@@ -7,6 +7,7 @@ const C = {
   bg:"#080f0a", surface:"#0e1a10", card:"#121e14",
   border:"rgba(123,180,80,0.18)", green:"#7bb450", gold:"#e8b84b",
   red:"#e05050", text:"#e8f0e9", muted:"#6b7f6d", dim:"#1e2f20",
+  venmo:"#008CFF", cashapp:"#00D54B",
 };
 
 const inp = {
@@ -118,6 +119,29 @@ function Empty({ msg }) {
   return <div style={{textAlign:"center",color:C.dim,padding:"44px 0",fontSize:13}}>⛳ {msg}</div>;
 }
 
+// Generate random invite code
+function genCode() {
+  return Math.random().toString(36).substring(2,8).toUpperCase();
+}
+
+// Payment deeplinks
+function openVenmo(name, amount) {
+  const note = encodeURIComponent(`Press Golf - ${name}`);
+  const amt = Math.abs(amount).toFixed(2);
+  window.open(`venmo://paycharge?txn=pay&recipients=${encodeURIComponent(name)}&amount=${amt}&note=${note}`, '_blank');
+  setTimeout(() => window.open(`https://venmo.com/`, '_blank'), 500);
+}
+
+function openCashApp(name, amount) {
+  const note = encodeURIComponent(`Press Golf - ${name}`);
+  const amt = Math.abs(amount).toFixed(2);
+  window.open(`https://cash.app/$${encodeURIComponent(name)}/${amt}`, '_blank');
+}
+
+function openZelle(amount) {
+  window.open(`https://enroll.zellepay.com/`, '_blank');
+}
+
 // ── AUTH ──────────────────────────────────────────────────────────────────────
 function AuthScreen({ onAuth }) {
   const [mode,    setMode]    = useState("login");
@@ -204,10 +228,67 @@ function AuthScreen({ onAuth }) {
   );
 }
 
+// ── ACCEPT INVITE SCREEN ──────────────────────────────────────────────────────
+function AcceptInviteScreen({ code, user }) {
+  const [status, setStatus] = useState("loading");
+  const [invite, setInvite] = useState(null);
+
+  useEffect(() => {
+    async function check() {
+      const { data } = await sb.from("invites").select("*").eq("code", code).single();
+      if (!data) { setStatus("invalid"); return; }
+      if (data.accepted) { setStatus("used"); return; }
+      if (data.owner_id === user.id) { setStatus("own"); return; }
+      setInvite(data);
+      setStatus("ready");
+    }
+    check();
+  }, [code, user.id]);
+
+  async function accept() {
+    setStatus("accepting");
+    await sb.from("invites").update({ accepted: true, invitee_id: user.id }).eq("code", code);
+    await sb.from("players").update({ linked_user_id: user.id }).eq("id", invite.player_id);
+    setStatus("done");
+  }
+
+  return (
+    <div style={{fontFamily:"'Georgia',serif",minHeight:"100vh",background:C.bg,color:C.text,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:24}}>
+      <div style={{fontSize:48,marginBottom:16}}>⛳</div>
+      <div style={{fontSize:32,fontWeight:800,color:C.green,marginBottom:8}}>Press</div>
+      {status==="loading" && <Spinner/>}
+      {status==="invalid" && <div style={{color:C.red,fontSize:16}}>Invalid invite link.</div>}
+      {status==="used" && <div style={{color:C.muted,fontSize:16}}>This invite has already been used.</div>}
+      {status==="own" && <div style={{color:C.muted,fontSize:16}}>You can't accept your own invite!</div>}
+      {status==="ready" && invite && (
+        <div style={{textAlign:"center",maxWidth:320}}>
+          <div style={{fontSize:18,fontWeight:600,marginBottom:8}}>You've been invited!</div>
+          <div style={{color:C.muted,fontSize:14,marginBottom:24}}>
+            Accept to share your golf ledger and settle bets together.
+          </div>
+          <BigBtn onClick={accept}>Accept Invite ✓</BigBtn>
+        </div>
+      )}
+      {status==="accepting" && <Spinner/>}
+      {status==="done" && (
+        <div style={{textAlign:"center"}}>
+          <div style={{fontSize:18,fontWeight:600,color:C.green,marginBottom:8}}>You're linked! ✅</div>
+          <div style={{color:C.muted,fontSize:14,marginBottom:24}}>Your golf ledger is now shared.</div>
+          <BigBtn onClick={()=>window.location.href="/"}>Open Press</BigBtn>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── ROOT ──────────────────────────────────────────────────────────────────────
 export default function App() {
   const [user,    setUser]    = useState(null);
   const [loading, setLoading] = useState(true);
+
+  // Check for invite code in URL
+  const urlParams = new URLSearchParams(window.location.search);
+  const inviteCode = urlParams.get("invite");
 
   useEffect(() => {
     sb.auth.getSession().then(({ data }) => {
@@ -228,6 +309,7 @@ export default function App() {
   );
 
   if (!user) return <AuthScreen onAuth={setUser}/>;
+  if (inviteCode) return <AcceptInviteScreen code={inviteCode} user={user}/>;
   return <Press user={user} onSignOut={()=>sb.auth.signOut()}/>;
 }
 
@@ -245,10 +327,12 @@ function Press({ user, onSignOut }) {
   const [pid,         setPid]         = useState(null);
   const [ptab,        setPtab]        = useState("overview");
   const [sheet,       setSheet]       = useState(null);
+  const [inviteLink,  setInviteLink]  = useState("");
 
   const [nName,setNName]=useState(""); const [nDir,setNDir]=useState("even"); const [nStr,setNStr]=useState("1");
-  const [fDate,setFDate]=useState(today); const [fDir,setFDir]=useState("received"); const [fStr,setFStr]=useState("1"); const [fMoney,setFMoney]=useState(""); const [fNotes,setFNotes]=useState("");
-  const [bDate,setBDate]=useState(today); const [bType,setBType]=useState(BET_TYPES[0]); const [bAmt,setBAmt]=useState(""); const [bNotes,setBNotes]=useState("");
+  const [fDate,setFDate]=useState(today); const [fDir,setFDir]=useState("received"); const [fStr,setFStr]=useState("1"); const [fMoney,setFMoney]=useState(""); const [fNotes,setFNotes]=useState(""); const [fWon,setFWon]=useState(true);
+  const [strokeSuggest, setStrokeSuggest] = useState(null);
+  const [bDate,setBDate]=useState(today); const [bType,setBType]=useState(BET_TYPES[0]); const [bAmt,setBAmt]=useState(""); const [bNotes,setBNotes]=useState(""); const [bWon,setBWon]=useState(true);
   const [eDir,setEDir]=useState("even"); const [eStr,setEStr]=useState("1");
 
   function t2(msg,error=false){setToast({msg,error});setTimeout(()=>setToast({msg:"",error:false}),2200);}
@@ -281,6 +365,30 @@ function Press({ user, onSignOut }) {
   function goProfile(id){setPid(id);setPtab("overview");setView("profile");}
   function goRoster(){setView("roster");setPid(null);}
 
+  // ── Generate Invite Link ──
+  async function generateInvite() {
+    if (!player) return;
+    setSaving(true);
+    const code = genCode();
+    await sb.from("invites").insert({
+      owner_id: user.id,
+      player_id: player.id,
+      player_name: player.name,
+      code,
+    });
+    const link = `${window.location.origin}?invite=${code}`;
+    setInviteLink(link);
+    setSaving(false);
+    // Copy to clipboard
+    try {
+      await navigator.clipboard.writeText(link);
+      t2("Invite link copied!");
+    } catch {
+      t2("Invite link generated!");
+    }
+    setSheet("invite");
+  }
+
   async function addPlayer(){
     const name=nName.trim();
     if(!name){t2("Enter a name.",true);return;}
@@ -298,22 +406,53 @@ function Press({ user, onSignOut }) {
   async function logRound(){
     if(!player)return;
     const st=fDir==="received"?-Math.abs(Number(fStr)):Math.abs(Number(fStr));
-    const amt=Number(fMoney)||0;
+    const rawAmt = Math.abs(Number(fMoney)||0);
+    const amt = fWon ? rawAmt : -rawAmt;
     setSaving(true);
     const{data:rd,error:re}=await sb.from("rounds").insert({owner_id:user.id,player_id:player.id,player_name:player.name,date:fDate,strokes:st,money:amt,notes:fNotes}).select().single();
     if(re){setSaving(false);t2("Error saving.",true);return;}
-    const{data:pd}=await sb.from("players").update({strokes:(player.strokes||0)+st,round_money:(player.round_money||0)+amt,bank:(player.bank||0)+amt}).eq("id",player.id).select().single();
+    const{data:pd}=await sb.from("players").update({round_money:(player.round_money||0)+amt,bank:(player.bank||0)+amt}).eq("id",player.id).select().single();
     setSaving(false);
     setRounds(prev=>[rd,...prev]);
     if(pd)setPlayers(prev=>prev.map(p=>p.id===pid?pd:p));
-    setFDate(today);setFDir("received");setFStr("1");setFMoney("");setFNotes("");
-    setSheet(null);t2("Round logged!");
+    setFDate(today);setFDir("received");setFStr("1");setFMoney("");setFNotes("");setFWon(true);
+    setSheet(null);
+    t2("Round logged!");
+
+    // Suggest stroke adjustment based on winner
+    if(amt!==0){
+      const currentStrokes = player.strokes||0;
+      const iWon = amt>0;
+      // If I won, I get 1 less stroke next round (handicap narrows)
+      // If I lost, I get 1 more stroke next round (handicap widens)
+      const suggested = iWon ? currentStrokes+1 : currentStrokes-1;
+      const currentLabel = currentStrokes===0?"Even":currentStrokes<0?`You receive ${Math.abs(currentStrokes)}`:`You give ${currentStrokes}`;
+      const suggestedLabel = suggested===0?"Even":suggested<0?`You receive ${Math.abs(suggested)}`:`You give ${suggested}`;
+      setStrokeSuggest({
+        current: currentStrokes,
+        suggested,
+        currentLabel,
+        suggestedLabel,
+        playerId: player.id,
+        playerName: player.name,
+        iWon,
+      });
+    }
+  }
+
+  async function applyStrokeChange(){
+    if(!strokeSuggest)return;
+    await sb.from("players").update({strokes:strokeSuggest.suggested}).eq("id",strokeSuggest.playerId);
+    setPlayers(prev=>prev.map(p=>p.id===strokeSuggest.playerId?{...p,strokes:strokeSuggest.suggested}:p));
+    setStrokeSuggest(null);
+    t2("Strokes updated!");
   }
 
   async function logBet(){
     if(!player)return;
-    const amt=Number(bAmt)||0;
-    if(amt===0){t2("Enter an amount.",true);return;}
+    const rawAmt = Math.abs(Number(bAmt)||0);
+    const amt = bWon ? rawAmt : -rawAmt;
+    if(rawAmt===0){t2("Enter an amount.",true);return;}
     setSaving(true);
     const{data:bd,error:be}=await sb.from("bets").insert({owner_id:user.id,player_id:player.id,player_name:player.name,date:bDate,type:bType,amount:amt,notes:bNotes}).select().single();
     if(be){setSaving(false);t2("Error saving.",true);return;}
@@ -321,7 +460,7 @@ function Press({ user, onSignOut }) {
     setSaving(false);
     setBets(prev=>[bd,...prev]);
     if(pd)setPlayers(prev=>prev.map(p=>p.id===pid?pd:p));
-    setBDate(today);setBType(BET_TYPES[0]);setBAmt("");setBNotes("");
+    setBDate(today);setBType(BET_TYPES[0]);setBAmt("");setBNotes("");setBWon(true);
     setSheet(null);t2("Side bet logged!");
   }
 
@@ -377,7 +516,7 @@ function Press({ user, onSignOut }) {
     goRoster();t2("Player removed.");
   }
 
-  // ROSTER
+  // ── ROSTER ────────────────────────────────────────────────────────────────
   if(view==="roster") return (
     <div style={{fontFamily:"'Georgia',serif",minHeight:"100vh",background:C.bg,color:C.text,paddingBottom:40}}>
       <div style={{background:`linear-gradient(180deg,${C.card} 0%,transparent 100%)`,padding:"50px 20px 24px",textAlign:"center"}}>
@@ -421,8 +560,11 @@ function Press({ user, onSignOut }) {
                 {p.name.charAt(0).toUpperCase()}
               </div>
               <div style={{flex:1,minWidth:0}}>
-                <div style={{fontWeight:700,fontSize:19,marginBottom:2}}>{p.name}</div>
-                <div style={{fontSize:11,color:C.muted}}>{sl} · {pr.length}R · {pb.length}B</div>
+                <div style={{display:"flex",alignItems:"center",gap:8}}>
+                  <div style={{fontWeight:700,fontSize:19}}>{p.name}</div>
+                  {p.linked_user_id && <span style={{fontSize:10,background:"rgba(123,180,80,0.15)",color:C.green,padding:"2px 8px",borderRadius:10}}>🔗 Linked</span>}
+                </div>
+                <div style={{fontSize:11,color:C.muted,marginTop:1}}>{sl} · {pr.length}R · {pb.length}B</div>
               </div>
               <div style={{textAlign:"right",flexShrink:0}}>
                 <Money value={p.bank||0} size={22}/><div style={{fontSize:9,color:C.muted,letterSpacing:1,textTransform:"uppercase",marginTop:2}}>Bank</div>
@@ -447,11 +589,12 @@ function Press({ user, onSignOut }) {
           <GhostBtn onClick={()=>setSheet(null)}>Cancel</GhostBtn>
         </div>
       </Sheet>
+
       <Toast msg={toast.msg} error={toast.error}/>
     </div>
   );
 
-  // PROFILE
+  // ── PROFILE ───────────────────────────────────────────────────────────────
   const PTABS=[{id:"overview",label:"Overview"},{id:"rounds",label:"Rounds"},{id:"bets",label:"Side Bets"},{id:"history",label:"History"},{id:"settings",label:"Settings"}];
 
   return (
@@ -463,7 +606,10 @@ function Press({ user, onSignOut }) {
             {player?.name.charAt(0).toUpperCase()}
           </div>
           <div style={{flex:1}}>
-            <div style={{fontWeight:700,fontSize:28,lineHeight:1.1}}>{player?.name}</div>
+            <div style={{display:"flex",alignItems:"center",gap:8}}>
+              <div style={{fontWeight:700,fontSize:28,lineHeight:1.1}}>{player?.name}</div>
+              {player?.linked_user_id && <span style={{fontSize:11,background:"rgba(123,180,80,0.15)",color:C.green,padding:"3px 10px",borderRadius:10}}>🔗 Linked</span>}
+            </div>
             <div style={{fontSize:12,color:C.green,marginTop:4}}>{player?.strokes===0?"Even":player?.strokes<0?`You receive ${Math.abs(player.strokes)} stroke(s)`:`You give ${player?.strokes} stroke(s)`}</div>
           </div>
           <div style={{textAlign:"right"}}><Money value={player?.bank??0} size={28}/><div style={{fontSize:9,color:C.muted,letterSpacing:1,textTransform:"uppercase",marginTop:2}}>Bank</div></div>
@@ -483,13 +629,30 @@ function Press({ user, onSignOut }) {
       </div>
 
       <div style={{padding:"16px"}}>
+
         {ptab==="overview"&&(
           <div>
+            {/* Action buttons */}
             <div style={{display:"flex",gap:8,marginBottom:18}}>
               <button onClick={()=>setSheet("round")}  style={{flex:1,padding:"15px 6px",background:C.green,color:"#0a1a0f",border:"none",borderRadius:12,fontSize:13,fontWeight:700,cursor:"pointer"}}>🏌️ Round</button>
-              <button onClick={()=>setSheet("bet")}    style={{flex:1,padding:"15px 6px",background:C.gold, color:"#0a1a0f",border:"none",borderRadius:12,fontSize:13,fontWeight:700,cursor:"pointer"}}>🎯 Side Bet</button>
+              <button onClick={()=>setSheet("bet")}    style={{flex:1,padding:"15px 6px",background:C.gold, color:"#0a1a0f",border:"none",borderRadius:12,fontSize:13,fontWeight:700,cursor:"pointer"}}>🎯 Bet</button>
               <button onClick={()=>setSheet("settle")} style={{flex:1,padding:"15px 6px",background:"transparent",color:C.gold,border:`1.5px solid ${C.gold}`,borderRadius:12,fontSize:13,fontWeight:700,cursor:"pointer"}}>🤝 Settle</button>
             </div>
+
+            {/* Invite banner if not linked */}
+            {!player?.linked_user_id && (
+              <div style={{background:"rgba(123,180,80,0.08)",border:`1px solid ${C.green}44`,borderRadius:12,padding:"14px 16px",marginBottom:14,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <div>
+                  <div style={{fontWeight:600,fontSize:14,marginBottom:2}}>Invite {player?.name}</div>
+                  <div style={{fontSize:12,color:C.muted}}>Link accounts to share this ledger</div>
+                </div>
+                <button onClick={generateInvite} disabled={saving} style={{background:C.green,border:"none",color:"#0a1a0f",padding:"8px 16px",borderRadius:20,fontSize:12,fontWeight:700,cursor:"pointer",flexShrink:0}}>
+                  {saving?"...":"Send Invite 🔗"}
+                </button>
+              </div>
+            )}
+
+            {/* Bank breakdown */}
             <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:"14px 16px",marginBottom:16}}>
               <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>Bank Breakdown</div>
               <div style={{display:"flex",border:`1px solid ${C.border}`,borderRadius:8,overflow:"hidden"}}>
@@ -500,6 +663,7 @@ function Press({ user, onSignOut }) {
                 ))}
               </div>
             </div>
+
             <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>Recent Activity</div>
             {loading?<Spinner/>:pHistory.length===0?<div style={{textAlign:"center",color:C.dim,padding:"30px 0",fontSize:13}}>⛳ No activity yet!</div>:pHistory.slice(0,5).map((item,i)=>(
               <div key={i} style={{display:"flex",alignItems:"center",gap:12,padding:"12px 14px",background:C.card,borderRadius:10,marginBottom:8,border:`1px solid ${item.kind==="bet"?"rgba(232,184,75,0.15)":C.border}`}}>
@@ -512,6 +676,7 @@ function Press({ user, onSignOut }) {
               </div>
             ))}
             {pHistory.length>5&&<button onClick={()=>setPtab("history")} style={{width:"100%",padding:"13px",background:"transparent",border:`1px solid ${C.border}`,borderRadius:10,color:C.green,fontSize:13,cursor:"pointer",marginTop:6}}>View All ({pHistory.length})</button>}
+
             {pSettle.length>0&&(
               <div style={{marginTop:18}}>
                 <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>Settlement History</div>
@@ -528,34 +693,54 @@ function Press({ user, onSignOut }) {
         {ptab==="history"&&(<div>{loading?<Spinner/>:pHistory.length===0?<Empty msg="No activity yet."/>:pHistory.map((item,i)=>(<SwipeRow key={i} onDelete={()=>item.kind==="round"?deleteRound(item):deleteBet(item)} accent={item.kind==="bet"?C.gold:C.green}><div style={{flex:1}}><div style={{display:"flex",alignItems:"center",gap:8}}><span>{item.kind==="round"?"🏌️":"🎯"}</span><span style={{fontWeight:600,fontSize:14}}>{item.kind==="round"?item.date:item.type}</span><span style={{fontSize:10,color:item.kind==="bet"?C.gold:C.green,background:item.kind==="bet"?"rgba(232,184,75,0.08)":"rgba(123,180,80,0.08)",padding:"2px 7px",borderRadius:8}}>{item.kind==="round"?"Round":"Side Bet"}</span></div><div style={{fontSize:11,color:C.muted,marginTop:2,paddingLeft:26}}>{item.kind==="round"?(item.notes||""):`${item.date}${item.notes?` · ${item.notes}`:""}`}</div></div><Money value={item.kind==="round"?item.money:item.amount} size={16}/></SwipeRow>))}</div>)}
 
         {ptab==="settings"&&(<div>
+          <SettingsCard title="Invite to Press" sub={player?.linked_user_id?"✅ Linked — sharing ledger":"Not linked yet — send an invite"}>
+            {!player?.linked_user_id && <BigBtn onClick={generateInvite} disabled={saving}>{saving?"Generating...":"Generate Invite Link 🔗"}</BigBtn>}
+          </SettingsCard>
           <SettingsCard title="Stroke Handicap" sub={player?.strokes===0?"Even":player?.strokes<0?`You receive ${Math.abs(player.strokes)}`:`You give ${player?.strokes}`}><GhostBtn onClick={openEditStrokes}>Edit Strokes</GhostBtn></SettingsCard>
           <SettingsCard title="Settle Up" sub="Current bank: " subExtra={<Money value={player?.bank??0} size={13}/>}><GhostBtn onClick={()=>setSheet("settle")} color={C.gold}>🤝 Settle Up with {player?.name}</GhostBtn></SettingsCard>
           <SettingsCard title="Remove Player" sub={`Permanently deletes all data for ${player?.name}.`} danger><GhostBtn onClick={removePlayer} color={C.red}>Remove {player?.name}</GhostBtn></SettingsCard>
         </div>)}
       </div>
 
+      {/* ROUND SHEET */}
       <Sheet open={sheet==="round"} onClose={()=>setSheet(null)} title={`Round vs ${player?.name}`}>
         <div style={{display:"flex",flexDirection:"column",gap:14}}>
           <div><Lbl>Date</Lbl><input type="date" value={fDate} onChange={e=>setFDate(e.target.value)} style={inp}/></div>
           <div><Lbl>Strokes</Lbl><div style={{display:"flex",gap:8,marginBottom:10}}><button onClick={()=>setFDir("received")} style={pill(fDir==="received")}>I Got</button><button onClick={()=>setFDir("gave")} style={pill(fDir==="gave")}>I Gave</button></div><input type="number" min="0" value={fStr} onChange={e=>setFStr(e.target.value)} style={inp} placeholder="# strokes"/></div>
-          <div><Lbl note="+ won  −  lost">Money</Lbl><input type="number" value={fMoney} onChange={e=>setFMoney(e.target.value)} style={inp} placeholder="e.g. 20 or -20" inputMode="decimal"/></div>
+          <div>
+            <Lbl>Result</Lbl>
+            <div style={{display:"flex",gap:8,marginBottom:10}}>
+              <button onClick={()=>setFWon(true)} style={pill(fWon, C.green)}>🏆 I Won</button>
+              <button onClick={()=>setFWon(false)} style={pill(!fWon, C.red)}>I Lost</button>
+            </div>
+          </div>
+          <div><Lbl>Amount ($)</Lbl><input type="number" min="0" value={fMoney} onChange={e=>setFMoney(e.target.value)} style={{...inp, borderColor: fWon?"rgba(123,180,80,0.5)":"rgba(224,80,80,0.5)"}} placeholder="e.g. 20" inputMode="decimal"/></div>
           <div><Lbl>Notes (optional)</Lbl><input type="text" value={fNotes} onChange={e=>setFNotes(e.target.value)} style={inp} placeholder="e.g. Back 9 Nassau"/></div>
           <BigBtn onClick={logRound} disabled={saving}>{saving?"Saving...":"Log Round"}</BigBtn>
           <GhostBtn onClick={()=>setSheet(null)}>Cancel</GhostBtn>
         </div>
       </Sheet>
 
+      {/* BET SHEET */}
       <Sheet open={sheet==="bet"} onClose={()=>setSheet(null)} title={`Side Bet vs ${player?.name}`}>
         <div style={{display:"flex",flexDirection:"column",gap:14}}>
           <div><Lbl>Date</Lbl><input type="date" value={bDate} onChange={e=>setBDate(e.target.value)} style={inp}/></div>
           <div><Lbl>Bet Type</Lbl><select value={bType} onChange={e=>setBType(e.target.value)} style={{...inp,cursor:"pointer"}}>{BET_TYPES.map(t=><option key={t}>{t}</option>)}</select></div>
-          <div><Lbl note="+ won  −  lost">Amount</Lbl><input type="number" value={bAmt} onChange={e=>setBAmt(e.target.value)} style={inp} placeholder="e.g. 10 or -10" inputMode="decimal"/></div>
+          <div>
+            <Lbl>Result</Lbl>
+            <div style={{display:"flex",gap:8,marginBottom:10}}>
+              <button onClick={()=>setBWon(true)} style={pill(bWon, C.green)}>🏆 I Won</button>
+              <button onClick={()=>setBWon(false)} style={pill(!bWon, C.red)}>I Lost</button>
+            </div>
+          </div>
+          <div><Lbl>Amount ($)</Lbl><input type="number" min="0" value={bAmt} onChange={e=>setBAmt(e.target.value)} style={{...inp, borderColor: bWon?"rgba(123,180,80,0.5)":"rgba(224,80,80,0.5)"}} placeholder="e.g. 10" inputMode="decimal"/></div>
           <div><Lbl>Notes (optional)</Lbl><input type="text" value={bNotes} onChange={e=>setBNotes(e.target.value)} style={inp} placeholder="e.g. Hole 7 CTP"/></div>
           <BigBtn onClick={logBet} disabled={saving} color={C.gold}>{saving?"Saving...":"Log Side Bet"}</BigBtn>
           <GhostBtn onClick={()=>setSheet(null)}>Cancel</GhostBtn>
         </div>
       </Sheet>
 
+      {/* EDIT STROKES SHEET */}
       <Sheet open={sheet==="editStrokes"} onClose={()=>setSheet(null)} title="Edit Strokes">
         <div style={{display:"flex",flexDirection:"column",gap:14}}>
           <div><Lbl>Direction</Lbl><div style={{display:"flex",gap:8}}>{["even","received","gave"].map(d=>(<button key={d} onClick={()=>setEDir(d)} style={pill(eDir===d)}>{d==="even"?"Even":d==="received"?"I Get":"I Give"}</button>))}</div></div>
@@ -565,24 +750,110 @@ function Press({ user, onSignOut }) {
         </div>
       </Sheet>
 
+      {/* INVITE SHEET */}
+      <Sheet open={sheet==="invite"} onClose={()=>setSheet(null)} title={`Invite ${player?.name}`}>
+        <div style={{display:"flex",flexDirection:"column",gap:14}}>
+          <div style={{textAlign:"center",padding:"10px 0"}}>
+            <div style={{fontSize:40,marginBottom:10}}>🔗</div>
+            <div style={{fontSize:15,fontWeight:600,marginBottom:6}}>Share this link with {player?.name}</div>
+            <div style={{fontSize:12,color:C.muted,marginBottom:16}}>When they sign up and accept, you'll both see the same ledger</div>
+          </div>
+          <div style={{background:C.dim,borderRadius:10,padding:"12px 14px",fontSize:12,color:C.muted,wordBreak:"break-all",border:`1px solid ${C.border}`}}>
+            {inviteLink}
+          </div>
+          <BigBtn onClick={async()=>{try{await navigator.clipboard.writeText(inviteLink);t2("Copied!");}catch{t2("Copy the link above");}}}>
+            Copy Link
+          </BigBtn>
+          {/* Share options */}
+          <div style={{display:"flex",gap:8}}>
+            <button onClick={()=>window.open(`sms:&body=${encodeURIComponent(`Join me on Press Golf! ${inviteLink}`)}`)} style={{flex:1,padding:"12px",background:"#1a1a2e",border:"1px solid rgba(255,255,255,0.1)",borderRadius:10,color:"#fff",fontSize:13,cursor:"pointer",fontWeight:600}}>
+              📱 Text
+            </button>
+            <button onClick={()=>window.open(`mailto:?subject=Join me on Press Golf&body=${encodeURIComponent(`Hey! Join me on Press to track our golf bets: ${inviteLink}`)}`)} style={{flex:1,padding:"12px",background:"#1a1a2e",border:"1px solid rgba(255,255,255,0.1)",borderRadius:10,color:"#fff",fontSize:13,cursor:"pointer",fontWeight:600}}>
+              📧 Email
+            </button>
+          </div>
+          <GhostBtn onClick={()=>setSheet(null)}>Done</GhostBtn>
+        </div>
+      </Sheet>
+
+      {/* SETTLE SHEET */}
       <Sheet open={sheet==="settle"} onClose={()=>setSheet(null)} title="Settle Up">
         {player&&(<div>
-          <div style={{textAlign:"center",marginBottom:20}}>
+          <div style={{textAlign:"center",marginBottom:16}}>
             <div style={{fontSize:48,marginBottom:10}}>🤝</div>
             <div style={{background:"rgba(0,0,0,0.3)",border:`1px solid ${player.bank>0?C.green:player.bank<0?C.red:C.border}`,borderRadius:16,padding:"22px 20px",marginBottom:14}}>
               <div style={{fontSize:11,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>{player.bank>0?`${player.name} owes you`:player.bank<0?`You owe ${player.name}`:"You're even"}</div>
               <Money value={player.bank} size={44}/>
             </div>
-            {player.bank!==0&&(<div style={{display:"flex",border:`1px solid ${C.border}`,borderRadius:10,overflow:"hidden",marginBottom:16}}>{[{l:"Rounds",v:player.round_money},{l:"Side Bets",v:player.bet_money}].map((item,i)=>(<div key={i} style={{flex:1,textAlign:"center",padding:"12px",borderRight:i===0?`1px solid ${C.border}`:"none",background:"rgba(0,0,0,0.2)"}}><Money value={item.v} size={15}/><div style={{fontSize:9,color:C.muted,letterSpacing:1,textTransform:"uppercase",marginTop:3}}>{item.l}</div></div>))}</div>)}
-            {player.bank===0?<div style={{color:C.green,fontSize:14,marginBottom:16}}>Already square! ✓</div>:<div style={{fontSize:12,color:C.muted,marginBottom:16}}>Zeros out {player.name}'s bank and records the settlement.</div>}
+            {player.bank!==0&&(<div style={{display:"flex",border:`1px solid ${C.border}`,borderRadius:10,overflow:"hidden",marginBottom:14}}>{[{l:"Rounds",v:player.round_money},{l:"Side Bets",v:player.bet_money}].map((item,i)=>(<div key={i} style={{flex:1,textAlign:"center",padding:"12px",borderRight:i===0?`1px solid ${C.border}`:"none",background:"rgba(0,0,0,0.2)"}}><Money value={item.v} size={15}/><div style={{fontSize:9,color:C.muted,letterSpacing:1,textTransform:"uppercase",marginTop:3}}>{item.l}</div></div>))}</div>)}
           </div>
-          {player.bank!==0&&<BigBtn onClick={settleUp} disabled={saving} color={player.bank>0?C.green:C.red} textColor="#fff" style={{marginBottom:10}}>{saving?"Saving...":(player.bank>0?"Collected ✓":"Paid ✓")}</BigBtn>}
+
+          {/* Payment buttons */}
+          {player.bank!==0&&(
+            <div style={{marginBottom:14}}>
+              <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>Pay With</div>
+              <div style={{display:"flex",gap:8,marginBottom:8}}>
+                <button onClick={()=>openVenmo(player.name, player.bank)} style={{flex:1,padding:"13px",background:C.venmo,border:"none",borderRadius:10,color:"#fff",fontSize:13,fontWeight:700,cursor:"pointer"}}>
+                  Venmo
+                </button>
+                <button onClick={()=>openCashApp(player.name, player.bank)} style={{flex:1,padding:"13px",background:C.cashapp,border:"none",borderRadius:10,color:"#fff",fontSize:13,fontWeight:700,cursor:"pointer"}}>
+                  Cash App
+                </button>
+                <button onClick={()=>openZelle(player.bank)} style={{flex:1,padding:"13px",background:"#6D1ED4",border:"none",borderRadius:10,color:"#fff",fontSize:13,fontWeight:700,cursor:"pointer"}}>
+                  Zelle
+                </button>
+              </div>
+              <div style={{fontSize:11,color:C.muted,textAlign:"center",marginBottom:14}}>After paying, tap "Mark as Settled" to record it</div>
+            </div>
+          )}
+
+          {player.bank===0?<div style={{color:C.green,fontSize:14,marginBottom:16,textAlign:"center"}}>Already square! ✓</div>:null}
+          {player.bank!==0&&<BigBtn onClick={settleUp} disabled={saving} color={player.bank>0?C.green:C.red} textColor="#fff" style={{marginBottom:10}}>{saving?"Saving...":(player.bank>0?"Mark as Collected ✓":"Mark as Paid ✓")}</BigBtn>}
           <GhostBtn onClick={()=>setSheet(null)}>Cancel</GhostBtn>
         </div>)}
       </Sheet>
+
+      {/* STROKE SUGGESTION MODAL */}
+      {strokeSuggest && (
+        <div style={{position:"fixed",inset:0,zIndex:500,background:"rgba(0,0,0,0.85)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
+          <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:20,padding:24,width:"100%",maxWidth:360}}>
+            <div style={{textAlign:"center",marginBottom:20}}>
+              <div style={{fontSize:40,marginBottom:10}}>{strokeSuggest.iWon?"🏆":"📉"}</div>
+              <div style={{fontWeight:700,fontSize:20,marginBottom:6}}>
+                {strokeSuggest.iWon?`You beat ${strokeSuggest.playerName}!`:`${strokeSuggest.playerName} won this one.`}
+              </div>
+              <div style={{fontSize:14,color:C.muted,marginBottom:20}}>
+                Adjust strokes for next round?
+              </div>
+
+              {/* Before / After */}
+              <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:16,marginBottom:20}}>
+                <div style={{textAlign:"center"}}>
+                  <div style={{fontSize:11,color:C.muted,letterSpacing:1,textTransform:"uppercase",marginBottom:4}}>Now</div>
+                  <div style={{fontSize:16,fontWeight:600,color:C.text}}>{strokeSuggest.currentLabel}</div>
+                </div>
+                <div style={{fontSize:24,color:C.green}}>→</div>
+                <div style={{textAlign:"center"}}>
+                  <div style={{fontSize:11,color:C.muted,letterSpacing:1,textTransform:"uppercase",marginBottom:4}}>Next Round</div>
+                  <div style={{fontSize:16,fontWeight:700,color:C.green}}>{strokeSuggest.suggestedLabel}</div>
+                </div>
+              </div>
+            </div>
+
+            <div style={{display:"flex",gap:10}}>
+              <button onClick={()=>setStrokeSuggest(null)} style={{flex:1,padding:"14px",background:"transparent",color:C.muted,border:`1px solid ${C.border}`,borderRadius:12,fontSize:14,fontWeight:600,cursor:"pointer"}}>
+                Keep Same
+              </button>
+              <button onClick={applyStrokeChange} style={{flex:1,padding:"14px",background:C.green,color:"#0a1a0f",border:"none",borderRadius:12,fontSize:14,fontWeight:700,cursor:"pointer"}}>
+                Yes, Update ✓
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <Toast msg={toast.msg} error={toast.error}/>
     </div>
   );
 }
-
