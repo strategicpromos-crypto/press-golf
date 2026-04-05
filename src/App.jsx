@@ -1036,11 +1036,12 @@ function Press({ user, onSignOut, onPrivacy }) {
           <div>
             <BigBtn onClick={()=>setSheet("round")} style={{marginBottom:12}}>+ Log Round</BigBtn>
             {loading?<Spinner/>:pRounds.length===0?<Empty msg="No rounds logged yet."/>:pRounds.map(r=>(
-              <SwipeRow key={r.id} onDelete={()=>requestCancel({...r,kind:"round"})} disabled={r.cancel_requested}>
+              <SwipeRow key={r.id} onDelete={()=>requestCancel({...r,kind:"round"})} disabled={r.cancel_requested||player?.bank===0}>
                 <div style={{flex:1}}>
                   <div style={{fontWeight:600,fontSize:14}}>{r.date}{r.cancel_requested&&<span style={{fontSize:10,color:C.gold,marginLeft:8}}>⏳ Cancel Pending</span>}</div>
                   {r.notes&&<div style={{fontSize:12,color:C.muted,marginTop:2,fontStyle:"italic"}}>{r.notes}</div>}
                   <div style={{fontSize:11,color:C.dim,marginTop:2}}>{r.strokes===0?"Even":r.strokes<0?`Got ${Math.abs(r.strokes)} stroke(s)`:`Gave ${r.strokes} stroke(s)`}</div>
+                  {player?.bank===0&&<div style={{fontSize:10,color:C.muted,marginTop:2}}>✅ Settled</div>}
                 </div>
                 <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4}}>
                   <Money value={r.money} size={16}/>
@@ -1056,10 +1057,11 @@ function Press({ user, onSignOut, onPrivacy }) {
           <div>
             <BigBtn onClick={()=>setSheet("bet")} style={{marginBottom:12,background:C.gold}}>+ Log Side Bet</BigBtn>
             {loading?<Spinner/>:pBets.length===0?<Empty msg="No side bets logged yet."/>:pBets.map(b=>(
-              <SwipeRow key={b.id} onDelete={()=>requestCancel({...b,kind:"bet"})} accent={C.gold} disabled={b.cancel_requested}>
+              <SwipeRow key={b.id} onDelete={()=>requestCancel({...b,kind:"bet"})} accent={C.gold} disabled={b.cancel_requested||player?.bank===0}>
                 <div style={{flex:1}}>
                   <div style={{fontWeight:700,fontSize:14}}>{b.type}{b.cancel_requested&&<span style={{fontSize:10,color:C.gold,marginLeft:8}}>⏳ Cancel Pending</span>}</div>
                   <div style={{fontSize:12,color:C.muted,marginTop:2}}>{b.date}{b.notes?` · ${b.notes}`:""}</div>
+                  {player?.bank===0&&<div style={{fontSize:10,color:C.muted,marginTop:2}}>✅ Settled</div>}
                 </div>
                 <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4}}>
                   <Money value={b.amount} size={16}/>
