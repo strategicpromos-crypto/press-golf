@@ -666,7 +666,7 @@ function Press({ user, onSignOut, onPrivacy }) {
                   <div style={{fontWeight:700,fontSize:19}}>{p.name}</div>
                   {p.linked_user_id && <span style={{fontSize:10,background:"rgba(123,180,80,0.15)",color:C.green,padding:"2px 8px",borderRadius:10}}>🔗 Linked</span>}
                 </div>
-                <div style={{fontSize:11,color:C.muted,marginTop:1}}>{sl} · {pr.length}R · {pb.length}B</div>
+                <div style={{fontSize:11,color:C.muted,marginTop:1}}>{sl} · {pr.length} round{pr.length!==1?"s":""} · {pb.length} bet{pb.length!==1?"s":""}</div>
               </div>
               <div style={{textAlign:"right",flexShrink:0}}>
                 <Money value={p.bank||0} size={22}/><div style={{fontSize:9,color:C.muted,letterSpacing:1,textTransform:"uppercase",marginTop:2}}>Bank</div>
