@@ -48,7 +48,7 @@ function Sheet({ open, onClose, title, children }) {
 // ── MAIN LIVE ROUND TRACKER ───────────────────────────────────────────────────
 export default function LiveRound({ user, players, onBack, onPostToLedger }) {
   const [step, setStep] = useState("setup"); // setup | playing | summary
-  const [courseId] = useState("south-toledo");
+  const [courseId, setCourseId] = useState("south-toledo");
   const [opponents, setOpponents] = useState([]); // [{playerId, name, strokes, betType, betAmount, linkedUserId}]
   const [scores, setScores] = useState({}); // {playerId: {hole: score}, me: {hole: score}}
   const [currentHole, setCurrentHole] = useState(1);
@@ -221,7 +221,20 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
       </div>
 
       <div style={{padding:"0 20px"}}>
-        <div style={{fontSize:11,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:12,marginTop:8}}>
+        {/* Course Picker */}
+        <div style={{marginBottom:16}}>
+          <div style={{fontSize:11,color:C.green,letterSpacing:1.5,textTransform:"uppercase",marginBottom:6,fontWeight:600}}>Select Course</div>
+          <select value={courseId} onChange={e=>setCourseId(e.target.value)} style={{width:"100%",padding:"14px",background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,color:C.text,fontSize:15,outline:"none",WebkitAppearance:"none",cursor:"pointer"}}>
+            {Object.entries(COURSES).map(([id,c])=>(
+              <option key={id} value={id}>{c.name} — {c.city}</option>
+            ))}
+          </select>
+          {COURSES[courseId]?.note && (
+            <div style={{fontSize:11,color:C.gold,marginTop:6}}>{COURSES[courseId].note}</div>
+          )}
+        </div>
+
+        <div style={{fontSize:11,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:12}}>
           Your Opponents ({opponents.length})
         </div>
 
