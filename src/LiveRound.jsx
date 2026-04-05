@@ -369,16 +369,16 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
             <div style={{display:"flex",alignItems:"center",gap:12}}>
               <button
                 onClick={() => {
-                  const current = myScore ?? holeData.par;
+                  const current = (myScore !== undefined && myScore !== null) ? myScore : holeData.par;
                   setScore("me", currentHole, Math.max(1, current - 1));
                 }}
                 style={{width:56,height:56,borderRadius:"50%",background:C.dim,border:`1px solid ${C.border}`,color:C.text,fontSize:32,fontWeight:700,cursor:"pointer",flexShrink:0}}
               >−</button>
               <div style={{flex:1,textAlign:"center"}}>
                 <div style={{fontSize:64,fontWeight:800,color:C.text,lineHeight:1}}>
-                  {myScore !== undefined ? myScore : "—"}
+                  {myScore !== undefined && myScore !== null ? myScore : "—"}
                 </div>
-                {myScore !== undefined && (
+                {myScore !== undefined && myScore !== null && (
                   <div style={{fontSize:13,color:myScore < holeData.par ? C.green : myScore > holeData.par ? C.red : C.muted,marginTop:4,fontWeight:600}}>
                     {myScore === holeData.par - 2 ? "Eagle 🦅" :
                      myScore === holeData.par - 1 ? "Birdie 🐦" :
@@ -388,13 +388,13 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
                      `+${myScore - holeData.par}`}
                   </div>
                 )}
-                {myScore === undefined && (
+                {(myScore === undefined || myScore === null) && (
                   <div style={{fontSize:12,color:C.muted,marginTop:4}}>Tap + to enter score</div>
                 )}
               </div>
               <button
                 onClick={() => {
-                  const current = myScore ?? holeData.par - 1;
+                  const current = (myScore !== undefined && myScore !== null) ? myScore : holeData.par - 1;
                   setScore("me", currentHole, current + 1);
                 }}
                 style={{width:56,height:56,borderRadius:"50%",background:C.dim,border:`1px solid ${C.border}`,color:C.text,fontSize:32,fontWeight:700,cursor:"pointer",flexShrink:0}}
@@ -428,22 +428,22 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
                 <div style={{display:"flex",alignItems:"center",gap:12}}>
                   <button
                     onClick={() => {
-                      const current = oppScore ?? holeData.par;
+                      const current = (oppScore !== undefined && oppScore !== null) ? oppScore : holeData.par;
                       setScore(opp.playerId, currentHole, Math.max(1, current - 1));
                     }}
                     style={{width:48,height:48,borderRadius:"50%",background:C.dim,border:`1px solid ${C.border}`,color:C.text,fontSize:24,fontWeight:700,cursor:"pointer",flexShrink:0}}
                   >−</button>
                   <div style={{flex:1,textAlign:"center"}}>
-                    <div style={{fontSize:44,fontWeight:800,color:oppScore !== undefined ? C.text : C.dim,lineHeight:1}}>
-                      {oppScore !== undefined ? oppScore : "—"}
+                    <div style={{fontSize:44,fontWeight:800,color:oppScore !== undefined && oppScore !== null ? C.text : C.dim,lineHeight:1}}>
+                      {oppScore !== undefined && oppScore !== null ? oppScore : "—"}
                     </div>
-                    {oppScore !== undefined && getsStroke  && <div style={{fontSize:11,color:C.gold, marginTop:2}}>Net: {oppScore - 1}</div>}
-                    {oppScore !== undefined && givesStroke && <div style={{fontSize:11,color:C.green,marginTop:2}}>Your net: {(myScore||0) - 1}</div>}
-                    {oppScore === undefined && <div style={{fontSize:11,color:C.dim,marginTop:2}}>not entered</div>}
+                    {oppScore !== undefined && oppScore !== null && getsStroke  && <div style={{fontSize:11,color:C.gold, marginTop:2}}>Net: {oppScore - 1}</div>}
+                    {oppScore !== undefined && oppScore !== null && givesStroke && <div style={{fontSize:11,color:C.green,marginTop:2}}>Your net: {(myScore||0) - 1}</div>}
+                    {(oppScore === undefined || oppScore === null) && <div style={{fontSize:11,color:C.dim,marginTop:2}}>tap + to enter</div>}
                   </div>
                   <button
                     onClick={() => {
-                      const current = oppScore ?? holeData.par - 1;
+                      const current = (oppScore !== undefined && oppScore !== null) ? oppScore : holeData.par - 1;
                       setScore(opp.playerId, currentHole, current + 1);
                     }}
                     style={{width:48,height:48,borderRadius:"50%",background:C.dim,border:`1px solid ${C.border}`,color:C.text,fontSize:24,fontWeight:700,cursor:"pointer",flexShrink:0}}
