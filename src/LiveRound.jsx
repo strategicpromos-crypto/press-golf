@@ -155,9 +155,9 @@ function calcSkinsTotal(scores, course, myStrokeHoles, oppStrokeHoles, betPerSki
   return net;
 }
 
-function getTally(scores, course, opp) {
+function getTally(scores, course, opp, courseId) {
   const absStrokes = Math.abs(opp.strokes || 0);
-  const strokeHoles    = getStrokeHoles(courseId_global || "south-toledo", absStrokes);
+  const strokeHoles    = getStrokeHoles(courseId || "south-toledo", absStrokes);
   const myStrokeHoles  = opp.strokes < 0 ? strokeHoles : [];
   const oppStrokeHoles = opp.strokes > 0 ? strokeHoles : [];
   const myScores  = scores["me"]         || {};
@@ -276,9 +276,6 @@ function getTally(scores, course, opp) {
   return { label: "—", total: 0 };
 }
 
-// courseId needs to be accessible in getTally — store as module-level var
-let courseId_global = "south-toledo";
-
 // ── MAIN COMPONENT ────────────────────────────────────────────────────────────
 export default function LiveRound({ user, players, onBack, onPostToLedger }) {
   const [step,        setStep]        = useState("setup");
@@ -301,8 +298,6 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
   const course = COURSES[courseId];
   const holeData = course?.holes[currentHole - 1];
   const saveTimer = useRef(null);
-  // Keep global in sync for getTally
-  courseId_global = courseId;
 
   // ── Check for existing active round on mount ──────────────────────────────
   useEffect(() => {
@@ -427,7 +422,7 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
     for (const opp of opponents) {
       const player = players.find(p => p.id === opp.playerId);
       if (!player) continue;
-      const tally = getTally(scores, course, opp);
+      const tally = getTally(scores, course, opp, courseId);
       const amount = tally.total;
 
       await sb.from("rounds").insert({
@@ -673,7 +668,7 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
             const oppScore    = getScore(opp.playerId, currentHole);
             const getsStroke  = oppGetsStrokeOnHole(opp, currentHole);
             const iGetStroke  = iGetStrokeOnHole(opp, currentHole);
-            const tally       = getTally(scores, course, opp);
+            const tally       = getTally(scores, course, opp, courseId);
 
             return (
               <div key={opp.playerId} style={{background:C.card,border:`1px solid ${getsStroke||iGetStroke?"rgba(232,184,75,0.5)":C.border}`,borderRadius:14,padding:"14px",marginBottom:10}}>
@@ -757,7 +752,7 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
   if (step === "summary") {
     const results = opponents.map(opp => ({
       ...opp,
-      tally: getTally(scores, course, opp),
+      tally: getTally(scores, course, opp, courseId),
     }));
     const grandTotal = results.reduce((s,r)=>s+r.tally.total, 0);
 
