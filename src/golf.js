@@ -282,7 +282,104 @@ export function calcNassau(scores, holeData, myStrokeHoles, oppStrokeHoles, betA
   return { front, back, total, net: front.amount + back.amount + total.amount };
 }
 
-export function calcSkins(scores, holeData, myStrokeHoles, oppStrokeHoles, betPerSkin) {
+// ── AUTO PRESS NASSAU CALCULATOR ─────────────────────────────────────────────
+// Rules:
+// - Play hole by hole match play within each 9
+// - When either player goes 2 DOWN on any active bet → new press bet starts at 0
+// - Original bet and all press bets continue to end of 9
+// - Press bets reset at the turn (back 9 starts fresh)
+// - 18-hole total bet NEVER gets pressed — always just betAmount
+// Returns { front, back, total, net, frontBets, backBets }
+
+export function calcAutoPressNassau(scores, holeData, myStrokeHoles, oppStrokeHoles, betAmount) {
+
+  function calcSideWithPress(sideHoles) {
+    // Each bet tracks: { startHole, status (running/done), myDiff }
+    // myDiff = holes won - holes lost (positive = I'm up, negative = I'm down)
+    const bets = [{ startHole: sideHoles[0]?.hole || 0, diff: 0, amount: 0 }];
+    const pressedAt = []; // track which holes presses started
+
+    for (const h of sideHoles) {
+      const myScore  = scores.me[h.hole];
+      const oppScore = scores.opp[h.hole];
+      if (myScore === undefined || myScore === null) continue;
+      if (oppScore === undefined || oppScore === null) continue;
+
+      const myNet  = myStrokeHoles.includes(h.hole)  ? myScore  - 1 : myScore;
+      const oppNet = oppStrokeHoles.includes(h.hole) ? oppScore - 1 : oppScore;
+
+      let holeResult = 0; // +1 I won, -1 I lost, 0 halved
+      if (myNet < oppNet)      holeResult =  1;
+      else if (myNet > oppNet) holeResult = -1;
+
+      // Update all active bets
+      for (const bet of bets) {
+        bet.diff  += holeResult;
+        bet.amount = bet.diff * betAmount; // running $ value
+      }
+
+      // Check if any bet just hit -2 (2 down) → trigger new press
+      // Only trigger once per hole (take the most recently triggered)
+      let pressTriggered = false;
+      for (const bet of bets) {
+        if (bet.diff === -2 && !pressTriggered) {
+          // New press starts AFTER this hole result is applied
+          bets.push({ startHole: h.hole, diff: 0, amount: 0 });
+          pressedAt.push(h.hole);
+          pressTriggered = true;
+          break; // only one press per hole
+        }
+      }
+    }
+
+    // Final amounts — each bet worth betAmount per hole differential
+    // Actually for Nassau: each bet is won/lost as a single bet based on who's ahead
+    // Re-calculate: each bet = betAmount if I'm up at end, -betAmount if down, 0 if tied
+    const finalBets = bets.map((bet, i) => ({
+      betNum: i + 1,
+      startHole: bet.startHole,
+      diff: bet.diff,
+      amount: bet.diff > 0 ? betAmount : bet.diff < 0 ? -betAmount : 0,
+      pressedAt: pressedAt[i - 1] || null,
+    }));
+
+    const total = finalBets.reduce((s, b) => s + b.amount, 0);
+    return { bets: finalBets, total, pressedAt };
+  }
+
+  const frontHoles = holeData.filter(h => h.side === "front");
+  const backHoles  = holeData.filter(h => h.side === "back");
+
+  const front = calcSideWithPress(frontHoles);
+  const back  = calcSideWithPress(backHoles);
+
+  // 18-hole total — never pressed, just compare total scores
+  function calcTotal() {
+    let myT = 0, oppT = 0, complete = true;
+    for (const h of holeData) {
+      const myScore  = scores.me[h.hole];
+      const oppScore = scores.opp[h.hole];
+      if (myScore === undefined || myScore === null) { complete = false; continue; }
+      if (oppScore === undefined || oppScore === null) { complete = false; continue; }
+      myT  += myStrokeHoles.includes(h.hole)  ? myScore  - 1 : myScore;
+      oppT += oppStrokeHoles.includes(h.hole) ? oppScore - 1 : oppScore;
+    }
+    if (!complete) return 0;
+    if (myT < oppT)  return  betAmount;
+    if (myT > oppT)  return -betAmount;
+    return 0;
+  }
+
+  const totalAmount = calcTotal();
+
+  return {
+    front,
+    back,
+    total: totalAmount,
+    net: front.total + back.total + totalAmount,
+  };
+}
+
   let me = 0, opp = 0, net = 0, carry = 0;
   const holes = [];
 
