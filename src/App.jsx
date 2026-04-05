@@ -678,6 +678,116 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,isPro,setIsPro}){
     if(unread.length>0){await sb.from("notifications").update({read:true}).in("id",unread);setNotifications(prev=>prev.map(n=>({...n,read:true})));}
   }
 
+  // ── EXPORT RECEIPT SCREEN ────────────────────────────────────────────────────
+  if(showExport && player) {
+    const totalRounds = pRounds.reduce((s,r)=>s+(r.money||0),0);
+    const totalBets   = pBets.reduce((s,b)=>s+(b.amount||0),0);
+    const totalSettled = pSettle.reduce((s,x)=>s+(x.amount||0),0);
+    return (
+      <div style={{fontFamily:"'Georgia',serif",minHeight:"100vh",background:C.bg,color:C.text,padding:"0 0 60px"}}>
+        <div style={{background:`linear-gradient(180deg,${C.card} 0%,transparent 100%)`,padding:"44px 20px 20px"}}>
+          <button onClick={()=>setShowExport(false)} style={{background:"rgba(123,180,80,0.15)",border:`1px solid ${C.green}`,color:C.green,fontSize:14,cursor:"pointer",padding:"8px 16px",borderRadius:20,display:"flex",alignItems:"center",gap:6,fontWeight:700,marginBottom:20}}>‹ Back</button>
+          <div style={{textAlign:"center"}}>
+            <div style={{fontSize:28,fontWeight:800,color:C.green,letterSpacing:-1,marginBottom:4}}>Press ⛳</div>
+            <div style={{fontSize:22,fontWeight:700,color:C.text,marginBottom:4}}>{player.name}</div>
+            <div style={{fontSize:13,color:C.muted}}>History as of {today}</div>
+          </div>
+        </div>
+        <div style={{padding:"0 20px"}}>
+          {/* Bank Summary */}
+          <div style={{background:C.card,border:`2px solid ${(player.bank||0)>=0?C.green:C.red}`,borderRadius:16,padding:"20px",marginBottom:20,textAlign:"center"}}>
+            <div style={{fontSize:12,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>Current Balance</div>
+            <div style={{fontSize:52,fontWeight:800,color:(player.bank||0)>0?C.green:(player.bank||0)<0?C.red:C.muted,letterSpacing:-2,marginBottom:8}}>
+              {(player.bank||0)>=0?"+":"-"}${Math.abs(player.bank||0).toFixed(2)}
+            </div>
+            <div style={{display:"flex",justifyContent:"center",gap:24,fontSize:13,color:C.muted}}>
+              <span>Rounds: <span style={{color:totalRounds>=0?C.green:C.red,fontWeight:700}}>{totalRounds>=0?"+":"-"}${Math.abs(totalRounds).toFixed(2)}</span></span>
+              <span>Bets: <span style={{color:totalBets>=0?C.green:C.red,fontWeight:700}}>{totalBets>=0?"+":"-"}${Math.abs(totalBets).toFixed(2)}</span></span>
+            </div>
+          </div>
+
+          {/* Rounds */}
+          {pRounds.length>0&&(
+            <div style={{marginBottom:20}}>
+              <div style={{fontSize:13,fontWeight:700,color:C.green,letterSpacing:2,textTransform:"uppercase",marginBottom:12}}>🏌️ Rounds ({pRounds.length})</div>
+              {pRounds.map((r,i)=>(
+                <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 16px",background:C.card,borderRadius:12,marginBottom:8,border:`1px solid ${C.border}`}}>
+                  <div>
+                    <div style={{fontSize:16,fontWeight:600,marginBottom:3}}>{r.date}</div>
+                    {r.notes&&<div style={{fontSize:13,color:C.muted,fontStyle:"italic"}}>{r.notes}</div>}
+                    <div style={{fontSize:12,color:C.dim,marginTop:2}}>{r.strokes===0?"Even":r.strokes<0?`Got ${Math.abs(r.strokes)} stroke(s)`:`Gave ${r.strokes} stroke(s)`}</div>
+                  </div>
+                  <div style={{fontSize:22,fontWeight:800,color:(r.money||0)>=0?C.green:C.red}}>{(r.money||0)>=0?"+":"-"}${Math.abs(r.money||0).toFixed(2)}</div>
+                </div>
+              ))}
+              <div style={{display:"flex",justifyContent:"flex-end",padding:"6px 4px",fontSize:14,color:C.muted}}>
+                Total: <span style={{color:totalRounds>=0?C.green:C.red,fontWeight:700,marginLeft:6}}>{totalRounds>=0?"+":"-"}${Math.abs(totalRounds).toFixed(2)}</span>
+              </div>
+            </div>
+          )}
+
+          {/* Bets */}
+          {pBets.length>0&&(
+            <div style={{marginBottom:20}}>
+              <div style={{fontSize:13,fontWeight:700,color:C.gold,letterSpacing:2,textTransform:"uppercase",marginBottom:12}}>🎯 Side Bets ({pBets.length})</div>
+              {pBets.map((b,i)=>(
+                <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 16px",background:C.card,borderRadius:12,marginBottom:8,border:"1px solid rgba(232,184,75,0.2)"}}>
+                  <div>
+                    <div style={{fontSize:16,fontWeight:700,marginBottom:3}}>{b.type}</div>
+                    <div style={{fontSize:13,color:C.muted}}>{b.date}{b.notes?` · ${b.notes}`:""}</div>
+                  </div>
+                  <div style={{fontSize:22,fontWeight:800,color:(b.amount||0)>=0?C.green:C.red}}>{(b.amount||0)>=0?"+":"-"}${Math.abs(b.amount||0).toFixed(2)}</div>
+                </div>
+              ))}
+              <div style={{display:"flex",justifyContent:"flex-end",padding:"6px 4px",fontSize:14,color:C.muted}}>
+                Total: <span style={{color:totalBets>=0?C.green:C.red,fontWeight:700,marginLeft:6}}>{totalBets>=0?"+":"-"}${Math.abs(totalBets).toFixed(2)}</span>
+              </div>
+            </div>
+          )}
+
+          {/* Archived */}
+          {(pArchR.length>0||pArchB.length>0)&&(
+            <div style={{marginBottom:20}}>
+              <div style={{fontSize:13,fontWeight:700,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:12}}>🗑️ Archived ({pArchR.length+pArchB.length})</div>
+              {[...pArchR,...pArchB].map((item,i)=>(
+                <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"12px 16px",background:"rgba(100,100,100,0.05)",borderRadius:12,marginBottom:8,border:"1px solid rgba(150,150,150,0.15)",opacity:0.7}}>
+                  <div>
+                    <div style={{fontSize:14,fontWeight:600,color:C.muted}}>{item.date||item.archived_at?.slice(0,10)} · {item.archive_reason}</div>
+                    {item.notes&&<div style={{fontSize:12,color:C.dim,fontStyle:"italic"}}>{item.notes}</div>}
+                  </div>
+                  <div style={{fontSize:16,fontWeight:700,color:C.muted}}>${Math.abs(item.money||item.amount||0).toFixed(2)}</div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Settlements */}
+          {pSettle.length>0&&(
+            <div style={{marginBottom:20}}>
+              <div style={{fontSize:13,fontWeight:700,color:C.green,letterSpacing:2,textTransform:"uppercase",marginBottom:12}}>🤝 Settlements ({pSettle.length})</div>
+              {pSettle.map((s,i)=>(
+                <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 16px",background:C.card,borderRadius:12,marginBottom:8,border:`1px solid ${C.border}`}}>
+                  <div style={{fontSize:16,fontWeight:600}}>{s.date}</div>
+                  <div style={{fontSize:20,fontWeight:800,color:C.green}}>${Math.abs(s.amount||0).toFixed(2)} settled</div>
+                </div>
+              ))}
+              <div style={{display:"flex",justifyContent:"flex-end",padding:"6px 4px",fontSize:14,color:C.muted}}>
+                Total settled: <span style={{color:C.green,fontWeight:700,marginLeft:6}}>${Math.abs(totalSettled).toFixed(2)}</span>
+              </div>
+            </div>
+          )}
+
+          {pRounds.length===0&&pBets.length===0&&<div style={{textAlign:"center",padding:"40px 0",color:C.dim,fontSize:15}}>⛳ No activity yet.</div>}
+
+          <div style={{textAlign:"center",padding:"20px 0",borderTop:`1px solid ${C.border}`,marginTop:10}}>
+            <div style={{fontSize:12,color:C.dim,marginBottom:4}}>Generated by Press Golf</div>
+            <div style={{fontSize:11,color:C.dim}}>press-golf.vercel.app</div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // ── ROSTER ──────────────────────────────────────────────────────────────────
   if(view==="roster") return(
     <div style={{fontFamily:"'Georgia',serif",minHeight:"100vh",background:C.bg,color:C.text,paddingBottom:40}}>
