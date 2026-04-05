@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { sb } from "./supabase.js";
-import { COURSES, getStrokeHoles } from "./golf.js";
+import { COURSES, getStrokeHoles, calcAutoPressNassau } from "./golf.js";
 
 const C = {
   bg:"#080f0a", surface:"#0e1a10", card:"#121e14",
@@ -156,25 +156,128 @@ function calcSkinsTotal(scores, course, myStrokeHoles, oppStrokeHoles, betPerSki
 }
 
 function getTally(scores, course, opp) {
-  const absStrokes = Math.abs(opp.strokes);
-  const strokeHoles = getStrokeHoles(course.id || "south-toledo", absStrokes);
+  const absStrokes = Math.abs(opp.strokes || 0);
+  const strokeHoles    = getStrokeHoles(courseId_global || "south-toledo", absStrokes);
   const myStrokeHoles  = opp.strokes < 0 ? strokeHoles : [];
   const oppStrokeHoles = opp.strokes > 0 ? strokeHoles : [];
-  const oppScores = { me: scores["me"] || {}, opp: scores[opp.playerId] || {} };
+  const myScores  = scores["me"]         || {};
+  const oppScores = scores[opp.playerId] || {};
 
+  // ── Match Play: show holes up/down ──
   if (opp.betType === "match") {
-    const r = calcMatchPlayTotal(oppScores, course, myStrokeHoles, oppStrokeHoles, opp.betAmount);
-    return { total: r.total, played: r.played };
+    let upDown = 0, played = 0;
+    for (const h of course.holes) {
+      const my = safeInt(myScores[h.hole],  -1);
+      const op = safeInt(oppScores[h.hole], -1);
+      if (my < 0 || op < 0) continue;
+      played++;
+      const myNet  = myStrokeHoles.includes(h.hole)  ? my - 1 : my;
+      const oppNet = oppStrokeHoles.includes(h.hole) ? op - 1 : op;
+      if (myNet < oppNet)      upDown++;
+      else if (myNet > oppNet) upDown--;
+    }
+    const label = upDown === 0 ? "Even"
+      : upDown > 0 ? `${upDown} Up` : `${Math.abs(upDown)} Down`;
+    return { label, upDown, played, total: upDown * opp.betAmount };
   }
+
+  // ── Nassau: show front/back standing ──
   if (opp.betType === "nassau") {
-    const r = calcNassauTotal(oppScores, course, myStrokeHoles, oppStrokeHoles, opp.betAmount);
-    return { total: r.net, played: 0 };
+    function sideDiff(holes) {
+      let myT = 0, oppT = 0, played = 0;
+      for (const h of holes) {
+        const my = safeInt(myScores[h.hole],  -1);
+        const op = safeInt(oppScores[h.hole], -1);
+        if (my < 0 || op < 0) continue;
+        played++;
+        myT  += myStrokeHoles.includes(h.hole)  ? my - 1 : my;
+        oppT += oppStrokeHoles.includes(h.hole) ? op - 1 : op;
+      }
+      return { diff: myT - oppT, played };
+    }
+    const front = sideDiff(course.holes.filter(h=>h.side==="front"));
+    const back  = sideDiff(course.holes.filter(h=>h.side==="back"));
+
+    function standingLabel(diff, played) {
+      if (played === 0) return "—";
+      if (diff === 0) return "Even";
+      return diff < 0 ? `${Math.abs(diff)} Up` : `${diff} Down`;
+    }
+
+    // Money calculation for final summary
+    function sideAmt(diff, played) {
+      if (played === 0) return 0;
+      if (diff < 0) return opp.betAmount;
+      if (diff > 0) return -opp.betAmount;
+      return 0;
+    }
+    const frontAmt = sideAmt(front.diff, front.played);
+    const backAmt  = sideAmt(back.diff,  back.played);
+    // Overall only counts if all 18 played
+    const allPlayed = course.holes.filter(h => {
+      const my = safeInt(myScores[h.hole], -1);
+      const op = safeInt(oppScores[h.hole], -1);
+      return my >= 0 && op >= 0;
+    }).length;
+    const overall   = sideDiff(course.holes);
+    const overallAmt = allPlayed === 18 ? sideAmt(overall.diff, overall.played) : 0;
+
+    const label = `F: ${standingLabel(front.diff, front.played)} · B: ${standingLabel(back.diff, back.played)}`;
+    return { label, total: frontAmt + backAmt + overallAmt };
   }
+
+  // ── Skins: show skin count ──
   if (opp.betType === "skins") {
-    return { total: calcSkinsTotal(oppScores, course, myStrokeHoles, oppStrokeHoles, opp.betAmount), played: 0 };
+    let mySkins = 0, oppSkins = 0, carry = 0, net = 0;
+    for (const h of course.holes) {
+      const my = safeInt(myScores[h.hole],  -1);
+      const op = safeInt(oppScores[h.hole], -1);
+      if (my < 0 || op < 0) continue;
+      const myNet  = myStrokeHoles.includes(h.hole)  ? my - 1 : my;
+      const oppNet = oppStrokeHoles.includes(h.hole) ? op - 1 : op;
+      const pot = opp.betAmount + carry;
+      if (myNet < oppNet)      { mySkins++; net += pot;  carry = 0; }
+      else if (myNet > oppNet) { oppSkins++; net -= pot; carry = 0; }
+      else                     { carry += opp.betAmount; }
+    }
+    const label = mySkins === oppSkins ? "Even"
+      : mySkins > oppSkins ? `You ${mySkins}-${oppSkins}`
+      : `${opp.name.split(" ")[0]} ${oppSkins}-${mySkins}`;
+    return { label, total: net };
   }
-  return { total: 0, played: 0 };
+
+  // ── Nassau with Auto Press ──
+  if (opp.betType === "nassau-press") {
+    const r = calcAutoPressNassau(
+      { me: myScores, opp: oppScores },
+      course.holes,
+      myStrokeHoles,
+      oppStrokeHoles,
+      opp.betAmount
+    );
+
+    // Build label showing front/back bets
+    function pressLabel(side) {
+      if (!side || !side.bets || side.bets.length === 0) return "—";
+      return side.bets.map((b, i) => {
+        const sym = b.diff < 0 ? `${Math.abs(b.diff)}↓` : b.diff > 0 ? `${b.diff}↑` : "E";
+        return i === 0 ? sym : `P${sym}`;
+      }).join(" / ");
+    }
+
+    const label = `F: ${pressLabel(r.front)} · B: ${pressLabel(r.back)}`;
+    return {
+      label,
+      total: r.net,
+      pressDetail: r,
+    };
+  }
+
+  return { label: "—", total: 0 };
 }
+
+// courseId needs to be accessible in getTally — store as module-level var
+let courseId_global = "south-toledo";
 
 // ── MAIN COMPONENT ────────────────────────────────────────────────────────────
 export default function LiveRound({ user, players, onBack, onPostToLedger }) {
@@ -198,6 +301,8 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
   const course = COURSES[courseId];
   const holeData = course?.holes[currentHole - 1];
   const saveTimer = useRef(null);
+  // Keep global in sync for getTally
+  courseId_global = courseId;
 
   // ── Check for existing active round on mount ──────────────────────────────
   useEffect(() => {
@@ -437,7 +542,7 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
                 <div>
                   <div style={{fontWeight:700,fontSize:17,marginBottom:3}}>{opp.name}</div>
                   <div style={{fontSize:12,color:C.muted,marginBottom:2}}>
-                    {strokeLabel} · {opp.betType === "match" ? `$${opp.betAmount}/hole` : opp.betType === "nassau" ? `Nassau $${opp.betAmount}` : `Skins $${opp.betAmount}`}
+                    {strokeLabel} · {opp.betType === "match" ? `$${opp.betAmount}/hole` : opp.betType === "nassau" ? `Nassau $${opp.betAmount}` : opp.betType === "nassau-press" ? `Nassau+Press $${opp.betAmount}` : `Skins $${opp.betAmount}`}
                   </div>
                   {opp.strokes !== 0 && sh.length > 0 && (
                     <div style={{fontSize:11,color:C.gold}}>Stroke holes: {sh.join(", ")}</div>
@@ -486,7 +591,7 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
           <div>
             <Lbl>Bet Type</Lbl>
             <div style={{display:"flex",gap:8}}>
-              {[["match","Match Play"],["nassau","Nassau"],["skins","Skins"]].map(([id,label])=>(
+              {[["match","Match Play"],["nassau","Nassau"],["nassau-press","Nassau + Auto Press"],["skins","Skins"]].map(([id,label])=>(
                 <button key={id} onClick={()=>setAddBetType(id)} style={{flex:1,padding:"10px 4px",fontSize:11,fontWeight:addBetType===id?700:500,background:addBetType===id?C.green:C.surface,color:addBetType===id?"#0a1a0f":C.muted,border:`1px solid ${addBetType===id?C.green:C.border}`,cursor:"pointer",borderRadius:8}}>{label}</button>
               ))}
             </div>
@@ -581,10 +686,20 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
                     {!getsStroke && !iGetStroke && <div style={{fontSize:10,color:C.dim,marginTop:2}}>optional — enter if in same group</div>}
                   </div>
                   <div style={{textAlign:"right"}}>
-                    <div style={{fontSize:14,fontWeight:700,color:tally.total>=0?C.green:C.red}}>
-                      {tally.total>=0?"+":"−"}${Math.abs(tally.total).toFixed(2)}
+                    <div style={{fontSize:14,fontWeight:700,color:
+                      tally.label==="Even" ? C.muted :
+                      tally.label?.includes("Up") ? C.green : C.red
+                    }}>
+                      {tally.label || "—"}
                     </div>
-                    <div style={{fontSize:10,color:C.muted}}>running</div>
+                    {/* Show press bets if nassau-press */}
+                    {opp.betType === "nassau-press" && tally.pressDetail && (
+                      <div style={{fontSize:10,color:C.gold,marginTop:2}}>
+                        {tally.pressDetail.front?.bets?.length > 1 && `F:${tally.pressDetail.front.bets.length} bets `}
+                        {tally.pressDetail.back?.bets?.length > 1 && `B:${tally.pressDetail.back.bets.length} bets`}
+                      </div>
+                    )}
+                    <div style={{fontSize:10,color:C.muted}}>standing</div>
                   </div>
                 </div>
 
@@ -676,11 +791,52 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
                   {r.tally.total>=0?"+":"−"}${Math.abs(r.tally.total).toFixed(2)}
                 </div>
               </div>
-              <div style={{fontSize:12,color:C.muted}}>
-                {r.betType==="match"?`Match Play $${r.betAmount}/hole`:r.betType==="nassau"?`Nassau $${r.betAmount}`:`Skins $${r.betAmount}`}
+              <div style={{fontSize:12,color:C.muted,marginBottom:8}}>
+                {r.betType==="match"?`Match Play $${r.betAmount}/hole`:r.betType==="nassau"?`Nassau $${r.betAmount}`:r.betType==="nassau-press"?`Nassau+Press $${r.betAmount}`:`Skins $${r.betAmount}`}
                 {" · "}
                 {r.strokes===0?"Even":r.strokes>0?`You gave ${r.strokes}`:(`You got ${Math.abs(r.strokes)}`)}
               </div>
+
+              {/* Press bet breakdown for nassau-press */}
+              {r.betType === "nassau-press" && r.tally.pressDetail && (
+                <div style={{background:"rgba(0,0,0,0.2)",borderRadius:8,padding:"10px 12px"}}>
+                  {/* Front bets */}
+                  {r.tally.pressDetail.front?.bets?.length > 0 && (
+                    <div style={{marginBottom:6}}>
+                      <div style={{fontSize:10,color:C.green,letterSpacing:1,textTransform:"uppercase",marginBottom:4}}>Front 9</div>
+                      {r.tally.pressDetail.front.bets.map((b, i) => (
+                        <div key={i} style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:2}}>
+                          <span style={{color:C.muted}}>{i===0?`Original $${r.betAmount}`:`Press ${i} (from hole ${b.startHole})`}</span>
+                          <span style={{color:b.amount>=0?C.green:C.red,fontWeight:700}}>
+                            {b.amount>=0?"+":"−"}${Math.abs(b.amount).toFixed(2)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {/* Back bets */}
+                  {r.tally.pressDetail.back?.bets?.length > 0 && (
+                    <div style={{marginBottom:6}}>
+                      <div style={{fontSize:10,color:C.green,letterSpacing:1,textTransform:"uppercase",marginBottom:4}}>Back 9</div>
+                      {r.tally.pressDetail.back.bets.map((b, i) => (
+                        <div key={i} style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:2}}>
+                          <span style={{color:C.muted}}>{i===0?`Original $${r.betAmount}`:`Press ${i} (from hole ${b.startHole})`}</span>
+                          <span style={{color:b.amount>=0?C.green:C.red,fontWeight:700}}>
+                            {b.amount>=0?"+":"−"}${Math.abs(b.amount).toFixed(2)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {/* 18-hole total — never pressed */}
+                  <div style={{display:"flex",justifyContent:"space-between",fontSize:12,borderTop:`1px solid ${C.border}`,paddingTop:6,marginTop:4}}>
+                    <span style={{color:C.muted}}>18-hole total (no press)</span>
+                    <span style={{color:r.tally.pressDetail.total>=0?C.green:C.red,fontWeight:700}}>
+                      {r.tally.pressDetail.total>=0?"+":"−"}${Math.abs(r.tally.pressDetail.total||0).toFixed(2)}
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
           ))}
 
