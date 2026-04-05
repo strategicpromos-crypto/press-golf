@@ -331,7 +331,8 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
   // ── PLAYING SCREEN ────────────────────────────────────────────────────────────
   if (step === "playing") {
     const myScore = getScore("me", currentHole);
-    const allScoresEntered = myScore !== undefined && opponents.every(opp => getScore(opp.playerId, currentHole) !== undefined);
+    // Only require MY score to advance — opponent scores are optional
+    const canAdvance = myScore !== undefined;
     const isLastHole = currentHole === totalHoles;
 
     return (
@@ -360,35 +361,62 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
         </div>
 
         <div style={{padding:"16px 20px"}}>
-          {/* My score */}
+          {/* MY score — always shown first and clearly labeled */}
           <div style={{background:C.card,border:`2px solid ${C.green}`,borderRadius:14,padding:"16px",marginBottom:14}}>
-            <div style={{fontSize:11,color:C.green,letterSpacing:2,textTransform:"uppercase",marginBottom:10,fontWeight:600}}>Your Score</div>
+            <div style={{fontSize:11,color:C.green,letterSpacing:2,textTransform:"uppercase",marginBottom:10,fontWeight:600}}>
+              ⛳ Your Score — Hole {currentHole}
+            </div>
             <div style={{display:"flex",alignItems:"center",gap:12}}>
-              <button onClick={() => setScore("me", currentHole, Math.max(1, (myScore||holeData.par) - 1))} style={{width:52,height:52,borderRadius:"50%",background:C.dim,border:`1px solid ${C.border}`,color:C.text,fontSize:28,fontWeight:700,cursor:"pointer"}}>−</button>
+              <button
+                onClick={() => {
+                  const current = myScore ?? holeData.par;
+                  setScore("me", currentHole, Math.max(1, current - 1));
+                }}
+                style={{width:56,height:56,borderRadius:"50%",background:C.dim,border:`1px solid ${C.border}`,color:C.text,fontSize:32,fontWeight:700,cursor:"pointer",flexShrink:0}}
+              >−</button>
               <div style={{flex:1,textAlign:"center"}}>
-                <div style={{fontSize:56,fontWeight:800,color:C.text,lineHeight:1}}>{myScore ?? "—"}</div>
-                {myScore && <div style={{fontSize:12,color:myScore < holeData.par ? C.green : myScore > holeData.par ? C.red : C.muted,marginTop:2}}>
-                  {myScore === holeData.par - 2 ? "Eagle 🦅" : myScore === holeData.par - 1 ? "Birdie 🐦" : myScore === holeData.par ? "Par" : myScore === holeData.par + 1 ? "Bogey" : myScore === holeData.par + 2 ? "Double 😬" : `+${myScore - holeData.par}`}
-                </div>}
+                <div style={{fontSize:64,fontWeight:800,color:C.text,lineHeight:1}}>
+                  {myScore !== undefined ? myScore : "—"}
+                </div>
+                {myScore !== undefined && (
+                  <div style={{fontSize:13,color:myScore < holeData.par ? C.green : myScore > holeData.par ? C.red : C.muted,marginTop:4,fontWeight:600}}>
+                    {myScore === holeData.par - 2 ? "Eagle 🦅" :
+                     myScore === holeData.par - 1 ? "Birdie 🐦" :
+                     myScore === holeData.par     ? "Par ✓" :
+                     myScore === holeData.par + 1 ? "Bogey" :
+                     myScore === holeData.par + 2 ? "Double 😬" :
+                     `+${myScore - holeData.par}`}
+                  </div>
+                )}
+                {myScore === undefined && (
+                  <div style={{fontSize:12,color:C.muted,marginTop:4}}>Tap + to enter score</div>
+                )}
               </div>
-              <button onClick={() => setScore("me", currentHole, (myScore||holeData.par) + 1)} style={{width:52,height:52,borderRadius:"50%",background:C.dim,border:`1px solid ${C.border}`,color:C.text,fontSize:28,fontWeight:700,cursor:"pointer"}}>+</button>
+              <button
+                onClick={() => {
+                  const current = myScore ?? holeData.par - 1;
+                  setScore("me", currentHole, current + 1);
+                }}
+                style={{width:56,height:56,borderRadius:"50%",background:C.dim,border:`1px solid ${C.border}`,color:C.text,fontSize:32,fontWeight:700,cursor:"pointer",flexShrink:0}}
+              >+</button>
             </div>
           </div>
 
-          {/* Opponent scores */}
+          {/* Opponent scores — optional, clearly labeled */}
           {opponents.map(opp => {
-            const oppScore = getScore(opp.playerId, currentHole);
+            const oppScore  = getScore(opp.playerId, currentHole);
             const getsStroke = oppGetsStroke(opp);
             const givesStroke = iGetStroke(opp);
             const tally = getRunningTally(opp);
 
             return (
-              <div key={opp.playerId} style={{background:C.card,border:`1px solid ${getsStroke||givesStroke?"rgba(232,184,75,0.4)":C.border}`,borderRadius:14,padding:"14px",marginBottom:12}}>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+              <div key={opp.playerId} style={{background:C.card,border:`1px solid ${getsStroke||givesStroke?"rgba(232,184,75,0.5)":C.border}`,borderRadius:14,padding:"14px",marginBottom:12}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
                   <div>
                     <span style={{fontWeight:700,fontSize:16}}>{opp.name}</span>
-                    {getsStroke && <span style={{fontSize:11,color:C.gold,marginLeft:8,background:"rgba(232,184,75,0.12)",padding:"2px 8px",borderRadius:8}}>⭐ Gets stroke</span>}
+                    {getsStroke  && <span style={{fontSize:11,color:C.gold, marginLeft:8,background:"rgba(232,184,75,0.12)",padding:"2px 8px",borderRadius:8}}>⭐ Gets stroke</span>}
                     {givesStroke && <span style={{fontSize:11,color:C.green,marginLeft:8,background:"rgba(123,180,80,0.12)",padding:"2px 8px",borderRadius:8}}>⭐ You get stroke</span>}
+                    <div style={{fontSize:10,color:C.muted,marginTop:2}}>optional — enter if in same group</div>
                   </div>
                   <div style={{textAlign:"right"}}>
                     <div style={{fontSize:13,fontWeight:700,color:tally.total >= 0 ? C.green : C.red}}>
@@ -398,31 +426,57 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
                   </div>
                 </div>
                 <div style={{display:"flex",alignItems:"center",gap:12}}>
-                  <button onClick={() => setScore(opp.playerId, currentHole, Math.max(1, (oppScore||holeData.par) - 1))} style={{width:48,height:48,borderRadius:"50%",background:C.dim,border:`1px solid ${C.border}`,color:C.text,fontSize:24,fontWeight:700,cursor:"pointer"}}>−</button>
+                  <button
+                    onClick={() => {
+                      const current = oppScore ?? holeData.par;
+                      setScore(opp.playerId, currentHole, Math.max(1, current - 1));
+                    }}
+                    style={{width:48,height:48,borderRadius:"50%",background:C.dim,border:`1px solid ${C.border}`,color:C.text,fontSize:24,fontWeight:700,cursor:"pointer",flexShrink:0}}
+                  >−</button>
                   <div style={{flex:1,textAlign:"center"}}>
-                    <div style={{fontSize:48,fontWeight:800,color:C.text,lineHeight:1}}>{oppScore ?? "—"}</div>
-                    {oppScore && getsStroke && <div style={{fontSize:11,color:C.gold,marginTop:2}}>Net: {oppScore - 1}</div>}
-                    {oppScore && givesStroke && <div style={{fontSize:11,color:C.green,marginTop:2}}>Your net: {(myScore||0) - 1}</div>}
+                    <div style={{fontSize:44,fontWeight:800,color:oppScore !== undefined ? C.text : C.dim,lineHeight:1}}>
+                      {oppScore !== undefined ? oppScore : "—"}
+                    </div>
+                    {oppScore !== undefined && getsStroke  && <div style={{fontSize:11,color:C.gold, marginTop:2}}>Net: {oppScore - 1}</div>}
+                    {oppScore !== undefined && givesStroke && <div style={{fontSize:11,color:C.green,marginTop:2}}>Your net: {(myScore||0) - 1}</div>}
+                    {oppScore === undefined && <div style={{fontSize:11,color:C.dim,marginTop:2}}>not entered</div>}
                   </div>
-                  <button onClick={() => setScore(opp.playerId, currentHole, (oppScore||holeData.par) + 1)} style={{width:48,height:48,borderRadius:"50%",background:C.dim,border:`1px solid ${C.border}`,color:C.text,fontSize:24,fontWeight:700,cursor:"pointer"}}>+</button>
+                  <button
+                    onClick={() => {
+                      const current = oppScore ?? holeData.par - 1;
+                      setScore(opp.playerId, currentHole, current + 1);
+                    }}
+                    style={{width:48,height:48,borderRadius:"50%",background:C.dim,border:`1px solid ${C.border}`,color:C.text,fontSize:24,fontWeight:700,cursor:"pointer",flexShrink:0}}
+                  >+</button>
                 </div>
               </div>
             );
           })}
 
-          {/* Next hole / Finish */}
+          {/* Next hole — only requires MY score */}
           <BigBtn
             onClick={() => {
               if (isLastHole) setStep("summary");
               else setCurrentHole(h => h + 1);
             }}
-            disabled={!allScoresEntered}
+            disabled={!canAdvance}
             color={isLastHole ? C.gold : C.green}
             textColor="#0a1a0f"
             style={{marginTop:8}}
           >
-            {!allScoresEntered ? "Enter all scores to continue" : isLastHole ? "Finish Round 🏆" : `Next → Hole ${currentHole + 1}`}
+            {!canAdvance
+              ? "Enter your score first"
+              : isLastHole
+              ? "Finish Round 🏆"
+              : `Next → Hole ${currentHole + 1}`}
           </BigBtn>
+
+          {/* Skip hint */}
+          {canAdvance && opponents.some(o => getScore(o.playerId, currentHole) === undefined) && (
+            <div style={{textAlign:"center",fontSize:11,color:C.muted,marginTop:8}}>
+              Opponent scores are optional — you can enter them later
+            </div>
+          )}
         </div>
       </div>
     );
