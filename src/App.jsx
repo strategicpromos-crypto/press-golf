@@ -367,7 +367,7 @@ function Press({ user, onSignOut, onPrivacy }) {
   const [invitePhone,setInvitePhone]=useState("");
   const [partialAmt,setPartialAmt]=useState("");
   const [strokeSuggest,setStrokeSuggest]=useState(null);
-  const [disputeItem,setDisputeItem]=useState(null);
+  const [confirmDelete, setConfirmDelete] = useState(null); // stores item to delete
   const [disputeAmt,setDisputeAmt]=useState("");
   const [disputeReason,setDisputeReason]=useState("");
   const [showNotifs,setShowNotifs]=useState(false);
@@ -500,7 +500,15 @@ function Press({ user, onSignOut, onPrivacy }) {
     setSheet(null);t2("Side bet logged!");
   }
 
-  // ── Request Cancel ──
+  function handleDeleteTap(item) {
+    if(player?.linked_user_id) {
+      // Linked — send cancel request
+      requestCancel(item);
+    } else {
+      // Not linked — show confirmation first
+      setConfirmDelete(item);
+    }
+  }
   async function requestCancel(item){
     if(!player)return;
     const isRound=item.kind==="round";
@@ -1044,7 +1052,7 @@ function Press({ user, onSignOut, onPrivacy }) {
           <div>
             <BigBtn onClick={()=>setSheet("round")} style={{marginBottom:12}}>+ Log Round</BigBtn>
             {loading?<Spinner/>:pRounds.length===0?<Empty msg="No rounds logged yet."/>:pRounds.map(r=>(
-              <SwipeRow key={r.id} onDelete={()=>requestCancel({...r,kind:"round"})} disabled={r.cancel_requested||isSettled}>
+              <SwipeRow key={r.id} onDelete={()=>handleDeleteTap({...r,kind:"round"})} disabled={r.cancel_requested||isSettled}>
                 <div style={{flex:1}}>
                   <div style={{fontWeight:600,fontSize:14}}>{r.date}{r.cancel_requested&&<span style={{fontSize:10,color:C.gold,marginLeft:8}}>⏳ Cancel Pending</span>}</div>
                   {r.notes&&<div style={{fontSize:12,color:C.muted,marginTop:2,fontStyle:"italic"}}>{r.notes}</div>}
@@ -1067,7 +1075,7 @@ function Press({ user, onSignOut, onPrivacy }) {
           <div>
             <BigBtn onClick={()=>setSheet("bet")} style={{marginBottom:12,background:C.gold}}>+ Log Side Bet</BigBtn>
             {loading?<Spinner/>:pBets.length===0?<Empty msg="No side bets logged yet."/>:pBets.map(b=>(
-              <SwipeRow key={b.id} onDelete={()=>requestCancel({...b,kind:"bet"})} accent={C.gold} disabled={b.cancel_requested||isSettled}>
+              <SwipeRow key={b.id} onDelete={()=>handleDeleteTap({...b,kind:"bet"})} accent={C.gold} disabled={b.cancel_requested||isSettled}>
                 <div style={{flex:1}}>
                   <div style={{fontWeight:700,fontSize:14}}>{b.type}{b.cancel_requested&&<span style={{fontSize:10,color:C.gold,marginLeft:8}}>⏳ Cancel Pending</span>}</div>
                   <div style={{fontSize:12,color:C.muted,marginTop:2}}>{b.date}{b.notes?` · ${b.notes}`:""}</div>
@@ -1287,6 +1295,31 @@ function Press({ user, onSignOut, onPrivacy }) {
           <GhostBtn onClick={()=>setSheet(null)}>Cancel</GhostBtn>
         </div>
       </Sheet>
+
+      {/* CONFIRM DELETE MODAL */}
+      {confirmDelete && (
+        <div style={{position:"fixed",inset:0,zIndex:500,background:"rgba(0,0,0,0.85)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
+          <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:20,padding:24,width:"100%",maxWidth:360}}>
+            <div style={{textAlign:"center",marginBottom:20}}>
+              <div style={{fontSize:40,marginBottom:10}}>⚠️</div>
+              <div style={{fontWeight:700,fontSize:18,marginBottom:8}}>Delete this entry?</div>
+              <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:"12px 14px",marginBottom:12}}>
+                <div style={{fontSize:13,fontWeight:600,marginBottom:4}}>
+                  {confirmDelete.kind==="round"?confirmDelete.date:confirmDelete.type}
+                </div>
+                <div style={{fontSize:12,color:C.muted}}>{confirmDelete.notes||confirmDelete.date}</div>
+                <div style={{marginTop:6}}><Money value={confirmDelete.kind==="round"?confirmDelete.money:confirmDelete.amount} size={15}/></div>
+              </div>
+              <div style={{fontSize:12,color:C.red,marginBottom:6}}>Balance will adjust by <Money value={confirmDelete.kind==="round"?-confirmDelete.money:-confirmDelete.amount} size={12}/></div>
+              <div style={{fontSize:11,color:C.muted}}>Entry will be saved in History.</div>
+            </div>
+            <div style={{display:"flex",gap:10}}>
+              <button onClick={()=>setConfirmDelete(null)} style={{flex:1,padding:"14px",background:"transparent",color:C.muted,border:`1px solid ${C.border}`,borderRadius:12,fontSize:14,fontWeight:600,cursor:"pointer"}}>Keep It</button>
+              <button onClick={async()=>{const item=confirmDelete;setConfirmDelete(null);await archiveAndDelete(item,true);}} style={{flex:1,padding:"14px",background:C.red,color:"#fff",border:"none",borderRadius:12,fontSize:14,fontWeight:700,cursor:"pointer"}}>Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* STROKE SUGGESTION MODAL */}
       {strokeSuggest&&(
