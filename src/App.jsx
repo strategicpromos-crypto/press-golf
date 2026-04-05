@@ -596,7 +596,7 @@ function Press({ user, onSignOut }) {
   );
 
   // ── PROFILE ───────────────────────────────────────────────────────────────
-  const PTABS=[{id:"overview",label:"Overview"},{id:"rounds",label:"Rounds"},{id:"bets",label:"Side Bets"},{id:"history",label:"History"},{id:"settings",label:"Settings"}];
+  const PTABS=[{id:"overview",label:"Overview"},{id:"rounds",label:"Rounds"},{id:"bets",label:"Bets"},{id:"history",label:"History"},{id:"settings",label:"⚙️"}];
 
   return (
     <div style={{fontFamily:"'Georgia',serif",minHeight:"100vh",background:C.bg,color:C.text,paddingBottom:100}}>
@@ -625,8 +625,8 @@ function Press({ user, onSignOut }) {
         </div>
       </div>
 
-      <div style={{display:"flex",overflowX:"auto",WebkitOverflowScrolling:"touch",borderBottom:`1px solid ${C.border}`,background:"rgba(0,0,0,0.2)",scrollbarWidth:"none"}}>
-        {PTABS.map(t=>(<button key={t.id} onClick={()=>setPtab(t.id)} style={{flexShrink:0,padding:"13px 20px",fontSize:12,fontWeight:ptab===t.id?700:500,background:"transparent",color:ptab===t.id?C.green:C.muted,border:"none",borderBottom:ptab===t.id?`2px solid ${C.green}`:"2px solid transparent",cursor:"pointer",whiteSpace:"nowrap"}}>{t.label}</button>))}
+      <div style={{display:"flex",borderBottom:`1px solid ${C.border}`,background:"rgba(0,0,0,0.2)"}}>
+        {PTABS.map(t=>(<button key={t.id} onClick={()=>setPtab(t.id)} style={{flex:1,padding:"13px 4px",fontSize:t.id==="settings"?18:11,fontWeight:ptab===t.id?700:500,background:"transparent",color:ptab===t.id?C.green:C.muted,border:"none",borderBottom:ptab===t.id?`2px solid ${C.green}`:"2px solid transparent",cursor:"pointer",whiteSpace:"nowrap"}}>{t.label}</button>))}
       </div>
 
       <div style={{padding:"16px"}}>
