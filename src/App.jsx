@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { sb } from "./supabase.js";
 import { loadStripe } from "https://esm.sh/@stripe/stripe-js@2";
+import LiveRound from "./LiveRound.jsx";
 
 const STRIPE_PK = "pk_test_51TIp2h2LCsgE9lxhGjdLujrI8YsZTGOtj1mC8fqHFupIOonwdYHqZRf2uImMvdoXCOclEH0ll3zxzOpfs0Jdo1Fh00nFj1I8GW";
 const PRICE_ID  = "price_1Tip7m2LCsgE9Ikh0yUEVgE8";
@@ -362,7 +363,7 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,isPro,setIsPro}){
   const [loading,setLoading]=useState(true);
   const [saving,setSaving]=useState(false);
   const [toast,setToast]=useState({msg:"",error:false});
-  const [view,setView]=useState("roster");
+  const [view,setView]=useState("roster"); // roster | profile | liveround
   const [pid,setPid]=useState(null);
   const [ptab,setPtab]=useState("overview");
   const [sheet,setSheet]=useState(null);
@@ -788,6 +789,16 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,isPro,setIsPro}){
     );
   }
 
+  // ── LIVE ROUND VIEW ──────────────────────────────────────────────────────────
+  if(view==="liveround") return(
+    <LiveRound
+      user={user}
+      players={players}
+      onBack={()=>setView("roster")}
+      onPostToLedger={async()=>{await loadAll();setView("roster");t2("Results posted to ledger! ⛳");}}
+    />
+  );
+
   // ── ROSTER ──────────────────────────────────────────────────────────────────
   if(view==="roster") return(
     <div style={{fontFamily:"'Georgia',serif",minHeight:"100vh",background:C.bg,color:C.text,paddingBottom:40}}>
@@ -806,6 +817,11 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,isPro,setIsPro}){
             ⭐ Upgrade to Pro — $1.99/mo
           </button>
         )}
+        {/* Live Round Button */}
+        <button onClick={()=>setView("liveround")} style={{background:`linear-gradient(135deg,${C.green},#4a8030)`,border:"none",color:"#0a1a0f",padding:"12px 24px",borderRadius:20,fontSize:14,fontWeight:800,cursor:"pointer",marginBottom:12,boxShadow:`0 4px 16px ${C.green}44`,letterSpacing:0.5}}>
+          ⛳ Start Live Round
+        </button>
+
         <div style={{display:"flex",background:"rgba(0,0,0,0.35)",border:`1px solid ${C.border}`,borderRadius:14,overflow:"hidden",maxWidth:360,margin:"0 auto"}}>
           {[{l:"Rounds",v:sRound},{l:"Side Bets",v:sBet},{l:"Season Bank",v:sBank}].map((item,i,arr)=>(<div key={i} style={{flex:1,textAlign:"center",padding:"13px 4px",borderRight:i<arr.length-1?`1px solid ${C.border}`:"none"}}><Money value={item.v} size={15}/><div style={{fontSize:8,color:C.muted,letterSpacing:1.5,textTransform:"uppercase",marginTop:3}}>{item.l}</div></div>))}
         </div>
