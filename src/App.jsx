@@ -367,8 +367,8 @@ function Press({ user, onSignOut, onPrivacy }) {
   const [invitePhone,setInvitePhone]=useState("");
   const [partialAmt,setPartialAmt]=useState("");
   const [strokeSuggest,setStrokeSuggest]=useState(null);
-  const [confirmDelete, setConfirmDelete] = useState(null); // stores item to delete
-  const [disputeAmt,setDisputeAmt]=useState("");
+  const [confirmDelete, setConfirmDelete] = useState(null);
+  const [disputeItem,setDisputeItem]=useState(null);
   const [disputeReason,setDisputeReason]=useState("");
   const [showNotifs,setShowNotifs]=useState(false);
   const [exportData,setExportData]=useState(null);
