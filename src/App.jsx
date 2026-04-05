@@ -142,8 +142,75 @@ function openZelle(amount) {
   window.open(`https://enroll.zellepay.com/`, '_blank');
 }
 
-// ── AUTH ──────────────────────────────────────────────────────────────────────
-function AuthScreen({ onAuth }) {
+// ── PRIVACY POLICY SCREEN ─────────────────────────────────────────────────────
+function PrivacyPolicy({ onBack }) {
+  return (
+    <div style={{fontFamily:"'Georgia',serif",minHeight:"100vh",background:C.bg,color:C.text,padding:"44px 20px 60px"}}>
+      <button onClick={onBack} style={{background:"rgba(123,180,80,0.15)",border:`1px solid ${C.green}`,color:C.green,fontSize:14,cursor:"pointer",padding:"8px 16px",borderRadius:20,display:"flex",alignItems:"center",gap:6,fontWeight:700,marginBottom:24}}>
+        ‹ Back
+      </button>
+
+      <div style={{textAlign:"center",marginBottom:30}}>
+        <div style={{fontSize:32,fontWeight:800,color:C.green,letterSpacing:-1}}>Press</div>
+        <div style={{fontSize:16,fontWeight:700,color:C.text,marginTop:6}}>Privacy Policy & Terms of Service</div>
+        <div style={{fontSize:12,color:C.muted,marginTop:4}}>Last updated: April 2026</div>
+      </div>
+
+      {[
+        {
+          title:"1. What We Collect",
+          body:`Press collects the following information when you create an account:\n\n• Email address (for login and account recovery)\n• Display name (chosen by you)\n• Golf round data, side bet records, and settlement history that you enter\n• Invite codes generated when you invite another player\n\nWe do not collect your location, contacts, or any financial account information.`
+        },
+        {
+          title:"2. How We Use Your Data",
+          body:`Your data is used solely to provide the Press service:\n\n• Displaying your golf records and balances\n• Linking your account with invited players\n• Sending password reset emails\n\nWe do not sell, rent, or share your personal data with third parties for marketing purposes.`
+        },
+        {
+          title:"3. Data Storage & Security",
+          body:`Your data is stored securely using Supabase (supabase.com), a trusted cloud database provider. All data is encrypted in transit using HTTPS. Each user can only access their own data — your records are private to you.`
+        },
+        {
+          title:"4. Text Messages & Invites",
+          body:`Press allows you to invite golf partners by opening your phone's native texting app with a pre-written message. Press does not send text messages on your behalf, does not store phone numbers, and does not have access to your contacts. All messages are sent by you from your own device.`
+        },
+        {
+          title:"5. Golf Betting Disclaimer",
+          body:`Press is a record-keeping and ledger tool only. It does not process, hold, transfer, or facilitate financial transactions. Users are solely responsible for ensuring their use of this app complies with all applicable local, state, and federal laws regarding wagering and gambling. Press LLC assumes no liability for any legal issues arising from the recording of wagers.`
+        },
+        {
+          title:"6. Payments",
+          body:`Press provides convenience links to third-party payment apps including Venmo, Cash App, and Zelle. Press does not process payments, does not receive any portion of payments made, and is not responsible for any transactions conducted through these third-party services. Use of those services is governed by their respective terms.`
+        },
+        {
+          title:"7. Account Deletion",
+          body:`You may delete your account and all associated data at any time by contacting us at:\n\nstrategicpromos@gmail.com\n\nWe will permanently delete your data within 30 days of your request.`
+        },
+        {
+          title:"8. Children's Privacy",
+          body:`Press is not intended for users under the age of 18. We do not knowingly collect data from minors.`
+        },
+        {
+          title:"9. Changes to This Policy",
+          body:`We may update this Privacy Policy from time to time. We will notify users of significant changes via the app. Continued use of Press after changes constitutes acceptance of the updated policy.`
+        },
+        {
+          title:"10. Contact Us",
+          body:`For questions, concerns, or data deletion requests:\n\nPress\nstrategicpromos@gmail.com\nMaumee, Ohio`
+        },
+      ].map((section,i)=>(
+        <div key={i} style={{marginBottom:24,background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:"16px 18px"}}>
+          <div style={{fontWeight:700,fontSize:15,color:C.green,marginBottom:8}}>{section.title}</div>
+          <div style={{fontSize:13,color:C.muted,lineHeight:1.7,whiteSpace:"pre-line"}}>{section.body}</div>
+        </div>
+      ))}
+
+      <div style={{textAlign:"center",fontSize:11,color:C.dim,marginTop:10}}>
+        © 2026 Press · Put Me In Your Phone
+      </div>
+    </div>
+  );
+}
+function AuthScreen({ onAuth, onPrivacy }) {
   const [mode,    setMode]    = useState("login");
   const [email,   setEmail]   = useState("");
   const [pass,    setPass]    = useState("");
@@ -223,7 +290,13 @@ function AuthScreen({ onAuth }) {
           )}
         </div>
       </div>
-      <div style={{marginTop:20,fontSize:11,color:C.dim,textAlign:"center"}}>Your data is private and encrypted.</div>
+      <div style={{marginTop:20,fontSize:11,color:C.dim,textAlign:"center"}}>
+        Your data is private and encrypted.
+        <br/>
+        <button onClick={onPrivacy} style={{background:"none",border:"none",color:C.muted,fontSize:11,cursor:"pointer",textDecoration:"underline",marginTop:4}}>
+          Privacy Policy & Terms
+        </button>
+      </div>
     </div>
   );
 }
@@ -283,8 +356,9 @@ function AcceptInviteScreen({ code, user }) {
 
 // ── ROOT ──────────────────────────────────────────────────────────────────────
 export default function App() {
-  const [user,    setUser]    = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [user,    setUser]       = useState(null);
+  const [loading, setLoading]    = useState(true);
+  const [showPrivacy, setShowPrivacy] = useState(false);
 
   // Check for invite code in URL
   const urlParams = new URLSearchParams(window.location.search);
@@ -308,13 +382,14 @@ export default function App() {
     </div>
   );
 
-  if (!user) return <AuthScreen onAuth={setUser}/>;
+  if (showPrivacy) return <PrivacyPolicy onBack={()=>setShowPrivacy(false)}/>;
+  if (!user) return <AuthScreen onAuth={setUser} onPrivacy={()=>setShowPrivacy(true)}/>;
   if (inviteCode) return <AcceptInviteScreen code={inviteCode} user={user}/>;
-  return <Press user={user} onSignOut={()=>sb.auth.signOut()}/>;
+  return <Press user={user} onSignOut={()=>sb.auth.signOut()} onPrivacy={()=>setShowPrivacy(true)}/>;
 }
 
 // ── PRESS APP ─────────────────────────────────────────────────────────────────
-function Press({ user, onSignOut }) {
+function Press({ user, onSignOut, onPrivacy }) {
   const today = new Date().toISOString().slice(0,10);
   const [players,     setPlayers]     = useState([]);
   const [rounds,      setRounds]      = useState([]);
@@ -592,6 +667,13 @@ function Press({ user, onSignOut }) {
       </Sheet>
 
       <Toast msg={toast.msg} error={toast.error}/>
+
+      {/* Footer */}
+      <div style={{textAlign:"center",padding:"20px 0 10px",fontSize:11,color:C.dim}}>
+        <button onClick={onPrivacy} style={{background:"none",border:"none",color:C.dim,fontSize:11,cursor:"pointer",textDecoration:"underline"}}>
+          Privacy Policy & Terms
+        </button>
+      </div>
     </div>
   );
 
@@ -601,7 +683,9 @@ function Press({ user, onSignOut }) {
   return (
     <div style={{fontFamily:"'Georgia',serif",minHeight:"100vh",background:C.bg,color:C.text,paddingBottom:100}}>
       <div style={{background:`linear-gradient(180deg,${C.card} 0%,transparent 100%)`,padding:"44px 18px 0"}}>
-        <button onClick={goRoster} style={{background:"none",border:"none",color:C.green,fontSize:16,cursor:"pointer",padding:"0 0 14px",display:"flex",alignItems:"center",gap:4}}>‹ Back</button>
+        <button onClick={goRoster} style={{background:"rgba(123,180,80,0.15)",border:`1px solid ${C.green}`,color:C.green,fontSize:14,cursor:"pointer",padding:"8px 16px",borderRadius:20,display:"flex",alignItems:"center",gap:6,fontWeight:700,marginBottom:14,WebkitTapHighlightColor:"transparent"}}>
+          ‹ All Players
+        </button>
         <div style={{display:"flex",alignItems:"center",gap:16,marginBottom:18}}>
           <div style={{width:62,height:62,borderRadius:"50%",background:`linear-gradient(135deg,${C.green},#4a8030)`,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:800,fontSize:28,color:"#0a1a0f",flexShrink:0}}>
             {player?.name.charAt(0).toUpperCase()}
