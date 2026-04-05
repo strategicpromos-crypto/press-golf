@@ -328,6 +328,7 @@ function Press({ user, onSignOut }) {
   const [ptab,        setPtab]        = useState("overview");
   const [sheet,       setSheet]       = useState(null);
   const [inviteLink,  setInviteLink]  = useState("");
+  const [invitePhone, setInvitePhone] = useState("");
 
   const [nName,setNName]=useState(""); const [nDir,setNDir]=useState("even"); const [nStr,setNStr]=useState("1");
   const [fDate,setFDate]=useState(today); const [fDir,setFDir]=useState("received"); const [fStr,setFStr]=useState("1"); const [fMoney,setFMoney]=useState(""); const [fNotes,setFNotes]=useState(""); const [fWon,setFWon]=useState(true);
@@ -755,24 +756,53 @@ function Press({ user, onSignOut }) {
         <div style={{display:"flex",flexDirection:"column",gap:14}}>
           <div style={{textAlign:"center",padding:"10px 0"}}>
             <div style={{fontSize:40,marginBottom:10}}>🔗</div>
-            <div style={{fontSize:15,fontWeight:600,marginBottom:6}}>Share this link with {player?.name}</div>
-            <div style={{fontSize:12,color:C.muted,marginBottom:16}}>When they sign up and accept, you'll both see the same ledger</div>
+            <div style={{fontSize:15,fontWeight:600,marginBottom:6}}>Invite {player?.name} to Press</div>
+            <div style={{fontSize:12,color:C.muted,marginBottom:4}}>Enter their cell number to text them directly</div>
           </div>
-          <div style={{background:C.dim,borderRadius:10,padding:"12px 14px",fontSize:12,color:C.muted,wordBreak:"break-all",border:`1px solid ${C.border}`}}>
+
+          {/* Phone number input */}
+          <div>
+            <Lbl>Cell Phone Number</Lbl>
+            <input
+              type="tel"
+              value={invitePhone}
+              onChange={e=>setInvitePhone(e.target.value)}
+              placeholder="e.g. 4195551234"
+              style={inp}
+              inputMode="tel"
+            />
+          </div>
+
+          {/* Text button with phone number */}
+          <BigBtn onClick={()=>{
+            const phone = invitePhone.replace(/\D/g,"");
+            const msg = encodeURIComponent(`Hey ${player?.name}! Join me on Press to track our golf bets, strokes and side bets. Sign up here: ${inviteLink}`);
+            window.open(`sms:${phone}?&body=${msg}`);
+          }}>
+            📱 Text {player?.name} the Invite
+          </BigBtn>
+
+          {/* Divider */}
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
+            <div style={{flex:1,height:1,background:C.border}}/>
+            <span style={{fontSize:11,color:C.muted}}>OR SHARE LINK</span>
+            <div style={{flex:1,height:1,background:C.border}}/>
+          </div>
+
+          {/* Link display */}
+          <div style={{background:C.dim,borderRadius:10,padding:"12px 14px",fontSize:11,color:C.muted,wordBreak:"break-all",border:`1px solid ${C.border}`}}>
             {inviteLink}
           </div>
-          <BigBtn onClick={async()=>{try{await navigator.clipboard.writeText(inviteLink);t2("Copied!");}catch{t2("Copy the link above");}}}>
-            Copy Link
-          </BigBtn>
-          {/* Share options */}
+
           <div style={{display:"flex",gap:8}}>
-            <button onClick={()=>window.open(`sms:&body=${encodeURIComponent(`Join me on Press Golf! ${inviteLink}`)}`)} style={{flex:1,padding:"12px",background:"#1a1a2e",border:"1px solid rgba(255,255,255,0.1)",borderRadius:10,color:"#fff",fontSize:13,cursor:"pointer",fontWeight:600}}>
-              📱 Text
+            <button onClick={async()=>{try{await navigator.clipboard.writeText(inviteLink);t2("Copied!");}catch{t2("Copy the link above");}}} style={{flex:1,padding:"12px",background:C.dim,border:`1px solid ${C.border}`,borderRadius:10,color:C.text,fontSize:13,cursor:"pointer",fontWeight:600}}>
+              📋 Copy Link
             </button>
-            <button onClick={()=>window.open(`mailto:?subject=Join me on Press Golf&body=${encodeURIComponent(`Hey! Join me on Press to track our golf bets: ${inviteLink}`)}`)} style={{flex:1,padding:"12px",background:"#1a1a2e",border:"1px solid rgba(255,255,255,0.1)",borderRadius:10,color:"#fff",fontSize:13,cursor:"pointer",fontWeight:600}}>
+            <button onClick={()=>window.open(`mailto:?subject=Join me on Press Golf&body=${encodeURIComponent(`Hey! Join me on Press to track our golf bets: ${inviteLink}`)}`)} style={{flex:1,padding:"12px",background:C.dim,border:`1px solid ${C.border}`,borderRadius:10,color:C.text,fontSize:13,cursor:"pointer",fontWeight:600}}>
               📧 Email
             </button>
           </div>
+
           <GhostBtn onClick={()=>setSheet(null)}>Done</GhostBtn>
         </div>
       </Sheet>
