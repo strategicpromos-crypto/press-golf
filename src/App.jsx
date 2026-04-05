@@ -760,24 +760,57 @@ function Press({ user, onSignOut }) {
             <div style={{fontSize:12,color:C.muted,marginBottom:4}}>Enter their cell number to text them directly</div>
           </div>
 
-          {/* Phone number input */}
+          {/* Contact picker + phone input */}
           <div>
             <Lbl>Cell Phone Number</Lbl>
-            <input
-              type="tel"
-              value={invitePhone}
-              onChange={e=>setInvitePhone(e.target.value)}
-              placeholder="e.g. 4195551234"
-              style={inp}
-              inputMode="tel"
-            />
+            <div style={{display:"flex",gap:8,marginBottom:0}}>
+              <input
+                type="tel"
+                value={invitePhone}
+                onChange={e=>setInvitePhone(e.target.value)}
+                placeholder="e.g. 4195551234"
+                style={{...inp, flex:1}}
+                inputMode="tel"
+              />
+              <button
+                onClick={async()=>{
+                  try {
+                    // Use Contact Picker API if available (Chrome Android, Safari iOS 14.5+)
+                    if("contacts" in navigator && "ContactsManager" in window){
+                      const contacts = await navigator.contacts.select(["name","tel"],{multiple:false});
+                      if(contacts && contacts.length>0 && contacts[0].tel && contacts[0].tel.length>0){
+                        const num = contacts[0].tel[0].replace(/\D/g,"");
+                        setInvitePhone(num);
+                        t2(`${contacts[0].name?.[0] || "Contact"} selected!`);
+                      }
+                    } else {
+                      // Fallback — open phone dialer so they can find the number
+                      t2("Type the number manually on this device");
+                    }
+                  } catch(e) {
+                    t2("Type the number manually");
+                  }
+                }}
+                style={{flexShrink:0,padding:"0 14px",background:C.green,border:"none",borderRadius:10,color:"#0a1a0f",fontSize:13,fontWeight:700,cursor:"pointer",height:50}}
+              >
+                👤 Contacts
+              </button>
+            </div>
+            <div style={{fontSize:11,color:C.muted,marginTop:6}}>
+              Tap "Contacts" to pick from your phone, or type the number directly
+            </div>
           </div>
 
           {/* Text button with phone number */}
           <BigBtn onClick={()=>{
             const phone = invitePhone.replace(/\D/g,"");
             const msg = encodeURIComponent(`Hey ${player?.name}! Join me on Press to track our golf bets, strokes and side bets. Sign up here: ${inviteLink}`);
-            window.open(`sms:${phone}?&body=${msg}`);
+            if(phone){
+              window.open(`sms:${phone}?&body=${msg}`);
+            } else {
+              // No number — open text with just the message
+              window.open(`sms:?&body=${msg}`);
+            }
           }}>
             📱 Text {player?.name} the Invite
           </BigBtn>
