@@ -1,5 +1,11 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { sb } from "./supabase.js";
+import { loadStripe } from "https://esm.sh/@stripe/stripe-js@2";
+
+const STRIPE_PK = "pk_test_51TIp2h2LCsgE9lxhGjdLujrI8YsZTGOtj1mC8fqHFupIOonwdYHqZRf2uImMvdoXCOclEH0ll3zxzOpfs0Jdo1Fh00nFj1I8GW";
+const PRICE_ID  = "price_1Tip7m2LCsgE9Ikh0yUEVgE8";
+const APP_URL   = "https://press-golf.vercel.app";
+const FREE_PLAYER_LIMIT = 2;
 
 const BET_TYPES = ["Skins","Nassau","Wolf","Birdies","Closest to Pin","Long Drive","Greenie","Press","Custom"];
 const CURRENT_SEASON = new Date().getFullYear();
@@ -23,136 +29,127 @@ const pill = (active, color=C.green) => ({
   cursor:"pointer", borderRadius:8, textAlign:"center", transition:"all 0.15s",
 });
 
-function genCode() { return Math.random().toString(36).substring(2,8).toUpperCase(); }
+function genCode(){ return Math.random().toString(36).substring(2,8).toUpperCase(); }
 
-// ── Payment deeplinks ─────────────────────────────────────────────────────────
-function openVenmo(name, amount) {
-  const amt = Math.abs(amount).toFixed(2);
-  const note = encodeURIComponent("Press Golf");
-  window.location.href = `venmo://paycharge?txn=pay&recipients=${encodeURIComponent(name)}&amount=${amt}&note=${note}`;
-  setTimeout(()=>window.open(`https://venmo.com/u/${encodeURIComponent(name)}?txn=pay&amount=${amt}&note=${note}`,"_blank"),1500);
+function openVenmo(name,amount){
+  const amt=Math.abs(amount).toFixed(2);
+  window.location.href=`venmo://paycharge?txn=pay&recipients=${encodeURIComponent(name)}&amount=${amt}&note=${encodeURIComponent("Press Golf")}`;
+  setTimeout(()=>window.open(`https://venmo.com/u/${encodeURIComponent(name)}?txn=pay&amount=${amt}`,"_blank"),1500);
 }
-function openCashApp(name, amount) {
-  const amt = Math.abs(amount).toFixed(2);
-  window.location.href = "cashme://cash.app/pay";
-  setTimeout(()=>window.open(`https://cash.app/$${encodeURIComponent(name)}/${amt}`,"_blank"),1500);
+function openCashApp(name,amount){
+  window.location.href="cashme://cash.app/pay";
+  setTimeout(()=>window.open(`https://cash.app/$${encodeURIComponent(name)}/${Math.abs(amount).toFixed(2)}`,"_blank"),1500);
 }
-function openZelle() {
-  window.location.href = "zelle://";
+function openZelle(){
+  window.location.href="zelle://";
   setTimeout(()=>window.open("https://enroll.zellepay.com/","_blank"),1500);
 }
 
-// ── UI Components ─────────────────────────────────────────────────────────────
-function Lbl({ children, note }) {
-  return (
-    <div style={{marginBottom:6}}>
-      <span style={{fontSize:11,letterSpacing:1.5,textTransform:"uppercase",color:C.green,fontWeight:600}}>{children}</span>
-      {note&&<span style={{fontSize:11,color:C.muted,marginLeft:8}}>{note}</span>}
-    </div>
-  );
-}
+// ── UI ────────────────────────────────────────────────────────────────────────
+function Lbl({children,note}){return(<div style={{marginBottom:6}}><span style={{fontSize:11,letterSpacing:1.5,textTransform:"uppercase",color:C.green,fontWeight:600}}>{children}</span>{note&&<span style={{fontSize:11,color:C.muted,marginLeft:8}}>{note}</span>}</div>);}
+function Money({value,size=15}){const color=value>0?C.green:value<0?C.red:C.muted;return <span style={{fontSize:size,fontWeight:700,color,fontVariantNumeric:"tabular-nums"}}>{value>=0?"+":"−"}${Math.abs(value).toFixed(2)}</span>;}
+function Spinner(){return(<div style={{display:"flex",alignItems:"center",justifyContent:"center",padding:40}}><div style={{width:32,height:32,border:`3px solid ${C.dim}`,borderTop:`3px solid ${C.green}`,borderRadius:"50%",animation:"spin 0.8s linear infinite"}}/><style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style></div>);}
+function Toast({msg,error}){if(!msg)return null;return(<div style={{position:"fixed",bottom:100,left:"50%",transform:"translateX(-50%)",background:error?C.red:C.green,color:"#fff",padding:"12px 24px",borderRadius:24,fontWeight:700,fontSize:13,zIndex:999,boxShadow:"0 4px 24px rgba(0,0,0,0.6)",whiteSpace:"nowrap",pointerEvents:"none"}}>{msg}</div>);}
+function Empty({msg}){return <div style={{textAlign:"center",color:C.dim,padding:"44px 0",fontSize:13}}>⛳ {msg}</div>;}
+function NotifBadge({count}){if(!count)return null;return <span style={{background:C.red,color:"#fff",borderRadius:"50%",width:18,height:18,fontSize:10,fontWeight:700,display:"inline-flex",alignItems:"center",justifyContent:"center",marginLeft:4}}>{count}</span>;}
 
-function Money({ value, size=15 }) {
-  const color = value>0?C.green:value<0?C.red:C.muted;
-  return <span style={{fontSize:size,fontWeight:700,color,fontVariantNumeric:"tabular-nums"}}>{value>=0?"+":"−"}${Math.abs(value).toFixed(2)}</span>;
-}
-
-function Spinner() {
-  return (
-    <div style={{display:"flex",alignItems:"center",justifyContent:"center",padding:40}}>
-      <div style={{width:32,height:32,border:`3px solid ${C.dim}`,borderTop:`3px solid ${C.green}`,borderRadius:"50%",animation:"spin 0.8s linear infinite"}}/>
-      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
-    </div>
-  );
-}
-
-function Toast({ msg, error }) {
-  if(!msg) return null;
-  return (
-    <div style={{position:"fixed",bottom:100,left:"50%",transform:"translateX(-50%)",background:error?C.red:C.green,color:"#fff",padding:"12px 24px",borderRadius:24,fontWeight:700,fontSize:13,zIndex:999,boxShadow:"0 4px 24px rgba(0,0,0,0.6)",whiteSpace:"nowrap",pointerEvents:"none"}}>
-      {msg}
-    </div>
-  );
-}
-
-function Sheet({ open, onClose, title, children }) {
-  if(!open) return null;
-  return (
+function Sheet({open,onClose,title,children}){
+  if(!open)return null;
+  return(
     <div style={{position:"fixed",inset:0,zIndex:400}}>
       <div onClick={onClose} style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.75)"}}/>
       <div style={{position:"absolute",bottom:0,left:0,right:0,background:C.surface,borderRadius:"22px 22px 0 0",border:`1px solid ${C.border}`,borderBottom:"none",padding:"0 0 44px",maxHeight:"92vh",overflowY:"auto",boxShadow:"0 -8px 40px rgba(0,0,0,0.7)"}}>
-        <div style={{display:"flex",justifyContent:"center",padding:"14px 0 6px"}}>
-          <div style={{width:40,height:4,background:C.dim,borderRadius:2}}/>
-        </div>
-        {title&&(
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 20px 16px"}}>
-            <div style={{fontWeight:700,fontSize:20,color:C.text}}>{title}</div>
-            <button onClick={onClose} style={{background:C.dim,border:"none",color:C.muted,width:32,height:32,borderRadius:"50%",fontSize:16,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
-          </div>
-        )}
+        <div style={{display:"flex",justifyContent:"center",padding:"14px 0 6px"}}><div style={{width:40,height:4,background:C.dim,borderRadius:2}}/></div>
+        {title&&(<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 20px 16px"}}><div style={{fontWeight:700,fontSize:20,color:C.text}}>{title}</div><button onClick={onClose} style={{background:C.dim,border:"none",color:C.muted,width:32,height:32,borderRadius:"50%",fontSize:16,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button></div>)}
         <div style={{padding:"0 20px"}}>{children}</div>
       </div>
     </div>
   );
 }
 
-function BigBtn({ children, onClick, color=C.green, textColor="#0a1a0f", style={}, disabled=false }) {
-  return (
-    <button onClick={onClick} disabled={disabled} style={{width:"100%",padding:"16px",background:disabled?"#333":color,color:disabled?C.muted:textColor,border:"none",borderRadius:12,fontSize:15,fontWeight:700,cursor:disabled?"not-allowed":"pointer",opacity:disabled?0.6:1,...style}}>
-      {children}
-    </button>
-  );
-}
+function BigBtn({children,onClick,color=C.green,textColor="#0a1a0f",style={},disabled=false}){return(<button onClick={onClick} disabled={disabled} style={{width:"100%",padding:"16px",background:disabled?"#333":color,color:disabled?C.muted:textColor,border:"none",borderRadius:12,fontSize:15,fontWeight:700,cursor:disabled?"not-allowed":"pointer",opacity:disabled?0.6:1,...style}}>{children}</button>);}
+function GhostBtn({children,onClick,color=C.green,style={}}){return(<button onClick={onClick} style={{width:"100%",padding:"14px",background:"transparent",color,border:`1.5px solid ${color}`,borderRadius:12,fontSize:14,fontWeight:600,cursor:"pointer",...style}}>{children}</button>);}
 
-function GhostBtn({ children, onClick, color=C.green, style={} }) {
-  return (
-    <button onClick={onClick} style={{width:"100%",padding:"14px",background:"transparent",color,border:`1.5px solid ${color}`,borderRadius:12,fontSize:14,fontWeight:600,cursor:"pointer",...style}}>
-      {children}
-    </button>
-  );
-}
-
-function SwipeRow({ children, onDelete, accent=C.green, disabled=false }) {
-  const [p,setP] = useState(false);
-  return (
+function SwipeRow({children,onDelete,accent=C.green,disabled=false}){
+  const [p,setP]=useState(false);
+  return(
     <div style={{display:"flex",alignItems:"center",background:C.card,border:`1px solid ${accent}22`,borderRadius:12,marginBottom:10,overflow:"hidden"}}>
       <div style={{display:"flex",alignItems:"center",gap:12,flex:1,padding:"14px"}}>{children}</div>
-      {disabled ? (
-        <div style={{flexShrink:0,padding:"14px",borderLeft:"1px solid rgba(123,180,80,0.08)",color:C.muted,fontSize:12}}>
-          ✅
-        </div>
-      ) : (
+      {disabled?(
+        <div style={{flexShrink:0,padding:"14px",borderLeft:`1px solid ${C.border}`,color:C.muted,fontSize:12}}>✅</div>
+      ):(
         <button onClick={onDelete} onTouchStart={()=>setP(true)} onTouchEnd={()=>setP(false)} onMouseDown={()=>setP(true)} onMouseUp={()=>setP(false)}
-          style={{flexShrink:0,padding:"14px",background:p?"rgba(224,80,80,0.2)":"transparent",border:"none",color:C.red,fontSize:18,cursor:"pointer",borderLeft:"1px solid rgba(224,80,80,0.12)",transition:"background 0.1s"}}>
-          ✕
-        </button>
+          style={{flexShrink:0,padding:"14px",background:p?"rgba(224,80,80,0.2)":"transparent",border:"none",color:C.red,fontSize:18,cursor:"pointer",borderLeft:"1px solid rgba(224,80,80,0.12)",transition:"background 0.1s"}}>✕</button>
       )}
     </div>
   );
 }
 
-function SettingsCard({ title, sub, subExtra, children, danger }) {
-  return (
-    <div style={{background:C.card,border:`1px solid ${danger?"rgba(224,80,80,0.2)":C.border}`,borderRadius:12,padding:"16px",marginBottom:10}}>
-      <div style={{fontWeight:600,fontSize:15,marginBottom:4,color:danger?C.red:C.text}}>{title}</div>
-      <div style={{fontSize:12,color:C.muted,marginBottom:12}}>{sub}{subExtra}</div>
-      {children}
+function SettingsCard({title,sub,subExtra,children,danger}){
+  return(<div style={{background:C.card,border:`1px solid ${danger?"rgba(224,80,80,0.2)":C.border}`,borderRadius:12,padding:"16px",marginBottom:10}}><div style={{fontWeight:600,fontSize:15,marginBottom:4,color:danger?C.red:C.text}}>{title}</div><div style={{fontSize:12,color:C.muted,marginBottom:12}}>{sub}{subExtra}</div>{children}</div>);
+}
+
+// ── PRO PAYWALL SCREEN ────────────────────────────────────────────────────────
+function ProPaywall({onBack,onUpgrade,saving}){
+  return(
+    <div style={{fontFamily:"'Georgia',serif",minHeight:"100vh",background:C.bg,color:C.text,padding:"44px 20px 60px"}}>
+      <button onClick={onBack} style={{background:"rgba(123,180,80,0.15)",border:`1px solid ${C.green}`,color:C.green,fontSize:14,cursor:"pointer",padding:"8px 16px",borderRadius:20,display:"flex",alignItems:"center",gap:6,fontWeight:700,marginBottom:24}}>‹ Back</button>
+
+      <div style={{textAlign:"center",marginBottom:32}}>
+        <div style={{display:"inline-flex",alignItems:"center",justifyContent:"center",width:72,height:72,background:`linear-gradient(135deg,${C.gold},#b8860b)`,borderRadius:20,marginBottom:14,boxShadow:`0 4px 24px ${C.gold}44`,fontSize:36}}>⛳</div>
+        <div style={{fontSize:32,fontWeight:800,letterSpacing:-1,color:"#f0f7ec"}}>Press Pro</div>
+        <div style={{fontSize:14,color:C.muted,marginTop:6}}>Upgrade to track unlimited players</div>
+      </div>
+
+      {/* Price card */}
+      <div style={{background:`linear-gradient(135deg,rgba(232,184,75,0.12),rgba(123,180,80,0.08))`,border:`1px solid ${C.gold}44`,borderRadius:16,padding:"24px",marginBottom:24,textAlign:"center"}}>
+        <div style={{fontSize:48,fontWeight:800,color:C.gold,letterSpacing:-2}}>$1.99</div>
+        <div style={{fontSize:14,color:C.muted,marginTop:4}}>per month · cancel anytime</div>
+      </div>
+
+      {/* Feature comparison */}
+      <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:14,overflow:"hidden",marginBottom:24}}>
+        {/* Header */}
+        <div style={{display:"flex",borderBottom:`1px solid ${C.border}`}}>
+          <div style={{flex:2,padding:"12px 16px",fontSize:11,color:C.muted,letterSpacing:1,textTransform:"uppercase"}}>Feature</div>
+          <div style={{flex:1,padding:"12px 8px",textAlign:"center",fontSize:11,color:C.muted,letterSpacing:1,textTransform:"uppercase",borderLeft:`1px solid ${C.border}`}}>Free</div>
+          <div style={{flex:1,padding:"12px 8px",textAlign:"center",fontSize:11,color:C.gold,letterSpacing:1,textTransform:"uppercase",fontWeight:700,borderLeft:`1px solid ${C.border}`}}>Pro</div>
+        </div>
+        {[
+          {feature:"Players",free:"2 max",pro:"Unlimited"},
+          {feature:"Rounds & Bets",free:"✅",pro:"✅"},
+          {feature:"Settle Up",free:"✅",pro:"✅"},
+          {feature:"Invite & Link Players",free:"❌",pro:"✅"},
+          {feature:"Email Notifications",free:"❌",pro:"✅"},
+          {feature:"Mutual Cancel",free:"❌",pro:"✅"},
+          {feature:"Stroke Approval",free:"❌",pro:"✅"},
+          {feature:"Amount Disputes",free:"❌",pro:"✅"},
+          {feature:"Season Reset",free:"❌",pro:"✅"},
+          {feature:"Export History",free:"❌",pro:"✅"},
+          {feature:"Venmo / Cash App",free:"❌",pro:"✅"},
+        ].map((row,i)=>(
+          <div key={i} style={{display:"flex",borderBottom:i<10?`1px solid ${C.border}`:"none",background:i%2===0?"rgba(0,0,0,0.1)":"transparent"}}>
+            <div style={{flex:2,padding:"11px 16px",fontSize:13,color:C.text}}>{row.feature}</div>
+            <div style={{flex:1,padding:"11px 8px",textAlign:"center",fontSize:12,color:row.free==="✅"?C.green:row.free==="❌"?C.red:C.muted,borderLeft:`1px solid ${C.border}`}}>{row.free}</div>
+            <div style={{flex:1,padding:"11px 8px",textAlign:"center",fontSize:12,color:row.pro==="✅"?C.green:C.gold,fontWeight:600,borderLeft:`1px solid ${C.border}`}}>{row.pro}</div>
+          </div>
+        ))}
+      </div>
+
+      <BigBtn onClick={onUpgrade} disabled={saving} color={C.gold} textColor="#0a1a0f" style={{marginBottom:10,fontSize:16,padding:"18px"}}>
+        {saving?"Redirecting to Stripe...":"⛳ Upgrade to Press Pro — $1.99/mo"}
+      </BigBtn>
+      <div style={{fontSize:11,color:C.muted,textAlign:"center",marginBottom:20}}>
+        Secure payment via Stripe · Cancel anytime · No hidden fees
+      </div>
+      <GhostBtn onClick={onBack}>Maybe Later</GhostBtn>
     </div>
   );
 }
 
-function Empty({ msg }) {
-  return <div style={{textAlign:"center",color:C.dim,padding:"44px 0",fontSize:13}}>⛳ {msg}</div>;
-}
-
-function NotifBadge({ count }) {
-  if(!count) return null;
-  return <span style={{background:C.red,color:"#fff",borderRadius:"50%",width:18,height:18,fontSize:10,fontWeight:700,display:"inline-flex",alignItems:"center",justifyContent:"center",marginLeft:4}}>{count}</span>;
-}
-
 // ── PRIVACY POLICY ────────────────────────────────────────────────────────────
-function PrivacyPolicy({ onBack }) {
-  return (
+function PrivacyPolicy({onBack}){
+  return(
     <div style={{fontFamily:"'Georgia',serif",minHeight:"100vh",background:C.bg,color:C.text,padding:"44px 20px 60px"}}>
       <button onClick={onBack} style={{background:"rgba(123,180,80,0.15)",border:`1px solid ${C.green}`,color:C.green,fontSize:14,cursor:"pointer",padding:"8px 16px",borderRadius:20,display:"flex",alignItems:"center",gap:6,fontWeight:700,marginBottom:24}}>‹ Back</button>
       <div style={{textAlign:"center",marginBottom:30}}>
@@ -163,16 +160,16 @@ function PrivacyPolicy({ onBack }) {
       {[
         {title:"1. What We Collect",body:"Press collects your email address, display name, and golf data you enter (rounds, bets, settlements). We do not collect your location, contacts, or financial account information."},
         {title:"2. How We Use Your Data",body:"Your data is used solely to provide the Press service. We do not sell, rent, or share your personal data with third parties for marketing purposes."},
-        {title:"3. Data Storage & Security",body:"Your data is stored securely using Supabase. All data is encrypted in transit using HTTPS. Each user can only access their own data."},
-        {title:"4. Text Messages & Invites",body:"Press opens your phone's native texting app with a pre-written message. Press does not send text messages on your behalf and does not store phone numbers."},
-        {title:"5. Golf Betting Disclaimer",body:"Press is a record-keeping tool only. It does not process, hold, or transfer money. Users are solely responsible for ensuring their use complies with all applicable local, state, and federal laws regarding wagering."},
-        {title:"6. Payments",body:"Press provides convenience links to Venmo, Cash App, and Zelle. Press does not process payments, does not receive any portion of payments, and is not responsible for transactions conducted through these services."},
-        {title:"7. Mutual Cancellation",body:"Rounds and bets can only be cancelled by mutual agreement of both linked players. All cancellations are permanently archived and visible to both parties."},
-        {title:"8. Account Deletion",body:"You may delete your account at any time by emailing strategicpromos@gmail.com. When an account is deleted, shared ledgers are frozen and remain visible to linked players. We will permanently delete your data within 30 days."},
-        {title:"9. Children's Privacy",body:"Press is not intended for users under the age of 18."},
+        {title:"3. Subscriptions & Billing",body:"Press Pro is $1.99/month billed through Stripe. You can cancel anytime from your account settings. Refunds are handled on a case-by-case basis by contacting strategicpromos@gmail.com."},
+        {title:"4. Data Storage & Security",body:"Your data is stored securely using Supabase. All data is encrypted in transit using HTTPS. Each user can only access their own data."},
+        {title:"5. Text Messages & Invites",body:"Press opens your phone's native texting app with a pre-written message. Press does not send text messages on your behalf and does not store phone numbers."},
+        {title:"6. Golf Betting Disclaimer",body:"Press is a record-keeping tool only. It does not process, hold, or transfer money. Users are solely responsible for ensuring their use complies with all applicable local, state, and federal laws regarding wagering."},
+        {title:"7. Payments",body:"Press provides convenience links to Venmo, Cash App, and Zelle. Press does not process payments and is not responsible for transactions conducted through these services."},
+        {title:"8. Mutual Cancellation",body:"Rounds and bets can only be cancelled by mutual agreement of both linked players. All cancellations are permanently archived and visible to both parties."},
+        {title:"9. Account Deletion",body:"You may delete your account at any time by emailing strategicpromos@gmail.com. We will permanently delete your data within 30 days."},
         {title:"10. Contact Us",body:"Press · strategicpromos@gmail.com · Maumee, Ohio"},
       ].map((s,i)=>(
-        <div key={i} style={{marginBottom:16,background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:"14px 16px"}}>
+        <div key={i} style={{marginBottom:12,background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:"14px 16px"}}>
           <div style={{fontWeight:700,fontSize:14,color:C.green,marginBottom:6}}>{s.title}</div>
           <div style={{fontSize:13,color:C.muted,lineHeight:1.7}}>{s.body}</div>
         </div>
@@ -183,7 +180,7 @@ function PrivacyPolicy({ onBack }) {
 }
 
 // ── AUTH ──────────────────────────────────────────────────────────────────────
-function AuthScreen({ onAuth, onPrivacy }) {
+function AuthScreen({onAuth,onPrivacy}){
   const [mode,setMode]=useState("login");
   const [email,setEmail]=useState("");
   const [pass,setPass]=useState("");
@@ -192,15 +189,15 @@ function AuthScreen({ onAuth, onPrivacy }) {
   const [err,setErr]=useState("");
   const [msg,setMsg]=useState("");
 
-  async function handleLogin() {
-    setErr(""); setLoading(true);
+  async function handleLogin(){
+    setErr("");setLoading(true);
     const{data,error}=await sb.auth.signInWithPassword({email,password:pass});
     setLoading(false);
     if(error){setErr(error.message);return;}
     onAuth(data.user);
   }
 
-  async function handleSignup() {
+  async function handleSignup(){
     setErr("");
     if(!name.trim()){setErr("Enter your name.");return;}
     if(pass.length<6){setErr("Password must be 6+ characters.");return;}
@@ -212,7 +209,7 @@ function AuthScreen({ onAuth, onPrivacy }) {
     setMode("login");
   }
 
-  async function handleReset() {
+  async function handleReset(){
     if(!email){setErr("Enter your email first.");return;}
     setLoading(true);
     await sb.auth.resetPasswordForEmail(email);
@@ -220,22 +217,16 @@ function AuthScreen({ onAuth, onPrivacy }) {
     setMsg("Password reset email sent!");
   }
 
-  return (
+  return(
     <div style={{fontFamily:"'Georgia',serif",minHeight:"100vh",background:C.bg,color:C.text,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"24px 24px 60px"}}>
       <div style={{textAlign:"center",marginBottom:36}}>
-        <div style={{display:"inline-flex",alignItems:"center",justifyContent:"center",width:72,height:72,background:`linear-gradient(135deg,${C.green},#4a8030)`,borderRadius:20,marginBottom:14,boxShadow:`0 4px 24px ${C.green}44`}}>
-          <span style={{fontSize:36}}>⛳</span>
-        </div>
+        <div style={{display:"inline-flex",alignItems:"center",justifyContent:"center",width:72,height:72,background:`linear-gradient(135deg,${C.green},#4a8030)`,borderRadius:20,marginBottom:14,boxShadow:`0 4px 24px ${C.green}44`}}><span style={{fontSize:36}}>⛳</span></div>
         <div style={{fontSize:46,fontWeight:800,letterSpacing:-2,color:"#f0f7ec",lineHeight:1}}>Press</div>
         <div style={{fontSize:10,color:C.green,letterSpacing:4,textTransform:"uppercase",marginTop:6}}>Put Me In Your Phone</div>
       </div>
       <div style={{width:"100%",maxWidth:380,background:C.card,border:`1px solid ${C.border}`,borderRadius:20,padding:"28px 24px"}}>
         <div style={{display:"flex",gap:0,marginBottom:24,border:`1px solid ${C.border}`,borderRadius:10,overflow:"hidden"}}>
-          {["login","signup"].map(m=>(
-            <button key={m} onClick={()=>{setMode(m);setErr("");setMsg("");}} style={{flex:1,padding:"12px",background:mode===m?C.green:"transparent",color:mode===m?"#0a1a0f":C.muted,border:"none",fontSize:13,fontWeight:700,cursor:"pointer",textTransform:"uppercase",letterSpacing:1}}>
-              {m==="login"?"Sign In":"Sign Up"}
-            </button>
-          ))}
+          {["login","signup"].map(m=>(<button key={m} onClick={()=>{setMode(m);setErr("");setMsg("");}} style={{flex:1,padding:"12px",background:mode===m?C.green:"transparent",color:mode===m?"#0a1a0f":C.muted,border:"none",fontSize:13,fontWeight:700,cursor:"pointer",textTransform:"uppercase",letterSpacing:1}}>{m==="login"?"Sign In":"Sign Up"}</button>))}
         </div>
         <div style={{display:"flex",flexDirection:"column",gap:12}}>
           {mode==="signup"&&<div><Lbl>Your Name</Lbl><input value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. Michael" style={inp}/></div>}
@@ -243,9 +234,7 @@ function AuthScreen({ onAuth, onPrivacy }) {
           <div><Lbl>Password</Lbl><input type="password" value={pass} onChange={e=>setPass(e.target.value)} placeholder={mode==="signup"?"6+ characters":"••••••••"} style={inp}/></div>
           {err&&<div style={{background:"rgba(224,80,80,0.1)",border:"1px solid rgba(224,80,80,0.3)",borderRadius:8,padding:"10px 12px",fontSize:13,color:C.red}}>{err}</div>}
           {msg&&<div style={{background:"rgba(123,180,80,0.1)",border:"1px solid rgba(123,180,80,0.3)",borderRadius:8,padding:"10px 12px",fontSize:13,color:C.green}}>{msg}</div>}
-          <BigBtn onClick={mode==="login"?handleLogin:handleSignup} disabled={loading} style={{marginTop:4}}>
-            {loading?"Loading...":(mode==="login"?"Sign In →":"Create Account →")}
-          </BigBtn>
+          <BigBtn onClick={mode==="login"?handleLogin:handleSignup} disabled={loading} style={{marginTop:4}}>{loading?"Loading...":(mode==="login"?"Sign In →":"Create Account →")}</BigBtn>
           {mode==="login"&&<button onClick={handleReset} style={{background:"none",border:"none",color:C.muted,fontSize:12,cursor:"pointer",textAlign:"center",padding:"4px"}}>Forgot password?</button>}
         </div>
       </div>
@@ -258,38 +247,29 @@ function AuthScreen({ onAuth, onPrivacy }) {
 }
 
 // ── ACCEPT INVITE ─────────────────────────────────────────────────────────────
-function AcceptInviteScreen({ code, user }) {
+function AcceptInviteScreen({code,user}){
   const [status,setStatus]=useState("loading");
   const [invite,setInvite]=useState(null);
-
   useEffect(()=>{
     async function check(){
       const{data}=await sb.from("invites").select("*").eq("code",code).single();
       if(!data){setStatus("invalid");return;}
       if(data.accepted){setStatus("used");return;}
       if(data.owner_id===user.id){setStatus("own");return;}
-      setInvite(data); setStatus("ready");
+      setInvite(data);setStatus("ready");
     }
     check();
   },[code,user.id]);
 
   async function accept(){
     setStatus("accepting");
-    const userEmail = user.email;
-    await sb.from("invites").update({accepted:true,invitee_id:user.id,invitee_email:userEmail}).eq("code",code);
-    await sb.from("players").update({linked_user_id:user.id,linked_email:userEmail}).eq("id",invite.player_id);
-    // Notify the inviter
-    await sb.from("notifications").insert({
-      user_id:invite.owner_id,
-      type:"invite_accepted",
-      title:"Invite Accepted! 🔗",
-      body:`${user.user_metadata?.display_name||userEmail} accepted your invite. Your ledger is now shared.`,
-      data:{player_id:invite.player_id}
-    });
+    await sb.from("invites").update({accepted:true,invitee_id:user.id,invitee_email:user.email}).eq("code",code);
+    await sb.from("players").update({linked_user_id:user.id,linked_email:user.email}).eq("id",invite.player_id);
+    await sb.from("notifications").insert({user_id:invite.owner_id,type:"invite_accepted",title:"Invite Accepted! 🔗",body:`${user.user_metadata?.display_name||user.email} accepted your invite.`,data:{player_id:invite.player_id}});
     setStatus("done");
   }
 
-  return (
+  return(
     <div style={{fontFamily:"'Georgia',serif",minHeight:"100vh",background:C.bg,color:C.text,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:24}}>
       <div style={{fontSize:48,marginBottom:16}}>⛳</div>
       <div style={{fontSize:32,fontWeight:800,color:C.green,marginBottom:20}}>Press</div>
@@ -297,55 +277,79 @@ function AcceptInviteScreen({ code, user }) {
       {status==="invalid"&&<div style={{color:C.red,fontSize:16}}>Invalid invite link.</div>}
       {status==="used"&&<div style={{color:C.muted,fontSize:16}}>This invite has already been used.</div>}
       {status==="own"&&<div style={{color:C.muted,fontSize:16}}>You can't accept your own invite!</div>}
-      {status==="ready"&&invite&&(
-        <div style={{textAlign:"center",maxWidth:320,width:"100%"}}>
-          <div style={{fontSize:18,fontWeight:600,marginBottom:8}}>You've been invited!</div>
-          <div style={{color:C.muted,fontSize:14,marginBottom:24}}>Accept to share your golf ledger and track bets together.</div>
-          <BigBtn onClick={accept}>Accept Invite ✓</BigBtn>
-        </div>
-      )}
+      {status==="ready"&&invite&&(<div style={{textAlign:"center",maxWidth:320,width:"100%"}}><div style={{fontSize:18,fontWeight:600,marginBottom:8}}>You've been invited!</div><div style={{color:C.muted,fontSize:14,marginBottom:24}}>Accept to share your golf ledger and track bets together.</div><BigBtn onClick={accept}>Accept Invite ✓</BigBtn></div>)}
       {status==="accepting"&&<Spinner/>}
-      {status==="done"&&(
-        <div style={{textAlign:"center"}}>
-          <div style={{fontSize:18,fontWeight:600,color:C.green,marginBottom:8}}>You're linked! ✅</div>
-          <div style={{color:C.muted,fontSize:14,marginBottom:24}}>Your golf ledger is now shared.</div>
-          <BigBtn onClick={()=>window.location.href="/"}>Open Press</BigBtn>
-        </div>
-      )}
+      {status==="done"&&(<div style={{textAlign:"center"}}><div style={{fontSize:18,fontWeight:600,color:C.green,marginBottom:8}}>You're linked! ✅</div><div style={{color:C.muted,fontSize:14,marginBottom:24}}>Your golf ledger is now shared.</div><BigBtn onClick={()=>window.location.href="/"}>Open Press</BigBtn></div>)}
     </div>
   );
 }
 
 // ── ROOT ──────────────────────────────────────────────────────────────────────
-export default function App() {
+export default function App(){
   const [user,setUser]=useState(null);
   const [loading,setLoading]=useState(true);
   const [showPrivacy,setShowPrivacy]=useState(false);
-  const urlParams = new URLSearchParams(window.location.search);
-  const inviteCode = urlParams.get("invite");
+  const [showPaywall,setShowPaywall]=useState(false);
+  const [isPro,setIsPro]=useState(false);
+  const [stripeSaving,setStripeSaving]=useState(false);
+
+  const urlParams=new URLSearchParams(window.location.search);
+  const inviteCode=urlParams.get("invite");
+  const stripeSuccess=urlParams.get("stripe")==="success";
 
   useEffect(()=>{
-    sb.auth.getSession().then(({data})=>{setUser(data.session?.user??null);setLoading(false);});
+    sb.auth.getSession().then(({data})=>{
+      setUser(data.session?.user??null);
+      setLoading(false);
+    });
     const{data:{subscription}}=sb.auth.onAuthStateChange((_e,session)=>{setUser(session?.user??null);});
     return()=>subscription.unsubscribe();
   },[]);
 
-  if(loading) return (
-    <div style={{background:C.bg,minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:16}}>
-      <div style={{fontSize:46,fontWeight:800,color:C.green,letterSpacing:-2}}>Press</div>
-      <Spinner/>
-    </div>
-  );
+  // Check Pro status
+  useEffect(()=>{
+    if(!user)return;
+    async function checkPro(){
+      const{data}=await sb.from("profiles").select("is_pro,stripe_customer_id").eq("id",user.id).single();
+      if(data?.is_pro)setIsPro(true);
+      // If returning from Stripe success
+      if(stripeSuccess&&!data?.is_pro){
+        await sb.from("profiles").update({is_pro:true}).eq("id",user.id);
+        setIsPro(true);
+        window.history.replaceState({},"","/");
+      }
+    }
+    checkPro();
+  },[user,stripeSuccess]);
 
-  if(showPrivacy) return <PrivacyPolicy onBack={()=>setShowPrivacy(false)}/>;
-  if(!user) return <AuthScreen onAuth={setUser} onPrivacy={()=>setShowPrivacy(true)}/>;
-  if(inviteCode) return <AcceptInviteScreen code={inviteCode} user={user}/>;
-  return <Press user={user} onSignOut={()=>sb.auth.signOut()} onPrivacy={()=>setShowPrivacy(true)}/>;
+  async function handleUpgrade(){
+    setStripeSaving(true);
+    try{
+      const stripe=await loadStripe(STRIPE_PK);
+      await stripe.redirectToCheckout({
+        lineItems:[{price:PRICE_ID,quantity:1}],
+        mode:"subscription",
+        successUrl:`${APP_URL}?stripe=success`,
+        cancelUrl:`${APP_URL}?stripe=cancelled`,
+        customerEmail:user?.email,
+      });
+    }catch(e){
+      console.error(e);
+      setStripeSaving(false);
+    }
+  }
+
+  if(loading)return(<div style={{background:C.bg,minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:16}}><div style={{fontSize:46,fontWeight:800,color:C.green,letterSpacing:-2}}>Press</div><Spinner/></div>);
+  if(showPrivacy)return <PrivacyPolicy onBack={()=>setShowPrivacy(false)}/>;
+  if(showPaywall)return <ProPaywall onBack={()=>setShowPaywall(false)} onUpgrade={handleUpgrade} saving={stripeSaving}/>;
+  if(!user)return <AuthScreen onAuth={setUser} onPrivacy={()=>setShowPrivacy(true)}/>;
+  if(inviteCode)return <AcceptInviteScreen code={inviteCode} user={user}/>;
+  return <Press user={user} onSignOut={()=>sb.auth.signOut()} onPrivacy={()=>setShowPrivacy(true)} onUpgrade={()=>setShowPaywall(true)} isPro={isPro} setIsPro={setIsPro}/>;
 }
 
 // ── PRESS APP ─────────────────────────────────────────────────────────────────
-function Press({ user, onSignOut, onPrivacy }) {
-  const today = new Date().toISOString().slice(0,10);
+function Press({user,onSignOut,onPrivacy,onUpgrade,isPro,setIsPro}){
+  const today=new Date().toISOString().slice(0,10);
   const [players,setPlayers]=useState([]);
   const [rounds,setRounds]=useState([]);
   const [bets,setBets]=useState([]);
@@ -354,7 +358,6 @@ function Press({ user, onSignOut, onPrivacy }) {
   const [archivedRounds,setArchivedRounds]=useState([]);
   const [archivedBets,setArchivedBets]=useState([]);
   const [cancelRequests,setCancelRequests]=useState([]);
-  const [disputes,setDisputes]=useState([]);
   const [strokeRequests,setStrokeRequests]=useState([]);
   const [loading,setLoading]=useState(true);
   const [saving,setSaving]=useState(false);
@@ -367,13 +370,11 @@ function Press({ user, onSignOut, onPrivacy }) {
   const [invitePhone,setInvitePhone]=useState("");
   const [partialAmt,setPartialAmt]=useState("");
   const [strokeSuggest,setStrokeSuggest]=useState(null);
-  const [confirmDelete, setConfirmDelete] = useState(null);
+  const [confirmDelete,setConfirmDelete]=useState(null);
   const [disputeItem,setDisputeItem]=useState(null);
+  const [disputeAmt,setDisputeAmt]=useState("");
   const [disputeReason,setDisputeReason]=useState("");
   const [showNotifs,setShowNotifs]=useState(false);
-  const [exportData,setExportData]=useState(null);
-
-  // Forms
   const [nName,setNName]=useState(""); const [nDir,setNDir]=useState("even"); const [nStr,setNStr]=useState("1");
   const [fDate,setFDate]=useState(today); const [fDir,setFDir]=useState("received"); const [fStr,setFStr]=useState("1"); const [fMoney,setFMoney]=useState(""); const [fNotes,setFNotes]=useState(""); const [fWon,setFWon]=useState(true);
   const [bDate,setBDate]=useState(today); const [bType,setBType]=useState(BET_TYPES[0]); const [bAmt,setBAmt]=useState(""); const [bNotes,setBNotes]=useState(""); const [bWon,setBWon]=useState(true);
@@ -381,9 +382,9 @@ function Press({ user, onSignOut, onPrivacy }) {
 
   function t2(msg,error=false){setToast({msg,error});setTimeout(()=>setToast({msg:"",error:false}),2400);}
 
-  const loadAll = useCallback(async()=>{
+  const loadAll=useCallback(async()=>{
     setLoading(true);
-    const [p,r,b,s,n,ar,ab,cr,d,sr]=await Promise.all([
+    const[p,r,b,s,n,ar,ab,cr,sr]=await Promise.all([
       sb.from("players").select("*").eq("owner_id",user.id).order("created_at"),
       sb.from("rounds").select("*").eq("owner_id",user.id).eq("cancelled",false).order("date",{ascending:false}),
       sb.from("bets").select("*").eq("owner_id",user.id).eq("cancelled",false).order("date",{ascending:false}),
@@ -392,43 +393,52 @@ function Press({ user, onSignOut, onPrivacy }) {
       sb.from("archived_rounds").select("*").eq("owner_id",user.id).order("archived_at",{ascending:false}),
       sb.from("archived_bets").select("*").eq("owner_id",user.id).order("archived_at",{ascending:false}),
       sb.from("cancel_requests").select("*").or(`requester_id.eq.${user.id},responder_id.eq.${user.id}`).eq("status","pending"),
-      sb.from("disputes").select("*").or(`requester_id.eq.${user.id},responder_id.eq.${user.id}`).eq("status","pending"),
       sb.from("stroke_requests").select("*").or(`requester_id.eq.${user.id},responder_id.eq.${user.id}`).eq("status","pending"),
     ]);
     if(p.data)setPlayers(p.data); if(r.data)setRounds(r.data);
     if(b.data)setBets(b.data); if(s.data)setSettlements(s.data);
     if(n.data)setNotifications(n.data);
     if(ar.data)setArchivedRounds(ar.data); if(ab.data)setArchivedBets(ab.data);
-    if(cr.data)setCancelRequests(cr.data); if(d.data)setDisputes(d.data);
+    if(cr.data)setCancelRequests(cr.data);
     if(sr.data)setStrokeRequests(sr.data);
     setLoading(false);
   },[user.id]);
 
   useEffect(()=>{loadAll();},[loadAll]);
 
-  const player   = players.find(p=>p.id===pid);
-  const pRounds  = rounds.filter(r=>r.player_id===pid);
-  const pBets    = bets.filter(b=>b.player_id===pid);
-  const pSettle  = settlements.filter(s=>s.player_id===pid);
-  const pArchR   = archivedRounds.filter(r=>r.player_id===pid);
-  const pArchB   = archivedBets.filter(b=>b.player_id===pid);
-  const pHistory = [...pRounds.map(r=>({...r,kind:"round"})),...pBets.map(b=>({...b,kind:"bet"})),...pArchR.map(r=>({...r,kind:"archived_round"})),...pArchB.map(b=>({...b,kind:"archived_bet"}))].sort((a,b)=>(b.date||b.archived_at||"").localeCompare(a.date||a.archived_at||""));
+  const player=players.find(p=>p.id===pid);
+  const pRounds=rounds.filter(r=>r.player_id===pid);
+  const pBets=bets.filter(b=>b.player_id===pid);
+  const pSettle=settlements.filter(s=>s.player_id===pid);
+  const pArchR=archivedRounds.filter(r=>r.player_id===pid);
+  const pArchB=archivedBets.filter(b=>b.player_id===pid);
+  const pHistory=[...pRounds.map(r=>({...r,kind:"round"})),...pBets.map(b=>({...b,kind:"bet"})),...pArchR.map(r=>({...r,kind:"archived_round"})),...pArchB.map(b=>({...b,kind:"archived_bet"}))].sort((a,b)=>(b.date||b.archived_at||"").localeCompare(a.date||a.archived_at||""));
 
-  const unreadNotifs = notifications.filter(n=>!n.read).length;
-  const pendingActions = cancelRequests.filter(r=>r.responder_id===user.id).length + disputes.filter(d=>d.responder_id===user.id).length + strokeRequests.filter(s=>s.responder_id===user.id).length;
-
+  const unreadNotifs=notifications.filter(n=>!n.read).length;
+  const pendingActions=cancelRequests.filter(r=>r.responder_id===user.id).length+strokeRequests.filter(s=>s.responder_id===user.id).length;
   const sRound=players.reduce((s,p)=>s+(p.round_money||0),0);
-  const sBet  =players.reduce((s,p)=>s+(p.bet_money||0),0);
-  const sBank =players.reduce((s,p)=>s+(p.bank||0),0);
+  const sBet=players.reduce((s,p)=>s+(p.bet_money||0),0);
+  const sBank=players.reduce((s,p)=>s+(p.bank||0),0);
+
+  // Pro gate check
+  function requirePro(action){
+    if(isPro){action();return;}
+    onUpgrade();
+  }
 
   function goProfile(id){setPid(id);setPtab("overview");setView("profile");}
   function goRoster(){setView("roster");setPid(null);}
 
-  // ── Add Player ──
   async function addPlayer(){
     const name=nName.trim();
     if(!name){t2("Enter a name.",true);return;}
     if(players.find(p=>p.name.toLowerCase()===name.toLowerCase())){t2("Already exists.",true);return;}
+    // Free tier limit
+    if(!isPro&&players.length>=FREE_PLAYER_LIMIT){
+      setSheet(null);
+      onUpgrade();
+      return;
+    }
     const st=nDir==="even"?0:nDir==="received"?-Math.abs(Number(nStr)):Math.abs(Number(nStr));
     setSaving(true);
     const{data,error}=await sb.from("players").insert({owner_id:user.id,name,strokes:st,round_money:0,bet_money:0,bank:0,season:CURRENT_SEASON}).select().single();
@@ -439,7 +449,6 @@ function Press({ user, onSignOut, onPrivacy }) {
     setSheet(null);t2(`${name} added!`);
   }
 
-  // ── Log Round ──
   async function logRound(){
     if(!player)return;
     const st=fDir==="received"?-Math.abs(Number(fStr)):Math.abs(Number(fStr));
@@ -449,22 +458,11 @@ function Press({ user, onSignOut, onPrivacy }) {
     const{data:rd,error:re}=await sb.from("rounds").insert({owner_id:user.id,player_id:player.id,player_name:player.name,date:fDate,strokes:st,money:amt,notes:fNotes,season:CURRENT_SEASON}).select().single();
     if(re){setSaving(false);t2("Error saving.",true);return;}
     const{data:pd}=await sb.from("players").update({round_money:(player.round_money||0)+amt,bank:(player.bank||0)+amt}).eq("id",player.id).select().single();
-    // Notify linked player
-    if(player.linked_user_id){
-      await sb.from("notifications").insert({
-        user_id:player.linked_user_id,type:"round_logged",
-        title:`Round logged vs ${user.user_metadata?.display_name||user.email}`,
-        body:`${fDate} · ${fWon?"They won":"You won"} · $${rawAmt.toFixed(2)}${fNotes?` · ${fNotes}`:""}`,
-        data:{player_id:player.id,round_id:rd.id}
-      });
-    }
     setSaving(false);
     setRounds(prev=>[rd,...prev]);
     if(pd)setPlayers(prev=>prev.map(p=>p.id===pid?pd:p));
     setFDate(today);setFDir("received");setFStr("1");setFMoney("");setFNotes("");setFWon(true);
     setSheet(null);t2("Round logged!");
-
-    // Suggest stroke adjustment
     if(amt!==0){
       const currentStrokes=player.strokes||0;
       const iWon=amt>0;
@@ -475,7 +473,6 @@ function Press({ user, onSignOut, onPrivacy }) {
     }
   }
 
-  // ── Log Bet ──
   async function logBet(){
     if(!player)return;
     const rawAmt=Math.abs(Number(bAmt)||0);
@@ -485,14 +482,6 @@ function Press({ user, onSignOut, onPrivacy }) {
     const{data:bd,error:be}=await sb.from("bets").insert({owner_id:user.id,player_id:player.id,player_name:player.name,date:bDate,type:bType,amount:amt,notes:bNotes,season:CURRENT_SEASON}).select().single();
     if(be){setSaving(false);t2("Error saving.",true);return;}
     const{data:pd}=await sb.from("players").update({bet_money:(player.bet_money||0)+amt,bank:(player.bank||0)+amt}).eq("id",player.id).select().single();
-    if(player.linked_user_id){
-      await sb.from("notifications").insert({
-        user_id:player.linked_user_id,type:"bet_logged",
-        title:`Side bet logged vs ${user.user_metadata?.display_name||user.email}`,
-        body:`${bDate} · ${bType} · ${bWon?"They won":"You won"} · $${rawAmt.toFixed(2)}${bNotes?` · ${bNotes}`:""}`,
-        data:{player_id:player.id,bet_id:bd.id}
-      });
-    }
     setSaving(false);
     setBets(prev=>[bd,...prev]);
     if(pd)setPlayers(prev=>prev.map(p=>p.id===pid?pd:p));
@@ -500,55 +489,29 @@ function Press({ user, onSignOut, onPrivacy }) {
     setSheet(null);t2("Side bet logged!");
   }
 
-  function handleDeleteTap(item) {
-    if(player?.linked_user_id) {
-      // Linked — send cancel request
-      requestCancel(item);
-    } else {
-      // Not linked — show confirmation first
-      setConfirmDelete(item);
-    }
+  function handleDeleteTap(item){
+    if(player?.linked_user_id){requestCancel(item);}
+    else{setConfirmDelete(item);}
   }
+
   async function requestCancel(item){
     if(!player)return;
     const isRound=item.kind==="round";
-
-    // If linked — require mutual consent
     if(player.linked_user_id){
       const paidSoFar=pSettle.reduce((s,x)=>s+(x.amount||0),0);
       setSaving(true);
       await sb.from(isRound?"rounds":"bets").update({cancel_requested:true}).eq("id",item.id);
-      await sb.from("cancel_requests").insert({
-        requester_id:user.id,
-        responder_id:player.linked_user_id,
-        player_id:player.id,
-        item_type:isRound?"round":"bet",
-        item_id:item.id,
-        item_date:item.date,
-        item_amount:isRound?item.money:item.amount,
-        item_notes:item.notes,
-        paid_so_far:paidSoFar,
-      });
-      await sb.from("notifications").insert({
-        user_id:player.linked_user_id,type:"cancel_request",
-        title:`Cancel request from ${user.user_metadata?.display_name||user.email}`,
-        body:`Wants to cancel ${isRound?"round":"bet"} on ${item.date} · $${Math.abs(isRound?item.money:item.amount).toFixed(2)}`,
-        data:{player_id:player.id,item_id:item.id,item_type:isRound?"round":"bet"}
-      });
+      await sb.from("cancel_requests").insert({requester_id:user.id,responder_id:player.linked_user_id,player_id:player.id,item_type:isRound?"round":"bet",item_id:item.id,item_date:item.date,item_amount:isRound?item.money:item.amount,item_notes:item.notes,paid_so_far:paidSoFar});
+      await sb.from("notifications").insert({user_id:player.linked_user_id,type:"cancel_request",title:`Cancel request from ${user.user_metadata?.display_name||user.email}`,body:`Wants to cancel ${isRound?"round":"bet"} on ${item.date}`,data:{player_id:player.id,item_id:item.id}});
       setSaving(false);
-      t2("Cancel request sent — waiting for approval.");
-      await loadAll();
-      return;
+      t2("Cancel request sent.");await loadAll();
+    } else {
+      const adjustBalance=(player.bank||0)!==0;
+      await archiveAndDelete(item,adjustBalance);
     }
-
-    // Not linked — archive and remove BUT only adjust balance if not already settled
-    // If bank is 0 the entry has been settled — don't touch the balance
-    const adjustBalance = player.bank !== 0;
-    await archiveAndDelete(item, adjustBalance);
   }
 
-  // ── Archive and delete ──
-  async function archiveAndDelete(item, adjustBalance=true){
+  async function archiveAndDelete(item,adjustBalance=true){
     const isRound=item.kind==="round"||item.kind==="archived_round";
     if(isRound){
       await sb.from("archived_rounds").insert({original_id:item.id,owner_id:user.id,player_id:item.player_id,player_name:item.player_name,date:item.date,strokes:item.strokes,money:item.money,notes:item.notes,archive_reason:"cancelled",archived_by:user.id});
@@ -567,38 +530,23 @@ function Press({ user, onSignOut, onPrivacy }) {
       }
       setBets(prev=>prev.filter(x=>x.id!==item.id));
     }
-    t2("Entry archived.");
-    await loadAll();
+    t2("Entry archived.");await loadAll();
   }
 
-  // ── Approve/Deny Cancel Request ──
   async function respondToCancel(req,approve){
     setSaving(true);
     await sb.from("cancel_requests").update({status:approve?"approved":"denied",resolved_at:new Date().toISOString()}).eq("id",req.id);
     if(approve){
       await sb.from(req.item_type==="round"?"rounds":"bets").update({cancelled:true,cancel_requested:false}).eq("id",req.item_id);
-      // Archive it
-      if(req.item_type==="round"){
-        await sb.from("archived_rounds").insert({original_id:req.item_id,owner_id:user.id,player_id:req.player_id,player_name:player?.name||"",date:req.item_date,money:req.item_amount,notes:req.item_notes,archive_reason:"cancelled",archived_by:user.id});
-      } else {
-        await sb.from("archived_bets").insert({original_id:req.item_id,owner_id:user.id,player_id:req.player_id,player_name:player?.name||"",date:req.item_date,amount:req.item_amount,notes:req.item_notes,archive_reason:"cancelled",archived_by:user.id});
-      }
-      // Adjust balance
-      const adj=req.item_type==="round"?-(req.item_amount||0):-(req.item_amount||0);
+      if(req.item_type==="round"){await sb.from("archived_rounds").insert({original_id:req.item_id,owner_id:user.id,player_id:req.player_id,player_name:player?.name||"",date:req.item_date,money:req.item_amount,notes:req.item_notes,archive_reason:"cancelled",archived_by:user.id});}
+      else{await sb.from("archived_bets").insert({original_id:req.item_id,owner_id:user.id,player_id:req.player_id,player_name:player?.name||"",date:req.item_date,amount:req.item_amount,notes:req.item_notes,archive_reason:"cancelled",archived_by:user.id});}
+      const adj=-(req.item_amount||0);
       await sb.from("players").update({bank:(player?.bank||0)+adj}).eq("id",req.player_id);
     }
-    await sb.from("notifications").insert({
-      user_id:req.requester_id,type:approve?"cancel_approved":"cancel_denied",
-      title:approve?"Cancel Request Approved ✅":"Cancel Request Denied ❌",
-      body:approve?`Your cancel request for ${req.item_date} was approved.`:`Your cancel request for ${req.item_date} was denied.`,
-      data:{player_id:req.player_id}
-    });
-    setSaving(false);
-    t2(approve?"Cancellation approved.":"Cancellation denied.");
-    await loadAll();
+    await sb.from("notifications").insert({user_id:req.requester_id,type:approve?"cancel_approved":"cancel_denied",title:approve?"Cancel Approved ✅":"Cancel Denied ❌",body:`Your cancel request for ${req.item_date} was ${approve?"approved":"denied"}.`,data:{player_id:req.player_id}});
+    setSaving(false);t2(approve?"Cancelled.":"Denied.");await loadAll();
   }
 
-  // ── Dispute Amount ──
   async function submitDispute(){
     if(!disputeItem||!player)return;
     const isRound=disputeItem.kind==="round";
@@ -606,29 +554,12 @@ function Press({ user, onSignOut, onPrivacy }) {
     const proposed=Number(disputeAmt);
     if(!proposed||proposed===Math.abs(original)){t2("Enter a different amount.",true);return;}
     setSaving(true);
-    await sb.from("disputes").insert({
-      requester_id:user.id,
-      responder_id:player.linked_user_id,
-      player_id:player.id,
-      item_type:isRound?"round":"bet",
-      item_id:disputeItem.id,
-      original_amount:original,
-      proposed_amount:original>0?proposed:-proposed,
-      reason:disputeReason,
-    });
-    await sb.from("notifications").insert({
-      user_id:player.linked_user_id,type:"dispute",
-      title:`Amount disputed by ${user.user_metadata?.display_name||user.email}`,
-      body:`${disputeItem.date} · Original: $${Math.abs(original).toFixed(2)} → Proposed: $${proposed.toFixed(2)}${disputeReason?` · ${disputeReason}`:""}`,
-      data:{player_id:player.id,item_id:disputeItem.id}
-    });
-    setSaving(false);
-    setSheet(null);setDisputeItem(null);setDisputeAmt("");setDisputeReason("");
-    t2("Dispute submitted.");
-    await loadAll();
+    await sb.from("disputes").insert({requester_id:user.id,responder_id:player.linked_user_id,player_id:player.id,item_type:isRound?"round":"bet",item_id:disputeItem.id,original_amount:original,proposed_amount:original>0?proposed:-proposed,reason:disputeReason});
+    await sb.from("notifications").insert({user_id:player.linked_user_id,type:"dispute",title:`Amount disputed`,body:`${disputeItem.date} · Original: $${Math.abs(original).toFixed(2)} → Proposed: $${proposed.toFixed(2)}`,data:{player_id:player.id}});
+    setSaving(false);setSheet(null);setDisputeItem(null);setDisputeAmt("");setDisputeReason("");
+    t2("Dispute submitted.");await loadAll();
   }
 
-  // ── Stroke Change ──
   async function openEditStrokes(){
     if(!player)return;
     if(player.strokes===0){setEDir("even");setEStr("1");}
@@ -640,23 +571,10 @@ function Press({ user, onSignOut, onPrivacy }) {
   async function saveStrokes(){
     const st=eDir==="even"?0:eDir==="received"?-Math.abs(Number(eStr)):Math.abs(Number(eStr));
     if(player.linked_user_id){
-      // Request mutual approval
       setSaving(true);
-      await sb.from("stroke_requests").insert({
-        requester_id:user.id,
-        responder_id:player.linked_user_id,
-        player_id:player.id,
-        current_strokes:player.strokes,
-        proposed_strokes:st,
-      });
-      await sb.from("notifications").insert({
-        user_id:player.linked_user_id,type:"stroke_change_request",
-        title:`Stroke change requested`,
-        body:`From ${player.strokes===0?"Even":Math.abs(player.strokes)+" strokes"} → ${st===0?"Even":Math.abs(st)+" strokes"}`,
-        data:{player_id:player.id}
-      });
-      setSaving(false);
-      setSheet(null);t2("Stroke change request sent — waiting for approval.");
+      await sb.from("stroke_requests").insert({requester_id:user.id,responder_id:player.linked_user_id,player_id:player.id,current_strokes:player.strokes,proposed_strokes:st});
+      await sb.from("notifications").insert({user_id:player.linked_user_id,type:"stroke_change_request",title:"Stroke change requested",body:`From ${player.strokes===0?"Even":Math.abs(player.strokes)+" strokes"} → ${st===0?"Even":Math.abs(st)+" strokes"}`,data:{player_id:player.id}});
+      setSaving(false);setSheet(null);t2("Request sent.");
     } else {
       setSaving(true);
       const{data:pd}=await sb.from("players").update({strokes:st}).eq("id",pid).select().single();
@@ -669,21 +587,9 @@ function Press({ user, onSignOut, onPrivacy }) {
   async function applyStrokeChange(){
     if(!strokeSuggest)return;
     if(strokeSuggest.linked&&strokeSuggest.linkedUserId){
-      // Request approval from linked player
-      await sb.from("stroke_requests").insert({
-        requester_id:user.id,
-        responder_id:strokeSuggest.linkedUserId,
-        player_id:strokeSuggest.playerId,
-        current_strokes:strokeSuggest.current,
-        proposed_strokes:strokeSuggest.suggested,
-      });
-      await sb.from("notifications").insert({
-        user_id:strokeSuggest.linkedUserId,type:"stroke_change_request",
-        title:"Stroke adjustment after round",
-        body:`Proposed: ${strokeSuggest.suggestedLabel}`,
-        data:{player_id:strokeSuggest.playerId}
-      });
-      setStrokeSuggest(null);t2("Stroke adjustment request sent!");
+      await sb.from("stroke_requests").insert({requester_id:user.id,responder_id:strokeSuggest.linkedUserId,player_id:strokeSuggest.playerId,current_strokes:strokeSuggest.current,proposed_strokes:strokeSuggest.suggested});
+      await sb.from("notifications").insert({user_id:strokeSuggest.linkedUserId,type:"stroke_change_request",title:"Stroke adjustment after round",body:`Proposed: ${strokeSuggest.suggestedLabel}`,data:{player_id:strokeSuggest.playerId}});
+      setStrokeSuggest(null);t2("Request sent!");
     } else {
       await sb.from("players").update({strokes:strokeSuggest.suggested}).eq("id",strokeSuggest.playerId);
       setPlayers(prev=>prev.map(p=>p.id===strokeSuggest.playerId?{...p,strokes:strokeSuggest.suggested}:p));
@@ -698,18 +604,10 @@ function Press({ user, onSignOut, onPrivacy }) {
       await sb.from("players").update({strokes:req.proposed_strokes}).eq("id",req.player_id);
       setPlayers(prev=>prev.map(p=>p.id===req.player_id?{...p,strokes:req.proposed_strokes}:p));
     }
-    await sb.from("notifications").insert({
-      user_id:req.requester_id,type:approve?"stroke_approved":"stroke_denied",
-      title:approve?"Stroke Change Approved ✅":"Stroke Change Denied ❌",
-      body:approve?"Handicap updated for next round.":"The other player denied the stroke change.",
-      data:{player_id:req.player_id}
-    });
-    setSaving(false);
-    t2(approve?"Strokes updated!":"Stroke change denied.");
-    await loadAll();
+    await sb.from("notifications").insert({user_id:req.requester_id,type:approve?"stroke_approved":"stroke_denied",title:approve?"Stroke Change Approved ✅":"Stroke Change Denied ❌",body:approve?"Handicap updated.":"Change denied.",data:{player_id:req.player_id}});
+    setSaving(false);t2(approve?"Strokes updated!":"Denied.");await loadAll();
   }
 
-  // ── Settle Up ──
   async function settleUp(customAmt){
     if(!player||player.bank===0){t2("Already even!");setSheet(null);return;}
     const fullAmt=player.bank;
@@ -720,37 +618,30 @@ function Press({ user, onSignOut, onPrivacy }) {
     await sb.from("settlements").insert({owner_id:user.id,player_id:player.id,player_name:player.name,date:today,amount:payAmt,round_snapshot:player.round_money,bet_snapshot:player.bet_money});
     const{data:pd}=await sb.from("players").update({bank:remaining,round_money:remaining<=0?0:player.round_money,bet_money:remaining<=0?0:player.bet_money}).eq("id",player.id).select().single();
     if(player.linked_user_id){
-      await sb.from("notifications").insert({
-        user_id:player.linked_user_id,type:"settlement",
-        title:"Payment recorded 💰",
-        body:`$${Math.abs(payAmt).toFixed(2)} settled. ${remaining!==0?`$${Math.abs(remaining).toFixed(2)} remaining.`:"All square!"}`,
-        data:{player_id:player.id}
-      });
+      await sb.from("notifications").insert({user_id:player.linked_user_id,type:"settlement",title:"Payment recorded 💰",body:`$${Math.abs(payAmt).toFixed(2)} settled. ${remaining!==0?`$${Math.abs(remaining).toFixed(2)} remaining.`:"All square!"}`,data:{player_id:player.id}});
     }
     setSaving(false);
     if(pd)setPlayers(prev=>prev.map(p=>p.id===pid?pd:p));
-    setPartialAmt("");
-    await loadAll();setSheet(null);
+    setPartialAmt("");await loadAll();setSheet(null);
     t2(payAmt>0?`Collected $${Math.abs(payAmt).toFixed(2)}!`:`Paid $${Math.abs(payAmt).toFixed(2)}!`);
   }
 
-  // ── Generate Invite ──
   async function generateInvite(){
     if(!player)return;
-    setSaving(true);
-    const code=genCode();
-    await sb.from("invites").insert({owner_id:user.id,player_id:player.id,player_name:player.name,code});
-    const link=`${window.location.origin}?invite=${code}`;
-    setInviteLink(link);
-    setSaving(false);
-    try{await navigator.clipboard.writeText(link);t2("Invite link copied!");}
-    catch{t2("Invite link generated!");}
-    setSheet("invite");
+    requirePro(async()=>{
+      setSaving(true);
+      const code=genCode();
+      await sb.from("invites").insert({owner_id:user.id,player_id:player.id,player_name:player.name,code});
+      const link=`${APP_URL}?invite=${code}`;
+      setInviteLink(link);setSaving(false);
+      try{await navigator.clipboard.writeText(link);t2("Invite link copied!");}
+      catch{t2("Invite link generated!");}
+      setSheet("invite");
+    });
   }
 
-  // ── Remove Player ──
   async function removePlayer(){
-    if(player.bank!==0){t2("Settle up before removing player.",true);return;}
+    if((player?.bank||0)!==0){t2("Settle up before removing.",true);return;}
     setSaving(true);
     await sb.from("players").delete().eq("id",pid);
     setSaving(false);
@@ -760,12 +651,10 @@ function Press({ user, onSignOut, onPrivacy }) {
     goRoster();t2("Player removed.");
   }
 
-  // ── Season Reset ──
   async function seasonReset(){
     if(!player)return;
-    if(player.bank!==0){t2("Settle up before starting a new season.",true);return;}
+    if((player?.bank||0)!==0){t2("Settle up first.",true);return;}
     setSaving(true);
-    // Archive all rounds and bets
     for(const r of pRounds){
       await sb.from("archived_rounds").insert({original_id:r.id,owner_id:user.id,player_id:r.player_id,player_name:r.player_name,date:r.date,strokes:r.strokes,money:r.money,notes:r.notes,archive_reason:"season_reset",archived_by:user.id});
       await sb.from("rounds").delete().eq("id",r.id);
@@ -775,71 +664,51 @@ function Press({ user, onSignOut, onPrivacy }) {
       await sb.from("bets").delete().eq("id",b.id);
     }
     await sb.from("players").update({round_money:0,bet_money:0,bank:0,season:CURRENT_SEASON+1}).eq("id",player.id);
-    setSaving(false);
-    t2("New season started!");
-    await loadAll();setSheet(null);
+    setSaving(false);t2("New season started!");await loadAll();setSheet(null);
   }
 
-  // ── Mark notifications read ──
+  const [showExport, setShowExport] = useState(false);
+
+  function exportHistory(){
+    setShowExport(true);
+  }
+
   async function markNotifsRead(){
     const unread=notifications.filter(n=>!n.read).map(n=>n.id);
-    if(unread.length>0){
-      await sb.from("notifications").update({read:true}).in("id",unread);
-      setNotifications(prev=>prev.map(n=>({...n,read:true})));
-    }
+    if(unread.length>0){await sb.from("notifications").update({read:true}).in("id",unread);setNotifications(prev=>prev.map(n=>({...n,read:true})));}
   }
 
-  // ── Export History ──
-  function exportHistory(){
-    const data={
-      player:player?.name,
-      exportDate:today,
-      rounds:pRounds.map(r=>({date:r.date,money:r.money,notes:r.notes,strokes:r.strokes})),
-      bets:pBets.map(b=>({date:b.date,type:b.type,amount:b.amount,notes:b.notes})),
-      settlements:pSettle.map(s=>({date:s.date,amount:s.amount})),
-      archived:pArchR.length+pArchB.length,
-      currentBank:player?.bank,
-    };
-    const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
-    const url=URL.createObjectURL(blob);
-    const a=document.createElement("a");
-    a.href=url;a.download=`press-${player?.name}-history.json`;
-    a.click();URL.revokeObjectURL(url);
-    t2("History exported!");
-  }
-
-  // ── ROSTER VIEW ──────────────────────────────────────────────────────────────
-  if(view==="roster") return (
+  // ── ROSTER ──────────────────────────────────────────────────────────────────
+  if(view==="roster") return(
     <div style={{fontFamily:"'Georgia',serif",minHeight:"100vh",background:C.bg,color:C.text,paddingBottom:40}}>
       <div style={{background:`linear-gradient(180deg,${C.card} 0%,transparent 100%)`,padding:"50px 20px 24px",textAlign:"center"}}>
-        <div style={{display:"inline-flex",alignItems:"center",justifyContent:"center",width:64,height:64,background:`linear-gradient(135deg,${C.green},#4a8030)`,borderRadius:18,marginBottom:14,boxShadow:`0 4px 20px ${C.green}44`}}>
-          <span style={{fontSize:32}}>⛳</span>
-        </div>
+        <div style={{display:"inline-flex",alignItems:"center",justifyContent:"center",width:64,height:64,background:`linear-gradient(135deg,${C.green},#4a8030)`,borderRadius:18,marginBottom:14,boxShadow:`0 4px 20px ${C.green}44`}}><span style={{fontSize:32}}>⛳</span></div>
         <div style={{fontSize:42,fontWeight:800,letterSpacing:-2,color:"#f0f7ec",lineHeight:1}}>Press</div>
         <div style={{fontSize:10,color:C.green,letterSpacing:4,textTransform:"uppercase",marginTop:5,marginBottom:4}}>Put Me In Your Phone</div>
-        <div style={{fontSize:11,color:C.muted,marginBottom:12,display:"flex",alignItems:"center",justifyContent:"center",gap:10}}>
-          {user.user_metadata?.display_name||user.email}
+        <div style={{fontSize:11,color:C.muted,marginBottom:6,display:"flex",alignItems:"center",justifyContent:"center",gap:10,flexWrap:"wrap"}}>
+          <span>{user.user_metadata?.display_name||user.email}</span>
+          {isPro&&<span style={{background:`rgba(232,184,75,0.15)`,color:C.gold,fontSize:10,padding:"2px 8px",borderRadius:10,fontWeight:700}}>⭐ Pro</span>}
           <button onClick={onSignOut} style={{background:"none",border:"none",color:C.dim,fontSize:11,cursor:"pointer"}}>Sign out</button>
-          <button onClick={()=>{setShowNotifs(true);markNotifsRead();}} style={{background:"none",border:"none",color:C.muted,fontSize:11,cursor:"pointer",display:"flex",alignItems:"center"}}>
-            🔔<NotifBadge count={unreadNotifs+pendingActions}/>
-          </button>
+          <button onClick={()=>{setShowNotifs(true);markNotifsRead();}} style={{background:"none",border:"none",color:C.muted,fontSize:11,cursor:"pointer",display:"flex",alignItems:"center"}}>🔔<NotifBadge count={unreadNotifs+pendingActions}/></button>
         </div>
+        {!isPro&&(
+          <button onClick={onUpgrade} style={{background:`linear-gradient(135deg,${C.gold},#b8860b)`,border:"none",color:"#0a1a0f",padding:"8px 20px",borderRadius:20,fontSize:12,fontWeight:700,cursor:"pointer",marginBottom:12}}>
+            ⭐ Upgrade to Pro — $1.99/mo
+          </button>
+        )}
         <div style={{display:"flex",background:"rgba(0,0,0,0.35)",border:`1px solid ${C.border}`,borderRadius:14,overflow:"hidden",maxWidth:360,margin:"0 auto"}}>
-          {[{l:"Rounds",v:sRound},{l:"Side Bets",v:sBet},{l:"Season Bank",v:sBank}].map((item,i,arr)=>(
-            <div key={i} style={{flex:1,textAlign:"center",padding:"13px 4px",borderRight:i<arr.length-1?`1px solid ${C.border}`:"none"}}>
-              <Money value={item.v} size={15}/><div style={{fontSize:8,color:C.muted,letterSpacing:1.5,textTransform:"uppercase",marginTop:3}}>{item.l}</div>
-            </div>
-          ))}
+          {[{l:"Rounds",v:sRound},{l:"Side Bets",v:sBet},{l:"Season Bank",v:sBank}].map((item,i,arr)=>(<div key={i} style={{flex:1,textAlign:"center",padding:"13px 4px",borderRight:i<arr.length-1?`1px solid ${C.border}`:"none"}}><Money value={item.v} size={15}/><div style={{fontSize:8,color:C.muted,letterSpacing:1.5,textTransform:"uppercase",marginTop:3}}>{item.l}</div></div>))}
         </div>
       </div>
 
       <div style={{padding:"0 16px"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
-          <div style={{fontSize:11,letterSpacing:2,color:C.muted,textTransform:"uppercase"}}>Your Opponents</div>
+          <div style={{fontSize:11,letterSpacing:2,color:C.muted,textTransform:"uppercase"}}>
+            Your Opponents {!isPro&&<span style={{color:C.gold}}>({players.length}/{FREE_PLAYER_LIMIT} free)</span>}
+          </div>
           <button onClick={()=>setSheet("addPlayer")} style={{background:C.green,border:"none",color:"#0a1a0f",padding:"9px 18px",borderRadius:20,fontSize:13,fontWeight:700,cursor:"pointer"}}>+ Add Player</button>
         </div>
 
-        {/* Pending actions banner */}
         {pendingActions>0&&(
           <div style={{background:"rgba(232,184,75,0.1)",border:`1px solid ${C.gold}44`,borderRadius:10,padding:"12px 14px",marginBottom:14,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
             <div style={{fontSize:13,color:C.gold,fontWeight:600}}>⚠️ {pendingActions} action{pendingActions>1?"s":""} need your response</div>
@@ -852,13 +721,14 @@ function Press({ user, onSignOut, onPrivacy }) {
             <div style={{fontSize:48,marginBottom:12}}>⛳</div>
             <div style={{fontSize:16,fontWeight:600,marginBottom:6}}>No opponents yet</div>
             <div style={{fontSize:13}}>Tap "+ Add Player" to get started.</div>
+            {!isPro&&<div style={{fontSize:12,color:C.gold,marginTop:8}}>Free plan: up to {FREE_PLAYER_LIMIT} players</div>}
           </div>
         ):[...players].sort((a,b)=>(b.bank||0)-(a.bank||0)).map((p,i)=>{
           const pr=rounds.filter(r=>r.player_id===p.id);
           const pb=bets.filter(b=>b.player_id===p.id);
           const sl=p.strokes===0?"Even":p.strokes<0?`You get ${Math.abs(p.strokes)}`:`You give ${p.strokes}`;
-          return (
-            <div key={p.id} onClick={()=>goProfile(p.id)} style={{display:"flex",alignItems:"center",gap:14,padding:"16px",marginBottom:10,background:p.frozen?"rgba(100,100,100,0.1)":C.card,border:`1px solid ${p.frozen?"rgba(150,150,150,0.2)":C.border}`,borderRadius:16,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
+          return(
+            <div key={p.id} onClick={()=>goProfile(p.id)} style={{display:"flex",alignItems:"center",gap:14,padding:"16px",marginBottom:10,background:C.card,border:`1px solid ${C.border}`,borderRadius:16,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
               <div style={{width:52,height:52,borderRadius:"50%",background:i===0?`linear-gradient(135deg,${C.green},#4a8030)`:C.dim,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:800,fontSize:22,color:i===0?"#0a1a0f":C.green,flexShrink:0}}>
                 {p.name.charAt(0).toUpperCase()}
               </div>
@@ -866,39 +736,59 @@ function Press({ user, onSignOut, onPrivacy }) {
                 <div style={{display:"flex",alignItems:"center",gap:6}}>
                   <div style={{fontWeight:700,fontSize:19}}>{p.name}</div>
                   {p.linked_user_id&&<span style={{fontSize:10,background:"rgba(123,180,80,0.15)",color:C.green,padding:"2px 6px",borderRadius:8}}>🔗</span>}
-                  {p.frozen&&<span style={{fontSize:10,background:"rgba(150,150,150,0.15)",color:C.muted,padding:"2px 6px",borderRadius:8}}>❄️ Frozen</span>}
                 </div>
                 <div style={{fontSize:11,color:C.muted,marginTop:1}}>{sl} · {pr.length} round{pr.length!==1?"s":""} · {pb.length} bet{pb.length!==1?"s":""}</div>
               </div>
-              <div style={{textAlign:"right",flexShrink:0}}>
-                <Money value={p.bank||0} size={22}/><div style={{fontSize:9,color:C.muted,letterSpacing:1,textTransform:"uppercase",marginTop:2}}>Bank</div>
-              </div>
+              <div style={{textAlign:"right",flexShrink:0}}><Money value={p.bank||0} size={22}/><div style={{fontSize:9,color:C.muted,letterSpacing:1,textTransform:"uppercase",marginTop:2}}>Bank</div></div>
               <div style={{color:C.dim,fontSize:20}}>›</div>
             </div>
           );
         })}
+
+        {/* Upgrade prompt when at limit */}
+        {!isPro&&players.length>=FREE_PLAYER_LIMIT&&(
+          <div style={{background:`linear-gradient(135deg,rgba(232,184,75,0.1),rgba(123,180,80,0.05))`,border:`1px solid ${C.gold}44`,borderRadius:14,padding:"20px",textAlign:"center",marginTop:8}}>
+            <div style={{fontSize:20,marginBottom:6}}>⭐</div>
+            <div style={{fontWeight:700,fontSize:15,marginBottom:6,color:C.gold}}>Unlock Unlimited Players</div>
+            <div style={{fontSize:12,color:C.muted,marginBottom:14}}>You've reached the free limit of {FREE_PLAYER_LIMIT} players. Upgrade to add more and unlock all Pro features.</div>
+            <button onClick={onUpgrade} style={{background:`linear-gradient(135deg,${C.gold},#b8860b)`,border:"none",color:"#0a1a0f",padding:"12px 24px",borderRadius:20,fontSize:13,fontWeight:700,cursor:"pointer"}}>
+              Upgrade to Pro — $1.99/mo
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Add Player Sheet */}
       <Sheet open={sheet==="addPlayer"} onClose={()=>setSheet(null)} title="Add Opponent">
         <div style={{display:"flex",flexDirection:"column",gap:14}}>
-          <div><Lbl>Name</Lbl><input value={nName} onChange={e=>setNName(e.target.value)} placeholder="e.g. KP" style={inp}/></div>
-          <div>
-            <Lbl note="Starting handicap">Strokes</Lbl>
-            <div style={{display:"flex",gap:8,marginBottom:nDir!=="even"?10:0}}>
-              {["even","received","gave"].map(d=>(<button key={d} onClick={()=>setNDir(d)} style={pill(nDir===d)}>{d==="even"?"Even":d==="received"?"I Get":"I Give"}</button>))}
+          {!isPro&&players.length>=FREE_PLAYER_LIMIT?(
+            <div style={{textAlign:"center",padding:"20px 0"}}>
+              <div style={{fontSize:32,marginBottom:10}}>⭐</div>
+              <div style={{fontWeight:700,fontSize:16,marginBottom:8,color:C.gold}}>Pro Required</div>
+              <div style={{fontSize:13,color:C.muted,marginBottom:20}}>Upgrade to add unlimited players.</div>
+              <BigBtn onClick={()=>{setSheet(null);onUpgrade();}} color={C.gold} textColor="#0a1a0f">Upgrade to Pro</BigBtn>
+              <GhostBtn onClick={()=>setSheet(null)} style={{marginTop:10}}>Cancel</GhostBtn>
             </div>
-            {nDir!=="even"&&<input type="number" min="1" value={nStr} onChange={e=>setNStr(e.target.value)} placeholder="# strokes" style={inp}/>}
-          </div>
-          <BigBtn onClick={addPlayer} disabled={saving}>{saving?"Saving...":"Add Player"}</BigBtn>
-          <GhostBtn onClick={()=>setSheet(null)}>Cancel</GhostBtn>
+          ):(
+            <>
+              <div><Lbl>Name</Lbl><input value={nName} onChange={e=>setNName(e.target.value)} placeholder="e.g. KP" style={inp}/></div>
+              <div>
+                <Lbl note="Starting handicap">Strokes</Lbl>
+                <div style={{display:"flex",gap:8,marginBottom:nDir!=="even"?10:0}}>
+                  {["even","received","gave"].map(d=>(<button key={d} onClick={()=>setNDir(d)} style={pill(nDir===d)}>{d==="even"?"Even":d==="received"?"I Get":"I Give"}</button>))}
+                </div>
+                {nDir!=="even"&&<input type="number" min="1" value={nStr} onChange={e=>setNStr(e.target.value)} placeholder="# strokes" style={inp}/>}
+              </div>
+              <BigBtn onClick={addPlayer} disabled={saving}>{saving?"Saving...":"Add Player"}</BigBtn>
+              <GhostBtn onClick={()=>setSheet(null)}>Cancel</GhostBtn>
+            </>
+          )}
         </div>
       </Sheet>
 
       {/* Notifications Sheet */}
       <Sheet open={showNotifs} onClose={()=>setShowNotifs(false)} title="Notifications & Actions">
         <div>
-          {/* Pending cancel requests */}
           {cancelRequests.filter(r=>r.responder_id===user.id).map(req=>(
             <div key={req.id} style={{background:"rgba(232,184,75,0.08)",border:`1px solid ${C.gold}33`,borderRadius:10,padding:"14px",marginBottom:10}}>
               <div style={{fontWeight:600,fontSize:14,marginBottom:4}}>⚠️ Cancel Request</div>
@@ -910,61 +800,41 @@ function Press({ user, onSignOut, onPrivacy }) {
               </div>
             </div>
           ))}
-
-          {/* Pending stroke requests */}
           {strokeRequests.filter(s=>s.responder_id===user.id).map(req=>(
             <div key={req.id} style={{background:"rgba(123,180,80,0.06)",border:`1px solid ${C.green}33`,borderRadius:10,padding:"14px",marginBottom:10}}>
               <div style={{fontWeight:600,fontSize:14,marginBottom:4}}>⛳ Stroke Change Request</div>
-              <div style={{fontSize:12,color:C.muted,marginBottom:10}}>
-                {req.current_strokes===0?"Even":Math.abs(req.current_strokes)+" strokes"} → {req.proposed_strokes===0?"Even":Math.abs(req.proposed_strokes)+" strokes"}
-              </div>
+              <div style={{fontSize:12,color:C.muted,marginBottom:10}}>{req.current_strokes===0?"Even":Math.abs(req.current_strokes)+" strokes"} → {req.proposed_strokes===0?"Even":Math.abs(req.proposed_strokes)+" strokes"}</div>
               <div style={{display:"flex",gap:8}}>
                 <button onClick={()=>respondToStrokeRequest(req,true)} style={{flex:1,padding:"10px",background:C.green,border:"none",borderRadius:8,color:"#0a1a0f",fontWeight:700,fontSize:13,cursor:"pointer"}}>Approve ✓</button>
                 <button onClick={()=>respondToStrokeRequest(req,false)} style={{flex:1,padding:"10px",background:"transparent",border:`1px solid ${C.red}`,borderRadius:8,color:C.red,fontWeight:700,fontSize:13,cursor:"pointer"}}>Deny ✗</button>
               </div>
             </div>
           ))}
-
-          {/* All notifications */}
-          {notifications.length===0&&cancelRequests.filter(r=>r.responder_id===user.id).length===0&&strokeRequests.filter(s=>s.responder_id===user.id).length===0&&(
-            <div style={{textAlign:"center",color:C.dim,padding:"30px 0"}}>No notifications yet.</div>
-          )}
-          {notifications.map(n=>(
-            <div key={n.id} style={{padding:"12px 14px",background:n.read?C.card:"rgba(123,180,80,0.06)",border:`1px solid ${n.read?C.border:C.green+"33"}`,borderRadius:10,marginBottom:8}}>
-              <div style={{fontWeight:600,fontSize:13,marginBottom:2}}>{n.title}</div>
-              {n.body&&<div style={{fontSize:12,color:C.muted}}>{n.body}</div>}
-              <div style={{fontSize:10,color:C.dim,marginTop:4}}>{new Date(n.created_at).toLocaleDateString()}</div>
-            </div>
-          ))}
+          {notifications.length===0&&cancelRequests.filter(r=>r.responder_id===user.id).length===0&&<div style={{textAlign:"center",color:C.dim,padding:"30px 0"}}>No notifications yet.</div>}
+          {notifications.map(n=>(<div key={n.id} style={{padding:"12px 14px",background:n.read?C.card:"rgba(123,180,80,0.06)",border:`1px solid ${n.read?C.border:C.green+"33"}`,borderRadius:10,marginBottom:8}}><div style={{fontWeight:600,fontSize:13,marginBottom:2}}>{n.title}</div>{n.body&&<div style={{fontSize:12,color:C.muted}}>{n.body}</div>}<div style={{fontSize:10,color:C.dim,marginTop:4}}>{new Date(n.created_at).toLocaleDateString()}</div></div>))}
         </div>
       </Sheet>
 
       <div style={{textAlign:"center",padding:"16px 0 6px",fontSize:11,color:C.dim}}>
         <button onClick={onPrivacy} style={{background:"none",border:"none",color:C.dim,fontSize:11,cursor:"pointer",textDecoration:"underline"}}>Privacy Policy & Terms</button>
       </div>
-
       <Toast msg={toast.msg} error={toast.error}/>
     </div>
   );
 
-  // ── PROFILE VIEW ─────────────────────────────────────────────────────────────
+  // ── PROFILE ──────────────────────────────────────────────────────────────────
   const PTABS=[{id:"overview",label:"Overview"},{id:"rounds",label:"Rounds"},{id:"bets",label:"Bets"},{id:"history",label:"History"},{id:"settings",label:"⚙️"}];
 
-  return (
+  return(
     <div style={{fontFamily:"'Georgia',serif",minHeight:"100vh",background:C.bg,color:C.text,paddingBottom:100}}>
       <div style={{background:`linear-gradient(180deg,${C.card} 0%,transparent 100%)`,padding:"44px 18px 0"}}>
-        <button onClick={goRoster} style={{background:"rgba(123,180,80,0.15)",border:`1px solid ${C.green}`,color:C.green,fontSize:14,cursor:"pointer",padding:"8px 16px",borderRadius:20,display:"flex",alignItems:"center",gap:6,fontWeight:700,marginBottom:14,WebkitTapHighlightColor:"transparent"}}>
-          ‹ All Players
-        </button>
+        <button onClick={goRoster} style={{background:"rgba(123,180,80,0.15)",border:`1px solid ${C.green}`,color:C.green,fontSize:14,cursor:"pointer",padding:"8px 16px",borderRadius:20,display:"flex",alignItems:"center",gap:6,fontWeight:700,marginBottom:14,WebkitTapHighlightColor:"transparent"}}>‹ All Players</button>
         <div style={{display:"flex",alignItems:"center",gap:16,marginBottom:18}}>
-          <div style={{width:62,height:62,borderRadius:"50%",background:`linear-gradient(135deg,${C.green},#4a8030)`,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:800,fontSize:28,color:"#0a1a0f",flexShrink:0}}>
-            {player?.name.charAt(0).toUpperCase()}
-          </div>
+          <div style={{width:62,height:62,borderRadius:"50%",background:`linear-gradient(135deg,${C.green},#4a8030)`,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:800,fontSize:28,color:"#0a1a0f",flexShrink:0}}>{player?.name.charAt(0).toUpperCase()}</div>
           <div style={{flex:1}}>
             <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
               <div style={{fontWeight:700,fontSize:26,lineHeight:1.1}}>{player?.name}</div>
               {player?.linked_user_id&&<span style={{fontSize:11,background:"rgba(123,180,80,0.15)",color:C.green,padding:"3px 8px",borderRadius:8}}>🔗 Linked</span>}
-              {player?.frozen&&<span style={{fontSize:11,background:"rgba(150,150,150,0.15)",color:C.muted,padding:"3px 8px",borderRadius:8}}>❄️ Frozen</span>}
             </div>
             {player?.linked_email&&<div style={{fontSize:11,color:C.muted,marginTop:2}}>Linked: {player.linked_email}</div>}
             <div style={{fontSize:12,color:C.green,marginTop:2}}>{player?.strokes===0?"Even":player?.strokes<0?`You receive ${Math.abs(player.strokes)} stroke(s)`:`You give ${player?.strokes} stroke(s)`}</div>
@@ -972,23 +842,16 @@ function Press({ user, onSignOut, onPrivacy }) {
           <div style={{textAlign:"right"}}><Money value={player?.bank??0} size={26}/><div style={{fontSize:9,color:C.muted,letterSpacing:1,textTransform:"uppercase",marginTop:2}}>Bank</div></div>
         </div>
         <div style={{display:"flex",background:"rgba(0,0,0,0.3)",borderRadius:"12px 12px 0 0",overflow:"hidden"}}>
-          {[{l:"Round $",v:player?.round_money??0,m:true},{l:"Bet $",v:player?.bet_money??0,m:true},{l:"Rounds",v:pRounds.length,m:false},{l:"Bets",v:pBets.length,m:false}].map((item,i,arr)=>(
-            <div key={i} style={{flex:1,textAlign:"center",padding:"11px 4px",borderRight:i<arr.length-1?`1px solid ${C.border}`:"none"}}>
-              {item.m?<Money value={item.v} size={13}/>:<div style={{fontSize:17,fontWeight:700,color:C.green}}>{item.v}</div>}
-              <div style={{fontSize:8,color:C.muted,letterSpacing:1,textTransform:"uppercase",marginTop:2}}>{item.l}</div>
-            </div>
-          ))}
+          {[{l:"Round $",v:player?.round_money??0,m:true},{l:"Bet $",v:player?.bet_money??0,m:true},{l:"Rounds",v:pRounds.length,m:false},{l:"Bets",v:pBets.length,m:false}].map((item,i,arr)=>(<div key={i} style={{flex:1,textAlign:"center",padding:"11px 4px",borderRight:i<arr.length-1?`1px solid ${C.border}`:"none"}}>{item.m?<Money value={item.v} size={13}/>:<div style={{fontSize:17,fontWeight:700,color:C.green}}>{item.v}</div>}<div style={{fontSize:8,color:C.muted,letterSpacing:1,textTransform:"uppercase",marginTop:2}}>{item.l}</div></div>))}
         </div>
       </div>
 
-      {/* Tabs — all visible, no scroll */}
       <div style={{display:"flex",borderBottom:`1px solid ${C.border}`,background:"rgba(0,0,0,0.2)"}}>
         {PTABS.map(t=>(<button key={t.id} onClick={()=>setPtab(t.id)} style={{flex:1,padding:"13px 4px",fontSize:t.id==="settings"?18:11,fontWeight:ptab===t.id?700:500,background:"transparent",color:ptab===t.id?C.green:C.muted,border:"none",borderBottom:ptab===t.id?`2px solid ${C.green}`:"2px solid transparent",cursor:"pointer",whiteSpace:"nowrap"}}>{t.label}</button>))}
       </div>
 
       <div style={{padding:"16px"}}>
 
-        {/* OVERVIEW */}
         {ptab==="overview"&&(
           <div>
             <div style={{display:"flex",gap:8,marginBottom:14}}>
@@ -998,42 +861,27 @@ function Press({ user, onSignOut, onPrivacy }) {
             </div>
 
             {/* Invite banner */}
-            {!player?.linked_user_id&&!player?.frozen&&(
+            {!player?.linked_user_id&&(
               <div style={{background:"rgba(123,180,80,0.07)",border:`1px solid ${C.green}33`,borderRadius:10,padding:"12px 14px",marginBottom:12,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                 <div>
                   <div style={{fontWeight:600,fontSize:13,marginBottom:1}}>Invite {player?.name}</div>
-                  <div style={{fontSize:11,color:C.muted}}>Link to share this ledger</div>
+                  <div style={{fontSize:11,color:C.muted}}>{isPro?"Link to share this ledger":"Pro feature — upgrade to invite"}</div>
                 </div>
-                <button onClick={generateInvite} disabled={saving} style={{background:C.green,border:"none",color:"#0a1a0f",padding:"7px 14px",borderRadius:16,fontSize:12,fontWeight:700,cursor:"pointer",flexShrink:0}}>
-                  {saving?"...":"Invite 🔗"}
+                <button onClick={generateInvite} disabled={saving} style={{background:isPro?C.green:C.gold,border:"none",color:"#0a1a0f",padding:"7px 14px",borderRadius:16,fontSize:12,fontWeight:700,cursor:"pointer",flexShrink:0}}>
+                  {isPro?(saving?"...":"Invite 🔗"):"⭐ Pro"}
                 </button>
               </div>
             )}
 
-            {/* Frozen notice */}
-            {player?.frozen&&(
-              <div style={{background:"rgba(150,150,150,0.08)",border:"1px solid rgba(150,150,150,0.2)",borderRadius:10,padding:"12px 14px",marginBottom:12}}>
-                <div style={{fontWeight:600,fontSize:13,marginBottom:2}}>❄️ Account Frozen</div>
-                <div style={{fontSize:12,color:C.muted}}>This player's account was deleted. Balance frozen at <Money value={player.frozen_balance||0} size={13}/>. History is preserved.</div>
-              </div>
-            )}
-
-            {/* Bank breakdown */}
             <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:"12px 14px",marginBottom:12}}>
               <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>Bank Breakdown</div>
               <div style={{display:"flex",border:`1px solid ${C.border}`,borderRadius:8,overflow:"hidden"}}>
-                {[{l:"Rounds",v:player?.round_money??0},{l:"Side Bets",v:player?.bet_money??0},{l:"Total Bank",v:player?.bank??0}].map((item,i,arr)=>(
-                  <div key={i} style={{flex:1,textAlign:"center",padding:"10px 4px",background:"rgba(0,0,0,0.2)",borderRight:i<arr.length-1?`1px solid ${C.border}`:"none"}}>
-                    <Money value={item.v} size={13}/><div style={{fontSize:8,color:C.muted,letterSpacing:1,textTransform:"uppercase",marginTop:3}}>{item.l}</div>
-                  </div>
-                ))}
+                {[{l:"Rounds",v:player?.round_money??0},{l:"Side Bets",v:player?.bet_money??0},{l:"Total Bank",v:player?.bank??0}].map((item,i,arr)=>(<div key={i} style={{flex:1,textAlign:"center",padding:"10px 4px",background:"rgba(0,0,0,0.2)",borderRight:i<arr.length-1?`1px solid ${C.border}`:"none"}}><Money value={item.v} size={13}/><div style={{fontSize:8,color:C.muted,letterSpacing:1,textTransform:"uppercase",marginTop:3}}>{item.l}</div></div>))}
               </div>
             </div>
 
             <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>Recent Activity</div>
-            {loading?<Spinner/>:pHistory.length===0?<div style={{textAlign:"center",color:C.dim,padding:"24px 0",fontSize:13}}>⛳ No activity yet!</div>:pHistory.slice(0,5).map((item,i)=>(
-              <ActivityItem key={i} item={item}/>
-            ))}
+            {loading?<Spinner/>:pHistory.length===0?<div style={{textAlign:"center",color:C.dim,padding:"24px 0",fontSize:13}}>⛳ No activity yet!</div>:pHistory.slice(0,5).map((item,i)=>(<ActivityItem key={i} item={item}/>))}
             {pHistory.length>5&&<button onClick={()=>setPtab("history")} style={{width:"100%",padding:"11px",background:"transparent",border:`1px solid ${C.border}`,borderRadius:10,color:C.green,fontSize:13,cursor:"pointer",marginTop:6}}>View All ({pHistory.length})</button>}
 
             {pSettle.length>0&&(
@@ -1045,89 +893,84 @@ function Press({ user, onSignOut, onPrivacy }) {
           </div>
         )}
 
-        {/* ROUNDS */}
         {ptab==="rounds"&&(()=>{
-          const isSettled = (player?.bank||0) === 0 && pSettle.length > 0;
-          return (
-          <div>
-            <BigBtn onClick={()=>setSheet("round")} style={{marginBottom:12}}>+ Log Round</BigBtn>
-            {loading?<Spinner/>:pRounds.length===0?<Empty msg="No rounds logged yet."/>:pRounds.map(r=>(
-              <SwipeRow key={r.id} onDelete={()=>handleDeleteTap({...r,kind:"round"})} disabled={r.cancel_requested||isSettled}>
-                <div style={{flex:1}}>
-                  <div style={{fontWeight:600,fontSize:14}}>{r.date}{r.cancel_requested&&<span style={{fontSize:10,color:C.gold,marginLeft:8}}>⏳ Cancel Pending</span>}</div>
-                  {r.notes&&<div style={{fontSize:12,color:C.muted,marginTop:2,fontStyle:"italic"}}>{r.notes}</div>}
-                  <div style={{fontSize:11,color:C.dim,marginTop:2}}>{r.strokes===0?"Even":r.strokes<0?`Got ${Math.abs(r.strokes)} stroke(s)`:`Gave ${r.strokes} stroke(s)`}</div>
-                </div>
-                <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4}}>
-                  <Money value={r.money} size={16}/>
-                  {player?.linked_user_id&&<button onClick={e=>{e.stopPropagation();setDisputeItem({...r,kind:"round"});setSheet("dispute");}} style={{background:"none",border:"none",color:C.gold,fontSize:10,cursor:"pointer",padding:0}}>dispute</button>}
-                </div>
-              </SwipeRow>
-            ))}
-          </div>
+          const isSettled=(player?.bank||0)===0&&pSettle.length>0;
+          return(
+            <div>
+              <BigBtn onClick={()=>setSheet("round")} style={{marginBottom:12}}>+ Log Round</BigBtn>
+              {loading?<Spinner/>:pRounds.length===0?<Empty msg="No rounds logged yet."/>:pRounds.map(r=>(
+                <SwipeRow key={r.id} onDelete={()=>handleDeleteTap({...r,kind:"round"})} disabled={r.cancel_requested||isSettled}>
+                  <div style={{flex:1}}>
+                    <div style={{fontWeight:600,fontSize:14}}>{r.date}{r.cancel_requested&&<span style={{fontSize:10,color:C.gold,marginLeft:8}}>⏳ Pending</span>}</div>
+                    {r.notes&&<div style={{fontSize:12,color:C.muted,marginTop:2,fontStyle:"italic"}}>{r.notes}</div>}
+                    <div style={{fontSize:11,color:C.dim,marginTop:2}}>{r.strokes===0?"Even":r.strokes<0?`Got ${Math.abs(r.strokes)} stroke(s)`:`Gave ${r.strokes} stroke(s)`}</div>
+                    {isSettled&&<div style={{fontSize:10,color:C.muted,marginTop:2}}>✅ Settled — locked</div>}
+                  </div>
+                  <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4}}>
+                    <Money value={r.money} size={16}/>
+                    {player?.linked_user_id&&<button onClick={e=>{e.stopPropagation();setDisputeItem({...r,kind:"round"});setSheet("dispute");}} style={{background:"none",border:"none",color:C.gold,fontSize:10,cursor:"pointer",padding:0}}>dispute</button>}
+                  </div>
+                </SwipeRow>
+              ))}
+            </div>
           );
         })()}
 
-        {/* BETS */}
         {ptab==="bets"&&(()=>{
-          const isSettled = (player?.bank||0) === 0 && pSettle.length > 0;
-          return (
-          <div>
-            <BigBtn onClick={()=>setSheet("bet")} style={{marginBottom:12,background:C.gold}}>+ Log Side Bet</BigBtn>
-            {loading?<Spinner/>:pBets.length===0?<Empty msg="No side bets logged yet."/>:pBets.map(b=>(
-              <SwipeRow key={b.id} onDelete={()=>handleDeleteTap({...b,kind:"bet"})} accent={C.gold} disabled={b.cancel_requested||isSettled}>
-                <div style={{flex:1}}>
-                  <div style={{fontWeight:700,fontSize:14}}>{b.type}{b.cancel_requested&&<span style={{fontSize:10,color:C.gold,marginLeft:8}}>⏳ Cancel Pending</span>}</div>
-                  <div style={{fontSize:12,color:C.muted,marginTop:2}}>{b.date}{b.notes?` · ${b.notes}`:""}</div>
-                  {isSettled&&<div style={{fontSize:10,color:C.muted,marginTop:2}}>✅ Settled — locked</div>}
-                </div>
-                <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4}}>
-                  <Money value={b.amount} size={16}/>
-                  {player?.linked_user_id&&<button onClick={e=>{e.stopPropagation();setDisputeItem({...b,kind:"bet"});setSheet("dispute");}} style={{background:"none",border:"none",color:C.gold,fontSize:10,cursor:"pointer",padding:0}}>dispute</button>}
-                </div>
-              </SwipeRow>
-            ))}
-          </div>
+          const isSettled=(player?.bank||0)===0&&pSettle.length>0;
+          return(
+            <div>
+              <BigBtn onClick={()=>setSheet("bet")} style={{marginBottom:12,background:C.gold}}>+ Log Side Bet</BigBtn>
+              {loading?<Spinner/>:pBets.length===0?<Empty msg="No side bets logged yet."/>:pBets.map(b=>(
+                <SwipeRow key={b.id} onDelete={()=>handleDeleteTap({...b,kind:"bet"})} accent={C.gold} disabled={b.cancel_requested||isSettled}>
+                  <div style={{flex:1}}>
+                    <div style={{fontWeight:700,fontSize:14}}>{b.type}{b.cancel_requested&&<span style={{fontSize:10,color:C.gold,marginLeft:8}}>⏳ Pending</span>}</div>
+                    <div style={{fontSize:12,color:C.muted,marginTop:2}}>{b.date}{b.notes?` · ${b.notes}`:""}</div>
+                    {isSettled&&<div style={{fontSize:10,color:C.muted,marginTop:2}}>✅ Settled — locked</div>}
+                  </div>
+                  <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4}}>
+                    <Money value={b.amount} size={16}/>
+                    {player?.linked_user_id&&<button onClick={e=>{e.stopPropagation();setDisputeItem({...b,kind:"bet"});setSheet("dispute");}} style={{background:"none",border:"none",color:C.gold,fontSize:10,cursor:"pointer",padding:0}}>dispute</button>}
+                  </div>
+                </SwipeRow>
+              ))}
+            </div>
           );
         })()}
 
-        {/* HISTORY */}
         {ptab==="history"&&(
           <div>
-            <button onClick={exportHistory} style={{width:"100%",padding:"11px",background:"transparent",border:`1px solid ${C.border}`,borderRadius:10,color:C.muted,fontSize:12,cursor:"pointer",marginBottom:12}}>
-              📄 Export History
-            </button>
-            {loading?<Spinner/>:pHistory.length===0?<Empty msg="No activity yet."/>:pHistory.map((item,i)=>(
-              <ActivityItem key={i} item={item} showDelete onDelete={()=>item.kind==="round"?requestCancel(item):requestCancel(item)}/>
-            ))}
+            <button onClick={exportHistory} style={{width:"100%",padding:"11px",background:"transparent",border:`1px solid ${C.border}`,borderRadius:10,color:C.muted,fontSize:12,cursor:"pointer",marginBottom:12}}>📄 Export History</button>
+            {loading?<Spinner/>:pHistory.length===0?<Empty msg="No activity yet."/>:pHistory.map((item,i)=>(<ActivityItem key={i} item={item}/>))}
           </div>
         )}
 
-        {/* SETTINGS */}
         {ptab==="settings"&&(
           <div>
-            <SettingsCard title="Invite to Press" sub={player?.linked_user_id?`✅ Linked · ${player.linked_email||""}`:player?.frozen?"❄️ Account frozen":"Not linked yet"}>
-              {!player?.linked_user_id&&!player?.frozen&&<BigBtn onClick={generateInvite} disabled={saving}>{saving?"Generating...":"Generate Invite Link 🔗"}</BigBtn>}
+            {!isPro&&(
+              <div style={{background:`linear-gradient(135deg,rgba(232,184,75,0.1),rgba(123,180,80,0.05))`,border:`1px solid ${C.gold}44`,borderRadius:12,padding:"16px",marginBottom:10,textAlign:"center"}}>
+                <div style={{fontWeight:700,fontSize:15,color:C.gold,marginBottom:4}}>⭐ Press Pro</div>
+                <div style={{fontSize:12,color:C.muted,marginBottom:12}}>Unlock invites, notifications, disputes and more.</div>
+                <button onClick={onUpgrade} style={{background:`linear-gradient(135deg,${C.gold},#b8860b)`,border:"none",color:"#0a1a0f",padding:"10px 20px",borderRadius:20,fontSize:13,fontWeight:700,cursor:"pointer"}}>Upgrade — $1.99/mo</button>
+              </div>
+            )}
+            <SettingsCard title="Invite to Press" sub={player?.linked_user_id?`✅ Linked · ${player.linked_email||""}`:"Not linked yet"}>
+              {!player?.linked_user_id&&<BigBtn onClick={generateInvite} disabled={saving} color={isPro?C.green:C.gold} textColor="#0a1a0f">{isPro?(saving?"Generating...":"Generate Invite Link 🔗"):"⭐ Pro Feature — Upgrade"}</BigBtn>}
             </SettingsCard>
-
             <SettingsCard title="Stroke Handicap" sub={player?.strokes===0?"Even":player?.strokes<0?`You receive ${Math.abs(player.strokes)}`:`You give ${player?.strokes}`}>
               <GhostBtn onClick={openEditStrokes}>{player?.linked_user_id?"Request Stroke Change":"Edit Strokes"}</GhostBtn>
             </SettingsCard>
-
             <SettingsCard title="Settle Up" sub="Current bank: " subExtra={<Money value={player?.bank??0} size={13}/>}>
               <GhostBtn onClick={()=>setSheet("settle")} color={C.gold}>🤝 Settle Up with {player?.name}</GhostBtn>
             </SettingsCard>
-
             <SettingsCard title="New Season" sub="Archives all rounds and bets. Balance must be $0.">
               <GhostBtn onClick={()=>setSheet("seasonReset")} color={C.gold}>🏆 Start New Season</GhostBtn>
             </SettingsCard>
-
-            <SettingsCard title="Export History" sub="Download a full record of all rounds, bets and settlements.">
+            <SettingsCard title="Export History" sub="Download a full record of all activity.">
               <GhostBtn onClick={exportHistory}>📄 Export</GhostBtn>
             </SettingsCard>
-
-            <SettingsCard title="Remove Player" sub={player?.bank!==0?"Settle up before removing.":"Permanently deletes all data."} danger>
-              <GhostBtn onClick={removePlayer} color={C.red} style={{opacity:player?.bank!==0?0.4:1}}>Remove {player?.name}</GhostBtn>
+            <SettingsCard title="Remove Player" sub={(player?.bank||0)!==0?"Settle up before removing.":"Permanently deletes all data."} danger>
+              <GhostBtn onClick={removePlayer} color={C.red} style={{opacity:(player?.bank||0)!==0?0.4:1}}>Remove {player?.name}</GhostBtn>
             </SettingsCard>
           </div>
         )}
@@ -1162,7 +1005,7 @@ function Press({ user, onSignOut, onPrivacy }) {
       {/* EDIT STROKES SHEET */}
       <Sheet open={sheet==="editStrokes"} onClose={()=>setSheet(null)} title="Edit Strokes">
         <div style={{display:"flex",flexDirection:"column",gap:14}}>
-          {player?.linked_user_id&&<div style={{background:"rgba(123,180,80,0.08)",border:`1px solid ${C.green}33`,borderRadius:8,padding:"10px 12px",fontSize:12,color:C.muted}}>Since {player?.name} is linked, this will send a request for their approval.</div>}
+          {player?.linked_user_id&&<div style={{background:"rgba(123,180,80,0.08)",border:`1px solid ${C.green}33`,borderRadius:8,padding:"10px 12px",fontSize:12,color:C.muted}}>Since {player?.name} is linked, this sends a request for approval.</div>}
           <div><Lbl>Direction</Lbl><div style={{display:"flex",gap:8}}>{["even","received","gave"].map(d=>(<button key={d} onClick={()=>setEDir(d)} style={pill(eDir===d)}>{d==="even"?"Even":d==="received"?"I Get":"I Give"}</button>))}</div></div>
           {eDir!=="even"&&<div><Lbl>Strokes</Lbl><input type="number" min="1" value={eStr} onChange={e=>setEStr(e.target.value)} style={inp}/></div>}
           <BigBtn onClick={saveStrokes} disabled={saving}>{saving?"Saving...":player?.linked_user_id?"Send Request":"Save"}</BigBtn>
@@ -1182,34 +1025,16 @@ function Press({ user, onSignOut, onPrivacy }) {
             <Lbl>Cell Phone Number</Lbl>
             <div style={{display:"flex",gap:8}}>
               <input type="tel" value={invitePhone} onChange={e=>setInvitePhone(e.target.value)} placeholder="e.g. 4195551234" style={{...inp,flex:1}} inputMode="tel"/>
-              <button onClick={async()=>{
-                try{
-                  if("contacts" in navigator&&"ContactsManager" in window){
-                    const contacts=await navigator.contacts.select(["name","tel"],{multiple:false});
-                    if(contacts&&contacts.length>0&&contacts[0].tel?.length>0){
-                      setInvitePhone(contacts[0].tel[0].replace(/\D/g,""));
-                      t2(`${contacts[0].name?.[0]||"Contact"} selected!`);
-                    }
-                  } else {t2("Type the number manually");}
-                }catch{t2("Type the number manually");}
-              }} style={{flexShrink:0,padding:"0 12px",background:C.green,border:"none",borderRadius:10,color:"#0a1a0f",fontSize:12,fontWeight:700,cursor:"pointer",height:50}}>
-                👤 Contacts
-              </button>
+              <button onClick={async()=>{try{if("contacts" in navigator&&"ContactsManager" in window){const contacts=await navigator.contacts.select(["name","tel"],{multiple:false});if(contacts&&contacts.length>0&&contacts[0].tel?.length>0){setInvitePhone(contacts[0].tel[0].replace(/\D/g,""));t2("Contact selected!");}}else{t2("Type the number manually");}}catch{t2("Type the number manually");}}} style={{flexShrink:0,padding:"0 12px",background:C.green,border:"none",borderRadius:10,color:"#0a1a0f",fontSize:12,fontWeight:700,cursor:"pointer",height:50}}>👤</button>
             </div>
-            <div style={{fontSize:11,color:C.muted,marginTop:5}}>Tap "Contacts" to pick from your phone</div>
+            <div style={{fontSize:11,color:C.muted,marginTop:5}}>Tap 👤 to pick from your contacts</div>
           </div>
-          <BigBtn onClick={()=>{
-            const phone=invitePhone.replace(/\D/g,"");
-            const msg=encodeURIComponent(`Hey ${player?.name}! Join me on Press to track our golf bets, strokes and side bets. Sign up here: ${inviteLink}`);
-            window.open(`sms:${phone}?&body=${msg}`);
-          }}>📱 Text {player?.name} the Invite</BigBtn>
-          <div style={{display:"flex",alignItems:"center",gap:10}}>
-            <div style={{flex:1,height:1,background:C.border}}/><span style={{fontSize:11,color:C.muted}}>OR</span><div style={{flex:1,height:1,background:C.border}}/>
-          </div>
+          <BigBtn onClick={()=>{const phone=invitePhone.replace(/\D/g,"");const msg=encodeURIComponent(`Hey ${player?.name}! Join me on Press to track our golf bets. Sign up here: ${inviteLink}`);window.open(`sms:${phone}?&body=${msg}`);}}>📱 Text {player?.name} the Invite</BigBtn>
+          <div style={{display:"flex",alignItems:"center",gap:10}}><div style={{flex:1,height:1,background:C.border}}/><span style={{fontSize:11,color:C.muted}}>OR</span><div style={{flex:1,height:1,background:C.border}}/></div>
           <div style={{background:C.dim,borderRadius:8,padding:"10px 12px",fontSize:11,color:C.muted,wordBreak:"break-all",border:`1px solid ${C.border}`}}>{inviteLink}</div>
           <div style={{display:"flex",gap:8}}>
             <button onClick={async()=>{try{await navigator.clipboard.writeText(inviteLink);t2("Copied!");}catch{t2("Copy the link above");}}} style={{flex:1,padding:"11px",background:C.dim,border:`1px solid ${C.border}`,borderRadius:8,color:C.text,fontSize:12,cursor:"pointer",fontWeight:600}}>📋 Copy</button>
-            <button onClick={()=>window.open(`mailto:?subject=Join me on Press Golf&body=${encodeURIComponent(`Hey! Join me on Press to track our golf bets: ${inviteLink}`)}`)} style={{flex:1,padding:"11px",background:C.dim,border:`1px solid ${C.border}`,borderRadius:8,color:C.text,fontSize:12,cursor:"pointer",fontWeight:600}}>📧 Email</button>
+            <button onClick={()=>window.open(`mailto:?subject=Join me on Press Golf&body=${encodeURIComponent(`Hey! Join me on Press: ${inviteLink}`)}`)} style={{flex:1,padding:"11px",background:C.dim,border:`1px solid ${C.border}`,borderRadius:8,color:C.text,fontSize:12,cursor:"pointer",fontWeight:600}}>📧 Email</button>
           </div>
           <GhostBtn onClick={()=>setSheet(null)}>Done</GhostBtn>
         </div>
@@ -1227,7 +1052,6 @@ function Press({ user, onSignOut, onPrivacy }) {
             </div>
             {player.bank!==0&&<div style={{display:"flex",border:`1px solid ${C.border}`,borderRadius:8,overflow:"hidden",marginBottom:12}}>{[{l:"Rounds",v:player.round_money},{l:"Side Bets",v:player.bet_money}].map((item,i)=>(<div key={i} style={{flex:1,textAlign:"center",padding:"10px",borderRight:i===0?`1px solid ${C.border}`:"none",background:"rgba(0,0,0,0.2)"}}><Money value={item.v} size={13}/><div style={{fontSize:9,color:C.muted,letterSpacing:1,textTransform:"uppercase",marginTop:2}}>{item.l}</div></div>))}</div>}
           </div>
-
           {player.bank!==0&&(
             <div>
               <div style={{marginBottom:12}}>
@@ -1236,11 +1060,8 @@ function Press({ user, onSignOut, onPrivacy }) {
                   <input type="number" min="0" max={Math.abs(player.bank)} value={partialAmt} onChange={e=>setPartialAmt(e.target.value)} placeholder={`Max $${Math.abs(player.bank).toFixed(2)}`} style={{...inp,flex:1}} inputMode="decimal"/>
                   <button onClick={()=>setPartialAmt(String(Math.abs(player.bank).toFixed(2)))} style={{flexShrink:0,padding:"0 12px",background:C.dim,border:`1px solid ${C.border}`,borderRadius:8,color:C.green,fontSize:12,fontWeight:700,cursor:"pointer"}}>Full</button>
                 </div>
-                {partialAmt&&Number(partialAmt)<Math.abs(player.bank)&&(
-                  <div style={{fontSize:12,color:C.gold,textAlign:"center"}}>Remaining: ${(Math.abs(player.bank)-Number(partialAmt)).toFixed(2)}</div>
-                )}
+                {partialAmt&&Number(partialAmt)<Math.abs(player.bank)&&<div style={{fontSize:12,color:C.gold,textAlign:"center"}}>Remaining: ${(Math.abs(player.bank)-Number(partialAmt)).toFixed(2)}</div>}
               </div>
-
               <div style={{marginBottom:12}}>
                 <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>Pay With</div>
                 <div style={{display:"flex",gap:8,marginBottom:6}}>
@@ -1250,7 +1071,6 @@ function Press({ user, onSignOut, onPrivacy }) {
                 </div>
                 <div style={{fontSize:11,color:C.muted,textAlign:"center",marginBottom:12}}>After paying, tap "Mark as Settled"</div>
               </div>
-
               <BigBtn onClick={()=>settleUp(partialAmt?(player.bank>0?Number(partialAmt):-Number(partialAmt)):player.bank)} disabled={saving} color={player.bank>0?C.green:C.red} textColor="#fff" style={{marginBottom:10}}>
                 {saving?"Saving...":(player.bank>0?"Mark as Collected ✓":"Mark as Paid ✓")}
               </BigBtn>
@@ -1263,18 +1083,16 @@ function Press({ user, onSignOut, onPrivacy }) {
 
       {/* DISPUTE SHEET */}
       <Sheet open={sheet==="dispute"} onClose={()=>setSheet(null)} title="Dispute Amount">
-        {disputeItem&&(
-          <div style={{display:"flex",flexDirection:"column",gap:14}}>
-            <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:"12px 14px"}}>
-              <div style={{fontSize:12,color:C.muted,marginBottom:4}}>{disputeItem.date} · {disputeItem.kind==="round"?"Round":"Side Bet"}</div>
-              <div style={{fontSize:15,fontWeight:600}}>Original amount: <Money value={disputeItem.kind==="round"?disputeItem.money:disputeItem.amount} size={15}/></div>
-            </div>
-            <div><Lbl>Proposed Amount ($)</Lbl><input type="number" min="0" value={disputeAmt} onChange={e=>setDisputeAmt(e.target.value)} style={inp} placeholder="Enter correct amount" inputMode="decimal"/></div>
-            <div><Lbl>Reason (optional)</Lbl><input type="text" value={disputeReason} onChange={e=>setDisputeReason(e.target.value)} style={inp} placeholder="e.g. We agreed on $10 not $20"/></div>
-            <BigBtn onClick={submitDispute} disabled={saving} color={C.gold} textColor="#0a1a0f">{saving?"Sending...":"Submit Dispute"}</BigBtn>
-            <GhostBtn onClick={()=>setSheet(null)}>Cancel</GhostBtn>
+        {disputeItem&&(<div style={{display:"flex",flexDirection:"column",gap:14}}>
+          <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:"12px 14px"}}>
+            <div style={{fontSize:12,color:C.muted,marginBottom:4}}>{disputeItem.date} · {disputeItem.kind==="round"?"Round":"Side Bet"}</div>
+            <div style={{fontSize:15,fontWeight:600}}>Original: <Money value={disputeItem.kind==="round"?disputeItem.money:disputeItem.amount} size={15}/></div>
           </div>
-        )}
+          <div><Lbl>Proposed Amount ($)</Lbl><input type="number" min="0" value={disputeAmt} onChange={e=>setDisputeAmt(e.target.value)} style={inp} placeholder="Enter correct amount" inputMode="decimal"/></div>
+          <div><Lbl>Reason (optional)</Lbl><input type="text" value={disputeReason} onChange={e=>setDisputeReason(e.target.value)} style={inp} placeholder="e.g. We agreed on $10 not $20"/></div>
+          <BigBtn onClick={submitDispute} disabled={saving} color={C.gold} textColor="#0a1a0f">{saving?"Sending...":"Submit Dispute"}</BigBtn>
+          <GhostBtn onClick={()=>setSheet(null)}>Cancel</GhostBtn>
+        </div>)}
       </Sheet>
 
       {/* SEASON RESET SHEET */}
@@ -1283,12 +1101,10 @@ function Press({ user, onSignOut, onPrivacy }) {
           <div style={{textAlign:"center",padding:"10px 0"}}>
             <div style={{fontSize:40,marginBottom:8}}>🏆</div>
             <div style={{fontSize:15,fontWeight:600,marginBottom:6}}>New Season with {player?.name}</div>
-            <div style={{fontSize:12,color:C.muted}}>This will archive all {pRounds.length} rounds and {pBets.length} bets. History is preserved. Balance must be $0.</div>
+            <div style={{fontSize:12,color:C.muted}}>Archives all {pRounds.length} rounds and {pBets.length} bets. History preserved. Balance must be $0.</div>
           </div>
-          {player?.bank!==0?(
-            <div style={{background:"rgba(224,80,80,0.08)",border:"1px solid rgba(224,80,80,0.2)",borderRadius:8,padding:"12px",fontSize:13,color:C.red,textAlign:"center"}}>
-              Settle up (${Math.abs(player?.bank||0).toFixed(2)}) before starting a new season.
-            </div>
+          {(player?.bank||0)!==0?(
+            <div style={{background:"rgba(224,80,80,0.08)",border:"1px solid rgba(224,80,80,0.2)",borderRadius:8,padding:"12px",fontSize:13,color:C.red,textAlign:"center"}}>Settle up (${Math.abs(player?.bank||0).toFixed(2)}) before starting a new season.</div>
           ):(
             <BigBtn onClick={seasonReset} disabled={saving} color={C.gold} textColor="#0a1a0f">{saving?"Archiving...":"Start New Season 🏆"}</BigBtn>
           )}
@@ -1297,21 +1113,19 @@ function Press({ user, onSignOut, onPrivacy }) {
       </Sheet>
 
       {/* CONFIRM DELETE MODAL */}
-      {confirmDelete && (
+      {confirmDelete&&(
         <div style={{position:"fixed",inset:0,zIndex:500,background:"rgba(0,0,0,0.85)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
           <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:20,padding:24,width:"100%",maxWidth:360}}>
             <div style={{textAlign:"center",marginBottom:20}}>
               <div style={{fontSize:40,marginBottom:10}}>⚠️</div>
               <div style={{fontWeight:700,fontSize:18,marginBottom:8}}>Delete this entry?</div>
               <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:"12px 14px",marginBottom:12}}>
-                <div style={{fontSize:13,fontWeight:600,marginBottom:4}}>
-                  {confirmDelete.kind==="round"?confirmDelete.date:confirmDelete.type}
-                </div>
+                <div style={{fontSize:13,fontWeight:600,marginBottom:4}}>{confirmDelete.kind==="round"?confirmDelete.date:confirmDelete.type}</div>
                 <div style={{fontSize:12,color:C.muted}}>{confirmDelete.notes||confirmDelete.date}</div>
                 <div style={{marginTop:6}}><Money value={confirmDelete.kind==="round"?confirmDelete.money:confirmDelete.amount} size={15}/></div>
               </div>
               <div style={{fontSize:12,color:C.red,marginBottom:6}}>Balance will adjust by <Money value={confirmDelete.kind==="round"?-confirmDelete.money:-confirmDelete.amount} size={12}/></div>
-              <div style={{fontSize:11,color:C.muted}}>Entry will be saved in History.</div>
+              <div style={{fontSize:11,color:C.muted}}>Entry saved in History.</div>
             </div>
             <div style={{display:"flex",gap:10}}>
               <button onClick={()=>setConfirmDelete(null)} style={{flex:1,padding:"14px",background:"transparent",color:C.muted,border:`1px solid ${C.border}`,borderRadius:12,fontSize:14,fontWeight:600,cursor:"pointer"}}>Keep It</button>
@@ -1330,17 +1144,11 @@ function Press({ user, onSignOut, onPrivacy }) {
               <div style={{fontWeight:700,fontSize:20,marginBottom:6}}>{strokeSuggest.iWon?`You beat ${strokeSuggest.playerName}!`:`${strokeSuggest.playerName} won this one.`}</div>
               <div style={{fontSize:14,color:C.muted,marginBottom:20}}>Adjust strokes for next round?</div>
               <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:16,marginBottom:20}}>
-                <div style={{textAlign:"center"}}>
-                  <div style={{fontSize:11,color:C.muted,letterSpacing:1,textTransform:"uppercase",marginBottom:4}}>Now</div>
-                  <div style={{fontSize:16,fontWeight:600}}>{strokeSuggest.currentLabel}</div>
-                </div>
+                <div style={{textAlign:"center"}}><div style={{fontSize:11,color:C.muted,letterSpacing:1,textTransform:"uppercase",marginBottom:4}}>Now</div><div style={{fontSize:16,fontWeight:600}}>{strokeSuggest.currentLabel}</div></div>
                 <div style={{fontSize:24,color:C.green}}>→</div>
-                <div style={{textAlign:"center"}}>
-                  <div style={{fontSize:11,color:C.muted,letterSpacing:1,textTransform:"uppercase",marginBottom:4}}>Next Round</div>
-                  <div style={{fontSize:16,fontWeight:700,color:C.green}}>{strokeSuggest.suggestedLabel}</div>
-                </div>
+                <div style={{textAlign:"center"}}><div style={{fontSize:11,color:C.muted,letterSpacing:1,textTransform:"uppercase",marginBottom:4}}>Next Round</div><div style={{fontSize:16,fontWeight:700,color:C.green}}>{strokeSuggest.suggestedLabel}</div></div>
               </div>
-              {strokeSuggest.linked&&<div style={{fontSize:11,color:C.muted,marginBottom:10}}>This will send a request to {strokeSuggest.playerName} for approval.</div>}
+              {strokeSuggest.linked&&<div style={{fontSize:11,color:C.muted,marginBottom:10}}>Will send a request to {strokeSuggest.playerName} for approval.</div>}
             </div>
             <div style={{display:"flex",gap:10}}>
               <button onClick={()=>setStrokeSuggest(null)} style={{flex:1,padding:"14px",background:"transparent",color:C.muted,border:`1px solid ${C.border}`,borderRadius:12,fontSize:14,fontWeight:600,cursor:"pointer"}}>Keep Same</button>
@@ -1356,18 +1164,17 @@ function Press({ user, onSignOut, onPrivacy }) {
 }
 
 // ── Activity Item ─────────────────────────────────────────────────────────────
-function ActivityItem({ item, showDelete, onDelete }) {
-  const isArchived = item.kind==="archived_round"||item.kind==="archived_bet";
-  const isRound = item.kind==="round"||item.kind==="archived_round";
-  const value = isRound?(item.money||0):(item.amount||0);
-  return (
+function ActivityItem({item}){
+  const isArchived=item.kind==="archived_round"||item.kind==="archived_bet";
+  const isRound=item.kind==="round"||item.kind==="archived_round";
+  const value=isRound?(item.money||0):(item.amount||0);
+  return(
     <div style={{display:"flex",alignItems:"center",gap:10,padding:"11px 12px",background:isArchived?"rgba(100,100,100,0.06)":C.card,borderRadius:10,marginBottom:8,border:`1px solid ${isArchived?"rgba(150,150,150,0.15)":item.kind==="bet"?"rgba(232,184,75,0.15)":C.border}`,opacity:isArchived?0.7:1}}>
       <span style={{fontSize:16}}>{isArchived?"🗑️":isRound?"🏌️":"🎯"}</span>
       <div style={{flex:1}}>
         <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
           <span style={{fontWeight:600,fontSize:13}}>{isRound?(item.date||item.archived_at?.slice(0,10)):(item.type||"Bet")}</span>
-          {isArchived&&<span style={{fontSize:9,color:C.muted,background:"rgba(150,150,150,0.15)",padding:"1px 6px",borderRadius:6}}>Archived · {item.archive_reason}</span>}
-          {item.cancel_requested&&<span style={{fontSize:9,color:C.gold,background:"rgba(232,184,75,0.1)",padding:"1px 6px",borderRadius:6}}>⏳ Cancel Pending</span>}
+          {isArchived&&<span style={{fontSize:9,color:C.muted,background:"rgba(150,150,150,0.15)",padding:"1px 6px",borderRadius:6}}>Archived</span>}
         </div>
         {(item.notes||(!isRound&&item.date))&&<div style={{fontSize:11,color:C.muted,marginTop:1}}>{!isRound&&item.date?item.date:""}{item.notes?` · ${item.notes}`:""}</div>}
       </div>
