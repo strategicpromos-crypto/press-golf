@@ -124,22 +124,32 @@ function genCode() {
   return Math.random().toString(36).substring(2,8).toUpperCase();
 }
 
-// Payment deeplinks
+// Payment deeplinks — opens actual apps on phone
 function openVenmo(name, amount) {
-  const note = encodeURIComponent(`Press Golf - ${name}`);
   const amt = Math.abs(amount).toFixed(2);
-  window.open(`venmo://paycharge?txn=pay&recipients=${encodeURIComponent(name)}&amount=${amt}&note=${note}`, '_blank');
-  setTimeout(() => window.open(`https://venmo.com/`, '_blank'), 500);
+  const note = encodeURIComponent(`Press Golf`);
+  // Venmo deep link — opens Venmo app directly
+  const venmoApp = `venmo://paycharge?txn=pay&recipients=${encodeURIComponent(name)}&amount=${amt}&note=${note}`;
+  const venmoWeb = `https://venmo.com/u/${encodeURIComponent(name)}?txn=pay&amount=${amt}&note=${note}`;
+  // Try app first, fall back to web
+  window.location.href = venmoApp;
+  setTimeout(() => { window.open(venmoWeb, "_blank"); }, 1500);
 }
 
 function openCashApp(name, amount) {
-  const note = encodeURIComponent(`Press Golf - ${name}`);
   const amt = Math.abs(amount).toFixed(2);
-  window.open(`https://cash.app/$${encodeURIComponent(name)}/${amt}`, '_blank');
+  // Cash App deep link — opens Cash App directly
+  const cashApp = `cashme://cash.app/pay`;
+  const cashWeb = `https://cash.app/$${encodeURIComponent(name)}/${amt}`;
+  window.location.href = cashApp;
+  setTimeout(() => { window.open(cashWeb, "_blank"); }, 1500);
 }
 
 function openZelle(amount) {
-  window.open(`https://enroll.zellepay.com/`, '_blank');
+  const amt = Math.abs(amount).toFixed(2);
+  // Zelle deep link
+  window.location.href = `zelle://`;
+  setTimeout(() => { window.open(`https://enroll.zellepay.com/`, "_blank"); }, 1500);
 }
 
 // ── PRIVACY POLICY SCREEN ─────────────────────────────────────────────────────
@@ -404,6 +414,7 @@ function Press({ user, onSignOut, onPrivacy }) {
   const [sheet,       setSheet]       = useState(null);
   const [inviteLink,  setInviteLink]  = useState("");
   const [invitePhone, setInvitePhone] = useState("");
+  const [partialAmt,  setPartialAmt]  = useState("");
 
   const [nName,setNName]=useState(""); const [nDir,setNDir]=useState("even"); const [nStr,setNStr]=useState("1");
   const [fDate,setFDate]=useState(today); const [fDir,setFDir]=useState("received"); const [fStr,setFStr]=useState("1"); const [fMoney,setFMoney]=useState(""); const [fNotes,setFNotes]=useState(""); const [fWon,setFWon]=useState(true);
@@ -571,14 +582,29 @@ function Press({ user, onSignOut, onPrivacy }) {
     setSheet(null);t2("Strokes updated.");
   }
 
-  async function settleUp(){
+  async function settleUp(customAmt){
     if(!player||player.bank===0){t2("Already even!");setSheet(null);return;}
+    const fullAmt = player.bank;
+    const payAmt = customAmt !== undefined ? customAmt : fullAmt;
+    if(payAmt === 0){t2("Enter an amount.");return;}
+    const remaining = fullAmt - payAmt;
     setSaving(true);
-    await sb.from("settlements").insert({owner_id:user.id,player_id:player.id,player_name:player.name,date:today,amount:player.bank,round_snapshot:player.round_money,bet_snapshot:player.bet_money});
-    const{data:pd}=await sb.from("players").update({bank:0,round_money:0,bet_money:0}).eq("id",player.id).select().single();
+    await sb.from("settlements").insert({
+      owner_id:user.id, player_id:player.id, player_name:player.name,
+      date:today, amount:payAmt,
+      round_snapshot:player.round_money, bet_snapshot:player.bet_money
+    });
+    const{data:pd}=await sb.from("players").update({
+      bank: remaining,
+      round_money: remaining <= 0 ? 0 : player.round_money,
+      bet_money: remaining <= 0 ? 0 : player.bet_money,
+    }).eq("id",player.id).select().single();
     setSaving(false);
-    const msg=player.bank>0?`Collected $${Math.abs(player.bank).toFixed(2)}!`:`Paid $${Math.abs(player.bank).toFixed(2)}!`;
+    const msg = payAmt > 0
+      ? `Collected $${Math.abs(payAmt).toFixed(2)}! ${remaining !== 0 ? `$${Math.abs(remaining).toFixed(2)} remaining.` : "All square!"}`
+      : `Paid $${Math.abs(payAmt).toFixed(2)}! ${remaining !== 0 ? `$${Math.abs(remaining).toFixed(2)} remaining.` : "All square!"}`;
     if(pd)setPlayers(prev=>prev.map(p=>p.id===pid?pd:p));
+    setPartialAmt("");
     await loadAll();setSheet(null);t2(msg);
   }
 
@@ -929,35 +955,78 @@ function Press({ user, onSignOut, onPrivacy }) {
         {player&&(<div>
           <div style={{textAlign:"center",marginBottom:16}}>
             <div style={{fontSize:48,marginBottom:10}}>🤝</div>
-            <div style={{background:"rgba(0,0,0,0.3)",border:`1px solid ${player.bank>0?C.green:player.bank<0?C.red:C.border}`,borderRadius:16,padding:"22px 20px",marginBottom:14}}>
-              <div style={{fontSize:11,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>{player.bank>0?`${player.name} owes you`:player.bank<0?`You owe ${player.name}`:"You're even"}</div>
+            <div style={{background:"rgba(0,0,0,0.3)",border:`1px solid ${player.bank>0?C.green:player.bank<0?C.red:C.border}`,borderRadius:16,padding:"18px 20px",marginBottom:14}}>
+              <div style={{fontSize:11,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>{player.bank>0?`${player.name} owes you`:player.bank<0?`You owe ${player.name}`:"You're even"}</div>
               <Money value={player.bank} size={44}/>
+              <div style={{fontSize:11,color:C.muted,marginTop:6}}>Total Balance</div>
             </div>
-            {player.bank!==0&&(<div style={{display:"flex",border:`1px solid ${C.border}`,borderRadius:10,overflow:"hidden",marginBottom:14}}>{[{l:"Rounds",v:player.round_money},{l:"Side Bets",v:player.bet_money}].map((item,i)=>(<div key={i} style={{flex:1,textAlign:"center",padding:"12px",borderRight:i===0?`1px solid ${C.border}`:"none",background:"rgba(0,0,0,0.2)"}}><Money value={item.v} size={15}/><div style={{fontSize:9,color:C.muted,letterSpacing:1,textTransform:"uppercase",marginTop:3}}>{item.l}</div></div>))}</div>)}
+
+            {player.bank!==0&&(
+              <div style={{display:"flex",border:`1px solid ${C.border}`,borderRadius:10,overflow:"hidden",marginBottom:16}}>{[{l:"Rounds",v:player.round_money},{l:"Side Bets",v:player.bet_money}].map((item,i)=>(<div key={i} style={{flex:1,textAlign:"center",padding:"10px",borderRight:i===0?`1px solid ${C.border}`:"none",background:"rgba(0,0,0,0.2)"}}><Money value={item.v} size={14}/><div style={{fontSize:9,color:C.muted,letterSpacing:1,textTransform:"uppercase",marginTop:3}}>{item.l}</div></div>))}</div>
+            )}
           </div>
 
-          {/* Payment buttons */}
           {player.bank!==0&&(
-            <div style={{marginBottom:14}}>
-              <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>Pay With</div>
-              <div style={{display:"flex",gap:8,marginBottom:8}}>
-                <button onClick={()=>openVenmo(player.name, player.bank)} style={{flex:1,padding:"13px",background:C.venmo,border:"none",borderRadius:10,color:"#fff",fontSize:13,fontWeight:700,cursor:"pointer"}}>
-                  Venmo
-                </button>
-                <button onClick={()=>openCashApp(player.name, player.bank)} style={{flex:1,padding:"13px",background:C.cashapp,border:"none",borderRadius:10,color:"#fff",fontSize:13,fontWeight:700,cursor:"pointer"}}>
-                  Cash App
-                </button>
-                <button onClick={()=>openZelle(player.bank)} style={{flex:1,padding:"13px",background:"#6D1ED4",border:"none",borderRadius:10,color:"#fff",fontSize:13,fontWeight:700,cursor:"pointer"}}>
-                  Zelle
-                </button>
+            <div>
+              {/* Partial amount input */}
+              <div style={{marginBottom:14}}>
+                <Lbl>Payment Amount</Lbl>
+                <div style={{display:"flex",gap:8,marginBottom:8}}>
+                  <input
+                    type="number"
+                    min="0"
+                    max={Math.abs(player.bank)}
+                    value={partialAmt}
+                    onChange={e=>setPartialAmt(e.target.value)}
+                    placeholder={`e.g. ${Math.abs(player.bank).toFixed(2)}`}
+                    style={{...inp, flex:1}}
+                    inputMode="decimal"
+                  />
+                  <button onClick={()=>setPartialAmt(String(Math.abs(player.bank).toFixed(2)))} style={{flexShrink:0,padding:"0 14px",background:C.dim,border:`1px solid ${C.border}`,borderRadius:10,color:C.green,fontSize:12,fontWeight:700,cursor:"pointer"}}>
+                    Full
+                  </button>
+                </div>
+                {partialAmt && Number(partialAmt) < Math.abs(player.bank) && (
+                  <div style={{fontSize:12,color:C.gold,textAlign:"center",marginBottom:8}}>
+                    Remaining after payment: ${(Math.abs(player.bank) - Number(partialAmt)).toFixed(2)}
+                  </div>
+                )}
               </div>
-              <div style={{fontSize:11,color:C.muted,textAlign:"center",marginBottom:14}}>After paying, tap "Mark as Settled" to record it</div>
+
+              {/* Pay With buttons */}
+              <div style={{marginBottom:14}}>
+                <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>Pay With</div>
+                <div style={{display:"flex",gap:8,marginBottom:8}}>
+                  <button onClick={()=>openVenmo(player.name, Number(partialAmt)||player.bank)} style={{flex:1,padding:"13px 4px",background:"#008CFF",border:"none",borderRadius:10,color:"#fff",fontSize:13,fontWeight:700,cursor:"pointer"}}>
+                    Venmo
+                  </button>
+                  <button onClick={()=>openCashApp(player.name, Number(partialAmt)||player.bank)} style={{flex:1,padding:"13px 4px",background:"#00D54B",border:"none",borderRadius:10,color:"#fff",fontSize:13,fontWeight:700,cursor:"pointer"}}>
+                    Cash App
+                  </button>
+                  <button onClick={()=>openZelle(Number(partialAmt)||player.bank)} style={{flex:1,padding:"13px 4px",background:"#6D1ED4",border:"none",borderRadius:10,color:"#fff",fontSize:13,fontWeight:700,cursor:"pointer"}}>
+                    Zelle
+                  </button>
+                </div>
+                <div style={{fontSize:11,color:C.muted,textAlign:"center",marginBottom:14}}>
+                  After paying, tap "Mark as Settled" to record it
+                </div>
+              </div>
+
+              {/* Mark as settled */}
+              <BigBtn
+                onClick={()=>settleUp(partialAmt ? (player.bank > 0 ? Number(partialAmt) : -Number(partialAmt)) : player.bank)}
+                disabled={saving}
+                color={player.bank>0?C.green:C.red}
+                textColor="#fff"
+                style={{marginBottom:10}}
+              >
+                {saving?"Saving...":(player.bank>0?"Mark as Collected ✓":"Mark as Paid ✓")}
+              </BigBtn>
             </div>
           )}
 
-          {player.bank===0?<div style={{color:C.green,fontSize:14,marginBottom:16,textAlign:"center"}}>Already square! ✓</div>:null}
-          {player.bank!==0&&<BigBtn onClick={settleUp} disabled={saving} color={player.bank>0?C.green:C.red} textColor="#fff" style={{marginBottom:10}}>{saving?"Saving...":(player.bank>0?"Mark as Collected ✓":"Mark as Paid ✓")}</BigBtn>}
-          <GhostBtn onClick={()=>setSheet(null)}>Cancel</GhostBtn>
+          {player.bank===0&&<div style={{color:C.green,fontSize:14,marginBottom:16,textAlign:"center"}}>Already square! ✓</div>}
+          <GhostBtn onClick={()=>{setSheet(null);setPartialAmt("");}}>Cancel</GhostBtn>
         </div>)}
       </Sheet>
 
