@@ -380,6 +380,7 @@ export function calcAutoPressNassau(scores, holeData, myStrokeHoles, oppStrokeHo
   };
 }
 
+export function calcSkins(scores, holeData, myStrokeHoles, oppStrokeHoles, betPerSkin) {
   let me = 0, opp = 0, net = 0, carry = 0;
   const holes = [];
 
