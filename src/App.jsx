@@ -498,12 +498,10 @@ function Press({ user, onSignOut, onPrivacy }) {
   async function requestCancel(item){
     if(!player)return;
     const isRound=item.kind==="round";
-    const paidSoFar=pSettle.reduce((s,x)=>s+x.amount,0);
-    if(player.bank!==0&&!player.linked_user_id){
-      t2("Settle up before deleting.",true);return;
-    }
+
+    // If linked — require mutual consent
     if(player.linked_user_id){
-      // Linked — request mutual cancel
+      const paidSoFar=pSettle.reduce((s,x)=>s+(x.amount||0),0);
       setSaving(true);
       await sb.from(isRound?"rounds":"bets").update({cancel_requested:true}).eq("id",item.id);
       await sb.from("cancel_requests").insert({
@@ -526,30 +524,36 @@ function Press({ user, onSignOut, onPrivacy }) {
       setSaving(false);
       t2("Cancel request sent — waiting for approval.");
       await loadAll();
-    } else {
-      // Not linked — check balance
-      if(player.bank!==0){t2("Settle up before deleting.",true);return;}
-      await archiveAndDelete(item);
+      return;
     }
+
+    // Not linked — archive and remove BUT only adjust balance if not already settled
+    // If bank is 0 the entry has been settled — don't touch the balance
+    const adjustBalance = player.bank !== 0;
+    await archiveAndDelete(item, adjustBalance);
   }
 
   // ── Archive and delete ──
-  async function archiveAndDelete(item){
+  async function archiveAndDelete(item, adjustBalance=true){
     const isRound=item.kind==="round"||item.kind==="archived_round";
     if(isRound){
       await sb.from("archived_rounds").insert({original_id:item.id,owner_id:user.id,player_id:item.player_id,player_name:item.player_name,date:item.date,strokes:item.strokes,money:item.money,notes:item.notes,archive_reason:"cancelled",archived_by:user.id});
       await sb.from("rounds").delete().eq("id",item.id);
-      const{data:pd}=await sb.from("players").update({round_money:(player.round_money||0)-item.money,bank:(player.bank||0)-item.money}).eq("id",player.id).select().single();
+      if(adjustBalance){
+        const{data:pd}=await sb.from("players").update({round_money:(player.round_money||0)-item.money,bank:(player.bank||0)-item.money}).eq("id",player.id).select().single();
+        if(pd)setPlayers(prev=>prev.map(p=>p.id===pid?pd:p));
+      }
       setRounds(prev=>prev.filter(x=>x.id!==item.id));
-      if(pd)setPlayers(prev=>prev.map(p=>p.id===pid?pd:p));
     } else {
       await sb.from("archived_bets").insert({original_id:item.id,owner_id:user.id,player_id:item.player_id,player_name:item.player_name,date:item.date,type:item.type,amount:item.amount,notes:item.notes,archive_reason:"cancelled",archived_by:user.id});
       await sb.from("bets").delete().eq("id",item.id);
-      const{data:pd}=await sb.from("players").update({bet_money:(player.bet_money||0)-item.amount,bank:(player.bank||0)-item.amount}).eq("id",player.id).select().single();
+      if(adjustBalance){
+        const{data:pd}=await sb.from("players").update({bet_money:(player.bet_money||0)-item.amount,bank:(player.bank||0)-item.amount}).eq("id",player.id).select().single();
+        if(pd)setPlayers(prev=>prev.map(p=>p.id===pid?pd:p));
+      }
       setBets(prev=>prev.filter(x=>x.id!==item.id));
-      if(pd)setPlayers(prev=>prev.map(p=>p.id===pid?pd:p));
     }
-    t2("Entry archived and removed.");
+    t2("Entry archived.");
     await loadAll();
   }
 
