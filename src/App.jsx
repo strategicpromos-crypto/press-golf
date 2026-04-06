@@ -364,6 +364,7 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,isPro,setIsPro}){
   const [saving,setSaving]=useState(false);
   const [toast,setToast]=useState({msg:"",error:false});
   const [view,setView]=useState("roster"); // roster | profile | liveround
+  const [activeRound, setActiveRound]=useState(null); // stores active live round info
   const [pid,setPid]=useState(null);
   const [ptab,setPtab]=useState("overview");
   const [sheet,setSheet]=useState(null);
@@ -406,6 +407,22 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,isPro,setIsPro}){
   },[user.id]);
 
   useEffect(()=>{loadAll();},[loadAll]);
+
+  // Check for active live round
+  useEffect(()=>{
+    async function checkActiveRound(){
+      const{data}=await sb.from("live_rounds")
+        .select("id,course_name,opponents,current_hole,updated_at")
+        .eq("owner_id",user.id)
+        .eq("status","active")
+        .order("updated_at",{ascending:false})
+        .limit(1)
+        .single();
+      if(data)setActiveRound(data);
+      else setActiveRound(null);
+    }
+    checkActiveRound();
+  },[user.id,view]); // re-check when returning from live round
 
   const player=players.find(p=>p.id===pid);
   const pRounds=rounds.filter(r=>r.player_id===pid);
@@ -828,6 +845,20 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,isPro,setIsPro}){
       </div>
 
       <div style={{padding:"0 16px"}}>
+        {/* Resume Round banner */}
+        {activeRound&&(
+          <div style={{background:`linear-gradient(135deg,rgba(123,180,80,0.15),rgba(123,180,80,0.05))`,border:`1px solid ${C.green}44`,borderRadius:14,padding:"14px 16px",marginBottom:14,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <div>
+              <div style={{fontWeight:700,fontSize:14,color:C.green,marginBottom:2}}>⛳ Round In Progress</div>
+              <div style={{fontSize:12,color:C.muted}}>{activeRound.course_name} · Hole {activeRound.current_hole}</div>
+              <div style={{fontSize:11,color:C.dim,marginTop:1}}>{(activeRound.opponents||[]).map(o=>o.name).join(", ")}</div>
+            </div>
+            <button onClick={()=>setView("liveround")} style={{background:C.green,border:"none",color:"#0a1a0f",padding:"10px 16px",borderRadius:12,fontSize:13,fontWeight:800,cursor:"pointer",flexShrink:0}}>
+              Resume →
+            </button>
+          </div>
+        )}
+
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
           <div style={{fontSize:11,letterSpacing:2,color:C.muted,textTransform:"uppercase"}}>
             Your Opponents {!isPro&&<span style={{color:C.gold}}>({players.length}/{FREE_PLAYER_LIMIT} free)</span>}
