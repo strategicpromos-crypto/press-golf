@@ -284,67 +284,67 @@ export function calcNassau(scores, holeData, myStrokeHoles, oppStrokeHoles, betA
 
 // ── AUTO PRESS NASSAU CALCULATOR ─────────────────────────────────────────────
 // Rules:
-// - Play hole by hole match play within each 9
-// - When either player goes 2 DOWN on any active bet → new press bet starts at 0
-// - Original bet and all press bets continue to end of 9
-// - Press bets reset at the turn (back 9 starts fresh)
-// - 18-hole total bet NEVER gets pressed — always just betAmount
-// Returns { front, back, total, net, frontBets, backBets }
+// - Nassau: front 9, back 9, 18-hole total — each a flat bet
+// - When any active bet hits exactly -2 (2 down) → new press starts at 0
+// - Each press bet can itself get pressed if it hits -2
+// - 18-hole total NEVER gets pressed
+// - Each bet result: +betAmount (won), -betAmount (lost), 0 (tied)
 
 export function calcAutoPressNassau(scores, holeData, myStrokeHoles, oppStrokeHoles, betAmount) {
 
   function calcSideWithPress(sideHoles) {
-    // Each bet tracks: { startHole, status (running/done), myDiff }
-    // myDiff = holes won - holes lost (positive = I'm up, negative = I'm down)
-    const bets = [{ startHole: sideHoles[0]?.hole || 0, diff: 0, amount: 0 }];
-    const pressedAt = []; // track which holes presses started
+    if (!sideHoles || sideHoles.length === 0) return { bets: [], total: 0 };
+
+    // Each bet: { startHole, diff, pressed }
+    // pressed = true means this bet already triggered a press (prevent double-trigger)
+    const bets = [{ startHole: sideHoles[0].hole, diff: 0, pressed: false }];
 
     for (const h of sideHoles) {
       const myScore  = scores.me[h.hole];
       const oppScore = scores.opp[h.hole];
-      if (myScore === undefined || myScore === null) continue;
+      if (myScore  === undefined || myScore  === null) continue;
       if (oppScore === undefined || oppScore === null) continue;
 
       const myNet  = myStrokeHoles.includes(h.hole)  ? myScore  - 1 : myScore;
       const oppNet = oppStrokeHoles.includes(h.hole) ? oppScore - 1 : oppScore;
 
-      let holeResult = 0; // +1 I won, -1 I lost, 0 halved
-      if (myNet < oppNet)      holeResult =  1;
-      else if (myNet > oppNet) holeResult = -1;
+      const holeResult = myNet < oppNet ? 1 : myNet > oppNet ? -1 : 0;
 
-      // Update all active bets
-      for (const bet of bets) {
-        bet.diff  += holeResult;
-        bet.amount = bet.diff * betAmount; // running $ value
+      // Snapshot how many bets existed BEFORE this hole — only check these for press
+      const betsThisHole = bets.length;
+
+      // Update only bets that have already started
+      for (let i = 0; i < betsThisHole; i++) {
+        if (bets[i].startHole <= h.hole) {
+          bets[i].diff += holeResult;
+        }
       }
 
-      // Check if any bet just hit -2 (2 down) → trigger new press
-      // Only trigger once per hole (take the most recently triggered)
-      let pressTriggered = false;
-      for (const bet of bets) {
-        if (bet.diff === -2 && !pressTriggered) {
-          // New press starts AFTER this hole result is applied
-          bets.push({ startHole: h.hole, diff: 0, amount: 0 });
-          pressedAt.push(h.hole);
-          pressTriggered = true;
-          break; // only one press per hole
+      // Check for press triggers — only on bets that existed before this hole
+      const isLastHole = h.hole === sideHoles[sideHoles.length - 1].hole;
+      for (let i = 0; i < betsThisHole; i++) {
+        const bet = bets[i];
+        if (bet.startHole <= h.hole && (bet.diff === 2 || bet.diff === -2) && !bet.pressed) {
+          bet.pressed = true;
+          // Only create press if there are holes remaining — last hole press = $0 so skip
+          if (!isLastHole) {
+            bets.push({ startHole: h.hole + 1, diff: 0, pressed: false });
+          }
         }
       }
     }
 
-    // Final amounts — each bet worth betAmount per hole differential
-    // Actually for Nassau: each bet is won/lost as a single bet based on who's ahead
-    // Re-calculate: each bet = betAmount if I'm up at end, -betAmount if down, 0 if tied
+    // Calculate final result for each bet: flat win/loss/tie
     const finalBets = bets.map((bet, i) => ({
-      betNum: i + 1,
+      betNum:    i + 1,
       startHole: bet.startHole,
-      diff: bet.diff,
-      amount: bet.diff > 0 ? betAmount : bet.diff < 0 ? -betAmount : 0,
-      pressedAt: pressedAt[i - 1] || null,
+      diff:      bet.diff,
+      // Flat bet: win $betAmount, lose $betAmount, tie $0
+      amount:    bet.diff > 0 ? betAmount : bet.diff < 0 ? -betAmount : 0,
     }));
 
     const total = finalBets.reduce((s, b) => s + b.amount, 0);
-    return { bets: finalBets, total, pressedAt };
+    return { bets: finalBets, total };
   }
 
   const frontHoles = holeData.filter(h => h.side === "front");
@@ -353,18 +353,19 @@ export function calcAutoPressNassau(scores, holeData, myStrokeHoles, oppStrokeHo
   const front = calcSideWithPress(frontHoles);
   const back  = calcSideWithPress(backHoles);
 
-  // 18-hole total — never pressed, just compare total scores
+  // 18-hole total — NEVER pressed, flat bet based on total score
   function calcTotal() {
-    let myT = 0, oppT = 0, complete = true;
+    let myT = 0, oppT = 0, holesPlayed = 0;
     for (const h of holeData) {
       const myScore  = scores.me[h.hole];
       const oppScore = scores.opp[h.hole];
-      if (myScore === undefined || myScore === null) { complete = false; continue; }
-      if (oppScore === undefined || oppScore === null) { complete = false; continue; }
+      if (myScore === undefined || myScore === null) continue;
+      if (oppScore === undefined || oppScore === null) continue;
+      holesPlayed++;
       myT  += myStrokeHoles.includes(h.hole)  ? myScore  - 1 : myScore;
       oppT += oppStrokeHoles.includes(h.hole) ? oppScore - 1 : oppScore;
     }
-    if (!complete) return 0;
+    if (holesPlayed === 0) return 0;
     if (myT < oppT)  return  betAmount;
     if (myT > oppT)  return -betAmount;
     return 0;
@@ -375,8 +376,8 @@ export function calcAutoPressNassau(scores, holeData, myStrokeHoles, oppStrokeHo
   return {
     front,
     back,
-    total: totalAmount,
-    net: front.total + back.total + totalAmount,
+    total:  totalAmount,
+    net:    front.total + back.total + totalAmount,
   };
 }
 
