@@ -401,8 +401,10 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
     if (!player) return;
     if (opponents.find(o => o.playerId === addOppId)) return;
     const rawStrokes = safeInt(addStrokes, 0);
-    const finalStrokes = addStrokesDir === "igive" ? rawStrokes
-                       : addStrokesDir === "iget"  ? -rawStrokes
+    // Strokes are entered per side — multiply by 2 for total across 18
+    const totalStrokes = rawStrokes * 2;
+    const finalStrokes = addStrokesDir === "igive" ? totalStrokes
+                       : addStrokesDir === "iget"  ? -totalStrokes
                        : 0;
     setOpponents(prev => [...prev, {
       playerId:    player.id,
@@ -535,9 +537,10 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
 
         {opponents.map(opp => {
           const sh = getStrokeHolesForOpp(opp).sort((a,b)=>a-b);
+          const perSide = Math.abs(opp.strokes) / 2;
           const strokeLabel = opp.strokes === 0 ? "Even"
-            : opp.strokes > 0 ? `You give ${opp.strokes}`
-            : `You get ${Math.abs(opp.strokes)}`;
+            : opp.strokes > 0 ? `You give ${perSide}/side (${opp.strokes} total)`
+            : `You get ${perSide}/side (${Math.abs(opp.strokes)} total)`;
           return (
             <div key={opp.playerId} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:"14px",marginBottom:10}}>
               <div style={{display:"flex",justifyContent:"space-between"}}>
@@ -579,14 +582,21 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
           </div>
 
           <div>
-            <Lbl>Strokes</Lbl>
+            <Lbl>Strokes Per Side</Lbl>
             <div style={{display:"flex",gap:8,marginBottom:8}}>
               {[["even","Even"],["igive","I Give"],["iget","I Get"]].map(([d,l])=>(
                 <button key={d} onClick={()=>setAddStrokesDir(d)} style={{flex:1,padding:"10px 4px",fontSize:11,fontWeight:addStrokesDir===d?700:500,background:addStrokesDir===d?C.green:C.surface,color:addStrokesDir===d?"#0a1a0f":C.muted,border:`1px solid ${addStrokesDir===d?C.green:C.border}`,cursor:"pointer",borderRadius:8}}>{l}</button>
               ))}
             </div>
             {addStrokesDir !== "even" && (
-              <input type="number" min="1" max="18" value={addStrokes} onChange={e=>setAddStrokes(e.target.value)} placeholder="# strokes" style={{width:"100%",padding:"12px",background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,color:C.text,fontSize:20,outline:"none",boxSizing:"border-box",textAlign:"center",fontWeight:700}} inputMode="numeric"/>
+              <>
+                <input type="number" min="1" max="9" value={addStrokes} onChange={e=>setAddStrokes(e.target.value)} placeholder="# per side" style={{width:"100%",padding:"12px",background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,color:C.text,fontSize:20,outline:"none",boxSizing:"border-box",textAlign:"center",fontWeight:700}} inputMode="numeric"/>
+                <div style={{fontSize:11,color:C.muted,marginTop:6,textAlign:"center"}}>
+                  {safeInt(addStrokes,0) > 0
+                    ? `${addStrokesDir==="igive"?"Giving":"Getting"} ${addStrokes} per side = ${safeInt(addStrokes,0)*2} total strokes`
+                    : "1 per side = stroke on #1 hdcp hole each side"}
+                </div>
+              </>
             )}
           </div>
 
@@ -816,7 +826,7 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
               <div style={{fontSize:12,color:C.muted,marginBottom:8}}>
                 {r.betType==="match"?`Match Play $${r.betAmount}/hole`:r.betType==="nassau"?`Nassau $${r.betAmount}`:r.betType==="nassau-press"?`Nassau - Auto Press ${r.pressDown||2}D $${r.betAmount}`:`Skins $${r.betAmount}`}
                 {" · "}
-                {r.strokes===0?"Even":r.strokes>0?`You gave ${r.strokes}`:(`You got ${Math.abs(r.strokes)}`)}
+                {r.strokes===0?"Even":r.strokes>0?`You gave ${r.strokes/2}/side`:(`You got ${Math.abs(r.strokes)/2}/side`)}
               </div>
 
               {/* Press bet breakdown for nassau-press */}
