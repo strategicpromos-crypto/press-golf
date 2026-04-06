@@ -32,33 +32,42 @@ const pill = (active, color=C.green) => ({
 
 function genCode(){ return Math.random().toString(36).substring(2,8).toUpperCase(); }
 
+function openDeepLink(appUrl, webUrl) {
+  // Create hidden link and click it — works correctly on Android
+  const a = document.createElement("a");
+  a.href = appUrl;
+  a.style.display = "none";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  // Fall back to web if app not installed after 2s
+  setTimeout(() => { window.open(webUrl, "_blank"); }, 2000);
+}
+
 function openVenmo(name, amount) {
   const amt = Math.abs(amount).toFixed(2);
   const note = encodeURIComponent("Press Golf");
   const recipient = encodeURIComponent(name);
-  // Try native app first, fall back to web after 1.5s if app not installed
-  window.location.href = `venmo://paycharge?txn=pay&recipients=${recipient}&amount=${amt}&note=${note}`;
-  setTimeout(() => {
-    window.open(`https://venmo.com/u/${recipient}?txn=pay&amount=${amt}&note=${note}`, "_blank");
-  }, 1500);
+  openDeepLink(
+    `venmo://paycharge?txn=pay&recipients=${recipient}&amount=${amt}&note=${note}`,
+    `https://venmo.com/u/${recipient}?txn=pay&amount=${amt}&note=${note}`
+  );
 }
 
 function openCashApp(name, amount) {
   const amt = Math.abs(amount).toFixed(2);
   const handle = encodeURIComponent(name.replace(/\s+/g, ""));
-  // cashapp:// is the correct native scheme
-  window.location.href = `cashapp://cash.app/pay/${handle}/${amt}`;
-  setTimeout(() => {
-    window.open(`https://cash.app/$${handle}/${amt}`, "_blank");
-  }, 1500);
+  openDeepLink(
+    `cashapp://cash.app/pay/${handle}/${amt}`,
+    `https://cash.app/$${handle}/${amt}`
+  );
 }
 
 function openZelle(phone) {
-  // zellepay:// works on some bank apps; fall back to web
-  window.location.href = `zellepay://pay${phone ? `?contact=${encodeURIComponent(phone)}` : ""}`;
-  setTimeout(() => {
-    window.open("https://www.zellepay.com/", "_blank");
-  }, 1500);
+  openDeepLink(
+    `zellepay://pay${phone ? `?contact=${encodeURIComponent(phone)}` : ""}`,
+    "https://www.zellepay.com/"
+  );
 }
 
 // ── UI ────────────────────────────────────────────────────────────────────────
