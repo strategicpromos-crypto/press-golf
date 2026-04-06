@@ -290,7 +290,7 @@ export function calcNassau(scores, holeData, myStrokeHoles, oppStrokeHoles, betA
 // - 18-hole total NEVER gets pressed
 // - Each bet result: +betAmount (won), -betAmount (lost), 0 (tied)
 
-export function calcAutoPressNassau(scores, holeData, myStrokeHoles, oppStrokeHoles, betAmount) {
+export function calcAutoPressNassau(scores, holeData, myStrokeHoles, oppStrokeHoles, betAmount, pressDown = 2) {
 
   function calcSideWithPress(sideHoles) {
     if (!sideHoles || sideHoles.length === 0) return { bets: [], total: 0 };
@@ -320,13 +320,12 @@ export function calcAutoPressNassau(scores, holeData, myStrokeHoles, oppStrokeHo
         }
       }
 
-      // Check for press triggers — only on bets that existed before this hole
+      // Check for press triggers — fires when either player reaches pressDown holes up/down
       const isLastHole = h.hole === sideHoles[sideHoles.length - 1].hole;
       for (let i = 0; i < betsThisHole; i++) {
         const bet = bets[i];
-        if (bet.startHole <= h.hole && (bet.diff === 2 || bet.diff === -2) && !bet.pressed) {
+        if (bet.startHole <= h.hole && (bet.diff === pressDown || bet.diff === -pressDown) && !bet.pressed) {
           bet.pressed = true;
-          // Only create press if there are holes remaining — last hole press = $0 so skip
           if (!isLastHole) {
             bets.push({ startHole: h.hole + 1, diff: 0, pressed: false });
           }
