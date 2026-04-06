@@ -623,7 +623,10 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
               <div style={{fontSize:48,fontWeight:800,color:C.text,lineHeight:1}}>{currentHole}</div>
               <div style={{fontSize:12,color:C.green,fontWeight:600}}>Par {holeData.par} · Hdcp {holeData.hdcp}</div>
             </div>
-            <button onClick={()=>setStep("summary")} style={{background:"transparent",border:`1px solid ${C.border}`,color:C.muted,fontSize:11,cursor:"pointer",padding:"6px 10px",borderRadius:12}}>Summary</button>
+            <div style={{display:"flex",flexDirection:"column",gap:6,alignItems:"flex-end"}}>
+              <button onClick={onBack} style={{background:"rgba(123,180,80,0.15)",border:`1px solid ${C.green}`,color:C.green,fontSize:11,cursor:"pointer",padding:"5px 10px",borderRadius:12,fontWeight:700}}>🏠 Home</button>
+              <button onClick={()=>setStep("summary")} style={{background:"transparent",border:`1px solid ${C.border}`,color:C.muted,fontSize:11,cursor:"pointer",padding:"5px 10px",borderRadius:12}}>Summary</button>
+            </div>
           </div>
           {/* Progress bar */}
           <div style={{display:"flex",gap:2}}>
