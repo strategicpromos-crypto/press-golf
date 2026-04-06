@@ -488,7 +488,11 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
       <div style={{width:"100%",maxWidth:340,display:"flex",flexDirection:"column",gap:10}}>
         <BigBtn onClick={()=>{setResuming(false);setStep("playing");}}>Resume Round →</BigBtn>
         <GhostBtn onClick={()=>{setResuming(false);setStep("summary");}}>Go to Summary</GhostBtn>
-        <GhostBtn onClick={()=>{discardRound();}} color={C.red}>Discard Round</GhostBtn>
+        <GhostBtn onClick={()=>{
+          if(window.confirm("Are you sure you want to discard this round? All scores will be lost and cannot be recovered.")) {
+            discardRound();
+          }
+        }} color={C.red}>Discard Round</GhostBtn>
         <GhostBtn onClick={()=>{setResuming(false);setLiveRoundId(null);setStep("setup");}}>Start New Round</GhostBtn>
       </div>
     </div>
