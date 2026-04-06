@@ -32,18 +32,33 @@ const pill = (active, color=C.green) => ({
 
 function genCode(){ return Math.random().toString(36).substring(2,8).toUpperCase(); }
 
-function openVenmo(name,amount){
-  const amt=Math.abs(amount).toFixed(2);
-  window.location.href=`venmo://paycharge?txn=pay&recipients=${encodeURIComponent(name)}&amount=${amt}&note=${encodeURIComponent("Press Golf")}`;
-  setTimeout(()=>window.open(`https://venmo.com/u/${encodeURIComponent(name)}?txn=pay&amount=${amt}`,"_blank"),1500);
+function openVenmo(name, amount) {
+  const amt = Math.abs(amount).toFixed(2);
+  const note = encodeURIComponent("Press Golf");
+  const recipient = encodeURIComponent(name);
+  // Try native app first, fall back to web after 1.5s if app not installed
+  window.location.href = `venmo://paycharge?txn=pay&recipients=${recipient}&amount=${amt}&note=${note}`;
+  setTimeout(() => {
+    window.open(`https://venmo.com/u/${recipient}?txn=pay&amount=${amt}&note=${note}`, "_blank");
+  }, 1500);
 }
-function openCashApp(name,amount){
-  window.location.href="cashme://cash.app/pay";
-  setTimeout(()=>window.open(`https://cash.app/$${encodeURIComponent(name)}/${Math.abs(amount).toFixed(2)}`,"_blank"),1500);
+
+function openCashApp(name, amount) {
+  const amt = Math.abs(amount).toFixed(2);
+  const handle = encodeURIComponent(name.replace(/\s+/g, ""));
+  // cashapp:// is the correct native scheme
+  window.location.href = `cashapp://cash.app/pay/${handle}/${amt}`;
+  setTimeout(() => {
+    window.open(`https://cash.app/$${handle}/${amt}`, "_blank");
+  }, 1500);
 }
-function openZelle(){
-  window.location.href="zelle://";
-  setTimeout(()=>window.open("https://enroll.zellepay.com/","_blank"),1500);
+
+function openZelle(phone) {
+  // zellepay:// works on some bank apps; fall back to web
+  window.location.href = `zellepay://pay${phone ? `?contact=${encodeURIComponent(phone)}` : ""}`;
+  setTimeout(() => {
+    window.open("https://www.zellepay.com/", "_blank");
+  }, 1500);
 }
 
 // ── UI ────────────────────────────────────────────────────────────────────────
@@ -1222,11 +1237,13 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,isPro,setIsPro}){
               <div style={{marginBottom:12}}>
                 <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>Pay With</div>
                 <div style={{display:"flex",gap:8,marginBottom:6}}>
-                  <button onClick={()=>openVenmo(player.name,Number(partialAmt)||player.bank)} style={{flex:1,padding:"12px 4px",background:"#008CFF",border:"none",borderRadius:8,color:"#fff",fontSize:13,fontWeight:700,cursor:"pointer"}}>Venmo</button>
-                  <button onClick={()=>openCashApp(player.name,Number(partialAmt)||player.bank)} style={{flex:1,padding:"12px 4px",background:"#00D54B",border:"none",borderRadius:8,color:"#fff",fontSize:13,fontWeight:700,cursor:"pointer"}}>Cash App</button>
-                  <button onClick={()=>openZelle()} style={{flex:1,padding:"12px 4px",background:"#6D1ED4",border:"none",borderRadius:8,color:"#fff",fontSize:13,fontWeight:700,cursor:"pointer"}}>Zelle</button>
+                  <button onClick={()=>openVenmo(player.venmo||player.name,Number(partialAmt)||player.bank)} style={{flex:1,padding:"12px 4px",background:"#008CFF",border:"none",borderRadius:8,color:"#fff",fontSize:13,fontWeight:700,cursor:"pointer"}}>Venmo</button>
+                  <button onClick={()=>openCashApp(player.cashapp||player.name,Number(partialAmt)||player.bank)} style={{flex:1,padding:"12px 4px",background:"#00D54B",border:"none",borderRadius:8,color:"#fff",fontSize:13,fontWeight:700,cursor:"pointer"}}>Cash App</button>
+                  <button onClick={()=>openZelle(player.phone||null)} style={{flex:1,padding:"12px 4px",background:"#6D1ED4",border:"none",borderRadius:8,color:"#fff",fontSize:13,fontWeight:700,cursor:"pointer"}}>Zelle</button>
                 </div>
-                <div style={{fontSize:11,color:C.muted,textAlign:"center",marginBottom:12}}>After paying, tap "Mark as Settled"</div>
+                <div style={{fontSize:11,color:C.muted,textAlign:"center",marginBottom:12}}>
+                  Tap to open app → After paying, tap "Mark as Settled"
+                </div>
               </div>
               <BigBtn onClick={()=>settleUp(partialAmt?(player.bank>0?Number(partialAmt):-Number(partialAmt)):player.bank)} disabled={saving} color={player.bank>0?C.green:C.red} textColor="#fff" style={{marginBottom:10}}>
                 {saving?"Saving...":(player.bank>0?"Mark as Collected ✓":"Mark as Paid ✓")}
