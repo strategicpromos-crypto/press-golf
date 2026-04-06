@@ -253,7 +253,8 @@ function getTally(scores, course, opp, courseId) {
       course.holes,
       myStrokeHoles,
       oppStrokeHoles,
-      opp.betAmount
+      opp.betAmount,
+      opp.pressDown || 2
     );
 
     // Build label showing front/back bets
@@ -293,6 +294,7 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
   const [addStrokes,     setAddStrokes]     = useState("0");
   const [addStrokesDir,  setAddStrokesDir]  = useState("even");
   const [addBetType,     setAddBetType]     = useState("nassau");
+  const [addPressDown,   setAddPressDown]   = useState(2); // 1, 2, or 3 holes down triggers press
   const [addBetAmt,      setAddBetAmt]      = useState("5");
 
   const course = COURSES[courseId];
@@ -408,6 +410,7 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
       strokes:     finalStrokes,
       betType:     addBetType,
       betAmount:   safeInt(addBetAmt, 5),
+      pressDown:   addBetType === "nassau-press" ? addPressDown : 2,
       linkedUserId: player.linked_user_id || null,
     }]);
     setAddOppId(""); setAddStrokes("0"); setAddStrokesDir("even"); setAddBetAmt("5");
@@ -537,7 +540,7 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
                 <div>
                   <div style={{fontWeight:700,fontSize:17,marginBottom:3}}>{opp.name}</div>
                   <div style={{fontSize:12,color:C.muted,marginBottom:2}}>
-                    {strokeLabel} · {opp.betType === "match" ? `$${opp.betAmount}/hole` : opp.betType === "nassau" ? `Nassau $${opp.betAmount}` : opp.betType === "nassau-press" ? `Nassau+Press $${opp.betAmount}` : `Skins $${opp.betAmount}`}
+                    {strokeLabel} · {opp.betType === "match" ? `$${opp.betAmount}/hole` : opp.betType === "nassau" ? `Nassau $${opp.betAmount}` : opp.betType === "nassau-press" ? `Nassau - Auto Press ${opp.pressDown||2}D $${opp.betAmount}` : `Skins $${opp.betAmount}`}
                   </div>
                   {opp.strokes !== 0 && sh.length > 0 && (
                     <div style={{fontSize:11,color:C.gold}}>Stroke holes: {sh.join(", ")}</div>
@@ -586,14 +589,33 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
           <div>
             <Lbl>Bet Type</Lbl>
             <div style={{display:"flex",gap:8}}>
-              {[["match","Match Play"],["nassau","Nassau"],["nassau-press","Nassau + Auto Press"],["skins","Skins"]].map(([id,label])=>(
+              {[["match","Match Play"],["nassau","Nassau"],["nassau-press","Nassau - Auto Press"],["skins","Skins"]].map(([id,label])=>(
                 <button key={id} onClick={()=>setAddBetType(id)} style={{flex:1,padding:"10px 4px",fontSize:11,fontWeight:addBetType===id?700:500,background:addBetType===id?C.green:C.surface,color:addBetType===id?"#0a1a0f":C.muted,border:`1px solid ${addBetType===id?C.green:C.border}`,cursor:"pointer",borderRadius:8}}>{label}</button>
               ))}
             </div>
           </div>
 
+          {/* Press trigger selector — only show for nassau-press */}
+          {addBetType === "nassau-press" && (
+            <div>
+              <Lbl>Auto Press Triggers When</Lbl>
+              <div style={{display:"flex",gap:8}}>
+                {[1,2,3].map(n=>(
+                  <button key={n} onClick={()=>setAddPressDown(n)} style={{flex:1,padding:"12px 4px",fontSize:13,fontWeight:addPressDown===n?700:500,background:addPressDown===n?C.gold:C.surface,color:addPressDown===n?"#0a1a0f":C.muted,border:`1px solid ${addPressDown===n?C.gold:C.border}`,cursor:"pointer",borderRadius:8}}>
+                    {n} Down
+                  </button>
+                ))}
+              </div>
+              <div style={{fontSize:11,color:C.muted,marginTop:6,textAlign:"center"}}>
+                New bet starts when either player is {addPressDown} down
+              </div>
+            </div>
+          )}
+            </div>
+          </div>
+
           <div>
-            <Lbl>{addBetType==="match"?"$ Per Hole":addBetType==="nassau"?"$ Per Side/Total":"$ Per Skin"}</Lbl>
+            <Lbl>{addBetType==="match"?"$ Per Hole":addBetType==="nassau"?"$ Per Side/Total":addBetType==="nassau-press"?"$ Per Side/Total/Press":"$ Per Skin"}</Lbl>
             <input type="number" min="1" value={addBetAmt} onChange={e=>setAddBetAmt(e.target.value)} placeholder="e.g. 5" style={{width:"100%",padding:"12px",background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,color:C.text,fontSize:20,outline:"none",boxSizing:"border-box",textAlign:"center",fontWeight:700}} inputMode="decimal"/>
           </div>
 
@@ -790,7 +812,7 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
                 </div>
               </div>
               <div style={{fontSize:12,color:C.muted,marginBottom:8}}>
-                {r.betType==="match"?`Match Play $${r.betAmount}/hole`:r.betType==="nassau"?`Nassau $${r.betAmount}`:r.betType==="nassau-press"?`Nassau+Press $${r.betAmount}`:`Skins $${r.betAmount}`}
+                {r.betType==="match"?`Match Play $${r.betAmount}/hole`:r.betType==="nassau"?`Nassau $${r.betAmount}`:r.betType==="nassau-press"?`Nassau - Auto Press ${r.pressDown||2}D $${r.betAmount}`:`Skins $${r.betAmount}`}
                 {" · "}
                 {r.strokes===0?"Even":r.strokes>0?`You gave ${r.strokes}`:(`You got ${Math.abs(r.strokes)}`)}
               </div>
