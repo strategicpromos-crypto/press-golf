@@ -611,8 +611,6 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
               </div>
             </div>
           )}
-            </div>
-          </div>
 
           <div>
             <Lbl>{addBetType==="match"?"$ Per Hole":addBetType==="nassau"?"$ Per Side/Total":addBetType==="nassau-press"?"$ Per Side/Total/Press":"$ Per Skin"}</Lbl>
