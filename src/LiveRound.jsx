@@ -426,24 +426,26 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
 
   // -- Advance to next hole - check for press decisions first ----------------
   function advanceHole() {
-    if (isLastHole) { setStep("summary"); return; }
+    const totalHoles = course?.holes?.length || 18;
+    const lastHole   = currentHole >= totalHoles;
+
+    if (lastHole) { setStep("summary"); return; }
+
     const nextHole = currentHole + 1;
     const side     = currentHole <= 9 ? "front" : "back";
 
-    // Find opponents who are eligible for a press decision right now
+    // Find opponents eligible for a press decision right now
     const pressable = opponents.filter(opp => {
       if (!opp.sameGroup) return false;
       if (opp.betType !== "nassau" && opp.betType !== "nassau-press") return false;
-      // Don't offer if already pressed on this hole
       if ((opp.manualPresses||[]).some(p => p.hole === currentHole)) return false;
       const tally = getTally(scores, course, opp, courseId);
       const lastDiff = side === "front" ? tally.lastFrontDiff : tally.lastBackDiff;
-      // Offer press when EITHER player is exactly 1 down on the current bet
       return lastDiff === -1 || lastDiff === 1;
     });
 
     if (pressable.length > 0) {
-      setPressCheck({ opps: pressable, nextHole, pressed: [] });
+      setPressCheck({ opps: pressable, nextHole, pressed: [], declined: [] });
     } else {
       setCurrentHole(nextHole);
     }
