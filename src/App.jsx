@@ -428,11 +428,11 @@ export default function App(){
   if(showProInfo)return <ProInfo onBack={()=>setShowProInfo(false)} isPro={isPro} onUpgrade={()=>{setShowProInfo(false);setShowPaywall(true);}}/>;
   if(!user)return <AuthScreen onAuth={setUser} onPrivacy={()=>setShowPrivacy(true)}/>;
   if(inviteCode)return <AcceptInviteScreen code={inviteCode} user={user}/>;
-  return <Press user={user} onSignOut={()=>sb.auth.signOut()} onPrivacy={()=>setShowPrivacy(true)} onUpgrade={()=>setShowPaywall(true)} isPro={isPro} setIsPro={setIsPro}/>;
+  return <Press user={user} onSignOut={()=>sb.auth.signOut()} onPrivacy={()=>setShowPrivacy(true)} onUpgrade={()=>setShowPaywall(true)} onShowProInfo={()=>setShowProInfo(true)} isPro={isPro} setIsPro={setIsPro}/>;
 }
 
 // ── PRESS APP ─────────────────────────────────────────────────────────────────
-function Press({user,onSignOut,onPrivacy,onUpgrade,isPro,setIsPro}){
+function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}){
   const today=new Date().toISOString().slice(0,10);
   const [players,setPlayers]=useState([]);
   const [rounds,setRounds]=useState([]);
@@ -917,13 +917,13 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,isPro,setIsPro}){
             <button onClick={onUpgrade} style={{background:`linear-gradient(135deg,${C.gold},#b8860b)`,border:"none",color:"#0a1a0f",padding:"8px 20px",borderRadius:20,fontSize:12,fontWeight:700,cursor:"pointer"}}>
               ⭐ Upgrade to Pro — $1.99/mo
             </button>
-            <button onClick={()=>setShowProInfo(true)} style={{background:"transparent",border:`1px solid ${C.gold}`,color:C.gold,padding:"8px 16px",borderRadius:20,fontSize:12,fontWeight:600,cursor:"pointer"}}>
+            <button onClick={onShowProInfo} style={{background:"transparent",border:`1px solid ${C.gold}`,color:C.gold,padding:"8px 16px",borderRadius:20,fontSize:12,fontWeight:600,cursor:"pointer"}}>
               What's included?
             </button>
           </div>
         )}
         {isPro&&(
-          <button onClick={()=>setShowProInfo(true)} style={{background:"transparent",border:`1px solid ${C.gold}44`,color:C.gold,padding:"6px 16px",borderRadius:20,fontSize:11,fontWeight:600,cursor:"pointer",marginBottom:12}}>
+          <button onClick={onShowProInfo} style={{background:"transparent",border:`1px solid ${C.gold}44`,color:C.gold,padding:"6px 16px",borderRadius:20,fontSize:11,fontWeight:600,cursor:"pointer",marginBottom:12}}>
             ⭐ View Pro Features
           </button>
         )}
