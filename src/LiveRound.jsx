@@ -199,11 +199,11 @@ function getTally(scores, course, opp, courseId) {
       function pressLabel(side) {
         if (!side?.bets?.length) return "—";
         return side.bets.map((b,i) => {
-          const sym = b.diff < 0 ? `${Math.abs(b.diff)}↓` : b.diff > 0 ? `${b.diff}↑` : "E";
+          const sym = b.diff < 0 ? (Math.abs(b.diff) + "v") : b.diff > 0 ? (b.diff + "^") : "E";
           return i === 0 ? sym : `P${sym}`;
         }).join(" / ");
       }
-      return { label: `F: ${pressLabel(r.front)} · B: ${pressLabel(r.back)}`, total: r.net, pressDetail: r };
+      return { label: "F: " + pressLabel(r.front) + " | B: " + pressLabel(r.back), total: r.net, pressDetail: r };
     }
 
     function sideDiff(holes) {
@@ -243,7 +243,7 @@ function getTally(scores, course, opp, courseId) {
     const overall   = sideDiff(course.holes);
     const overallAmt = allPlayed === 18 ? sideAmt(overall.diff, overall.played) : 0;
 
-    const label = `F: ${standingLabel(front.diff, front.played)} · B: ${standingLabel(back.diff, back.played)}`;
+    const label = "F: " + standingLabel(front.diff, front.played) + " | B: " + standingLabel(back.diff, back.played);
     return { label, total: frontAmt + backAmt + overallAmt };
   }
 
@@ -283,12 +283,12 @@ function getTally(scores, course, opp, courseId) {
     function pressLabel(side) {
       if (!side || !side.bets || side.bets.length === 0) return "—";
       return side.bets.map((b, i) => {
-        const sym = b.diff < 0 ? `${Math.abs(b.diff)}↓` : b.diff > 0 ? `${b.diff}↑` : "E";
+        const sym = b.diff < 0 ? (Math.abs(b.diff) + "v") : b.diff > 0 ? (b.diff + "^") : "E";
         return i === 0 ? sym : `P${sym}`;
       }).join(" / ");
     }
 
-    const label = `F: ${pressLabel(r.front)} · B: ${pressLabel(r.back)}`;
+    const label = "F: " + pressLabel(r.front) + " | B: " + pressLabel(r.back);
     return {
       label,
       total: r.net,
@@ -474,7 +474,7 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
         date:        today,
         strokes:     opp.strokes,
         money:       amount,
-        notes:       `Live round · ${course.name} · ${opp.betType} $${opp.betAmount}`,
+        notes:       "Live round | " + course.name + " | " + opp.betType + " $" + opp.betAmount,
         season:      new Date().getFullYear(),
         cancelled:   false,
       });
@@ -488,8 +488,8 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
         await sb.from("notifications").insert({
           user_id: opp.linkedUserId,
           type:    "round_logged",
-          title:   `Round posted — ${course.name}`,
-          body:    `${opp.betType} · ${amount >= 0 ? "You owe" : "You collect"} $${Math.abs(amount).toFixed(2)}`,
+          title:   "Round posted: " + course.name,
+          body:    opp.betType + " | " + (amount >= 0 ? "You owe" : "You collect") + " $" + Math.abs(amount).toFixed(2),
           data:    { player_id: opp.playerId },
         });
       }
@@ -860,7 +860,7 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
           >
             {!canAdvance ? "Enter your score to continue"
               : isLastHole ? "Finish Round 🏆"
-              : `Next → Hole ${currentHole + 1}`}
+              : "Next — Hole " + (currentHole + 1)}
           </BigBtn>
 
           <div style={{textAlign:"center",fontSize:11,color:C.dim,marginTop:8}}>
