@@ -825,13 +825,22 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
                 {/* Header row */}
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
                   <div>
-                    <div style={{display:"flex",alignItems:"center",gap:8}}>
-                      <div style={{fontWeight:700,fontSize:16}}>{opp.name}</div>
+                    <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                      <div style={{fontWeight:700,fontSize:16,color:C.text}}>{opp.name}</div>
                       {opp.sameGroup && <div style={{fontSize:10,color:C.green,background:"rgba(123,180,80,0.12)",padding:"2px 7px",borderRadius:8}}>Same Group</div>}
+                    </div>
+                    {/* Bet info always visible */}
+                    <div style={{fontSize:11,color:C.muted,marginTop:3}}>
+                      {opp.betType==="match"?"Match $"+opp.betAmount+"/hole"
+                        :opp.betType==="nassau"?"Nassau $"+opp.betAmount
+                        :opp.betType==="nassau-press"?"Nassau+Press $"+opp.betAmount
+                        :"Skins $"+opp.betAmount}
+                      {" · "}
+                      {opp.strokes===0?"Even":opp.strokes>0?"You give "+(opp.strokes/2)+"/side":"You get "+(Math.abs(opp.strokes)/2)+"/side"}
                     </div>
                     {getsStroke && <div style={{fontSize:11,color:C.gold,marginTop:2}}>⭐ {opp.name} gets a stroke this hole</div>}
                     {iGetStroke && <div style={{fontSize:11,color:C.green,marginTop:2}}>⭐ You get a stroke this hole</div>}
-                    {!getsStroke && !iGetStroke && !opp.sameGroup && <div style={{fontSize:10,color:C.dim,marginTop:2}}>different group - scores optional</div>}
+                    {!getsStroke && !iGetStroke && !opp.sameGroup && <div style={{fontSize:11,color:C.muted,marginTop:2}}>Different group · scores optional</div>}
                   </div>
                 </div>
 
@@ -842,7 +851,7 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
                     setScore(opp.playerId, currentHole, cur - 1);
                   }}/>
                   <div style={{flex:1,textAlign:"center"}}>
-                    <div style={{fontSize:52,fontWeight:800,color:oppScore!==null?C.text:C.dim,lineHeight:1}}>
+                    <div style={{fontSize:52,fontWeight:800,color:oppScore!==null?C.text:C.muted,lineHeight:1}}>
                       {oppScore !== null ? oppScore : "-"}
                     </div>
                     {oppScore !== null && getsStroke && (
@@ -851,7 +860,7 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
                     {oppScore !== null && iGetStroke && (
                       <div style={{fontSize:11,color:C.green,marginTop:2}}>Your net: {myScore !== null ? myScore - 1 : "-"}</div>
                     )}
-                    {oppScore === null && <div style={{fontSize:11,color:C.dim,marginTop:2}}>tap + to enter</div>}
+                    {oppScore === null && <div style={{fontSize:11,color:C.muted,marginTop:2}}>tap + to enter</div>}
                   </div>
                   <ScoreButton label="+" size={52} onClick={()=>{
                     const cur = oppScore !== null ? oppScore : holeData.par - 1;
