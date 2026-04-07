@@ -8,7 +8,7 @@ const C = {
   red:"#e05050", text:"#e8f0e9", muted:"#6b7f6d", dim:"#1e2f20",
 };
 
-// ── Safe integer helper — NEVER returns NaN or undefined ──────────────────────
+// -- Safe integer helper - NEVER returns NaN or undefined ----------------------
 function safeInt(val, fallback) {
   const n = parseInt(val, 10);
   return isNaN(n) ? fallback : n;
@@ -84,11 +84,11 @@ const selStyle = {
   WebkitAppearance:"none", cursor:"pointer",
 };
 
-// ── SCORE NAME LABEL ──────────────────────────────────────────────────────────
+// -- SCORE NAME LABEL ----------------------------------------------------------
 function scoreName(score, par) {
   if (score === par - 2) return "Eagle 🦅";
   if (score === par - 1) return "Birdie 🐦";
-  if (score === par)     return "Par ✓";
+  if (score === par)     return "Par v";
   if (score === par + 1) return "Bogey";
   if (score === par + 2) return "Double 😬";
   return score > par ? `+${score - par}` : `${score - par}`;
@@ -100,7 +100,7 @@ function scoreColor(score, par) {
   return C.muted;
 }
 
-// ── BET CALCULATORS ───────────────────────────────────────────────────────────
+// -- BET CALCULATORS -----------------------------------------------------------
 function calcMatchPlayTotal(scores, course, myStrokeHoles, oppStrokeHoles, betPerHole) {
   let total = 0;
   let played = 0;
@@ -163,7 +163,7 @@ function getTally(scores, course, opp, courseId) {
   const myScores  = scores["me"]         || {};
   const oppScores = scores[opp.playerId] || {};
 
-  // ── Match Play: show holes up/down ──
+  // -- Match Play: show holes up/down --
   if (opp.betType === "match") {
     let upDown = 0, played = 0;
     for (const h of course.holes) {
@@ -181,7 +181,7 @@ function getTally(scores, course, opp, courseId) {
     return { label, upDown, played, total: upDown * opp.betAmount };
   }
 
-  // ── Nassau: show front/back standing ──
+  // -- Nassau: show front/back standing --
   if (opp.betType === "nassau") {
     const manualPresses = opp.manualPresses || [];
 
@@ -197,7 +197,7 @@ function getTally(scores, course, opp, courseId) {
         manualPresses
       );
       function pressLabel(side) {
-        if (!side?.bets?.length) return "—";
+        if (!side?.bets?.length) return "-";
         return side.bets.map((b,i) => {
           const sym = b.diff < 0 ? (Math.abs(b.diff) + "v") : b.diff > 0 ? (b.diff + "^") : "E";
           return i === 0 ? sym : `P${sym}`;
@@ -222,7 +222,7 @@ function getTally(scores, course, opp, courseId) {
     const back  = sideDiff(course.holes.filter(h=>h.side==="back"));
 
     function standingLabel(diff, played) {
-      if (played === 0) return "—";
+      if (played === 0) return "-";
       if (diff === 0) return "Even";
       return diff < 0 ? `${Math.abs(diff)} Up` : `${diff} Down`;
     }
@@ -247,7 +247,7 @@ function getTally(scores, course, opp, courseId) {
     return { label, total: frontAmt + backAmt + overallAmt };
   }
 
-  // ── Skins: show skin count ──
+  // -- Skins: show skin count --
   if (opp.betType === "skins") {
     let mySkins = 0, oppSkins = 0, carry = 0, net = 0;
     for (const h of course.holes) {
@@ -267,7 +267,7 @@ function getTally(scores, course, opp, courseId) {
     return { label, total: net };
   }
 
-  // ── Nassau with Auto Press ──
+  // -- Nassau with Auto Press --
   if (opp.betType === "nassau-press") {
     const r = calcAutoPressNassau(
       { me: myScores, opp: oppScores },
@@ -281,7 +281,7 @@ function getTally(scores, course, opp, courseId) {
 
     // Build label showing front/back bets
     function pressLabel(side) {
-      if (!side || !side.bets || side.bets.length === 0) return "—";
+      if (!side || !side.bets || side.bets.length === 0) return "-";
       return side.bets.map((b, i) => {
         const sym = b.diff < 0 ? (Math.abs(b.diff) + "v") : b.diff > 0 ? (b.diff + "^") : "E";
         return i === 0 ? sym : `P${sym}`;
@@ -296,10 +296,10 @@ function getTally(scores, course, opp, courseId) {
     };
   }
 
-  return { label: "—", total: 0 };
+  return { label: "-", total: 0 };
 }
 
-// ── MAIN COMPONENT ────────────────────────────────────────────────────────────
+// -- MAIN COMPONENT ------------------------------------------------------------
 export default function LiveRound({ user, players, onBack, onPostToLedger }) {
   const [step,        setStep]        = useState("setup");
   const [courseId,    setCourseId]    = useState("south-toledo");
@@ -324,7 +324,7 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
   const holeData = course?.holes[currentHole - 1];
   const saveTimer = useRef(null);
 
-  // ── Check for existing active round on mount ──────────────────────────────
+  // -- Check for existing active round on mount ------------------------------
   useEffect(() => {
     async function checkExisting() {
       const { data } = await sb.from("live_rounds")
@@ -348,7 +348,7 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
     checkExisting();
   }, [user.id]);
 
-  // ── Auto-save scores to Supabase whenever scores change ──────────────────
+  // -- Auto-save scores to Supabase whenever scores change ------------------
   useEffect(() => {
     if (!liveRoundId || step !== "playing") return;
     if (saveTimer.current) clearTimeout(saveTimer.current);
@@ -362,7 +362,7 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
     return () => clearTimeout(saveTimer.current);
   }, [scores, currentHole, liveRoundId, step]);
 
-  // ── Start round — saves to DB immediately ─────────────────────────────────
+  // -- Start round - saves to DB immediately ---------------------------------
   async function startRound() {
     if (opponents.length === 0) return;
     setPosting(true);
@@ -384,7 +384,7 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
     }
   }
 
-  // ── Score setter — always uses safe integers ──────────────────────────────
+  // -- Score setter - always uses safe integers ------------------------------
   function setScore(playerId, hole, rawValue) {
     const value = safeInt(rawValue, 1);
     const safeValue = Math.max(1, Math.min(15, value)); // clamp 1-15
@@ -403,7 +403,7 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
     return safeInt(val, null);
   }
 
-  // ── Opponent helpers ──────────────────────────────────────────────────────
+  // -- Opponent helpers ------------------------------------------------------
   function getStrokeHolesForOpp(opp) {
     return getStrokeHoles(courseId, Math.abs(opp.strokes || 0));
   }
@@ -418,13 +418,13 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
     return getStrokeHolesForOpp(opp).includes(hole);
   }
 
-  // ── Add opponent ──────────────────────────────────────────────────────────
+  // -- Add opponent ----------------------------------------------------------
   function addOpponent() {
     const player = players.find(p => p.id === addOppId);
     if (!player) return;
     if (opponents.find(o => o.playerId === addOppId)) return;
     const rawStrokes = safeInt(addStrokes, 0);
-    // Strokes are entered per side — multiply by 2 for total across 18
+    // Strokes are entered per side - multiply by 2 for total across 18
     const totalStrokes = rawStrokes * 2;
     const finalStrokes = addStrokesDir === "igive" ? totalStrokes
                        : addStrokesDir === "iget"  ? -totalStrokes
@@ -444,7 +444,7 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
     setSheet(null);
   }
 
-  // ── Manual Press ──────────────────────────────────────────────────────────
+  // -- Manual Press ----------------------------------------------------------
   function callManualPress(oppId) {
     setOpponents(prev => prev.map(opp => {
       if (opp.playerId !== oppId) return opp;
@@ -504,7 +504,7 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
     onPostToLedger();
   }
 
-  // ── Discard round ─────────────────────────────────────────────────────────
+  // -- Discard round ---------------------------------------------------------
   async function discardRound() {
     if (liveRoundId) {
       await sb.from("live_rounds").update({ status: "complete" }).eq("id", liveRoundId);
@@ -513,19 +513,19 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
     setCurrentHole(1); setStep("setup"); setResuming(false);
   }
 
-  // ══════════════════════════════════════════════════════════════════════════
-  // ── RESUME PROMPT ─────────────────────────────────────────────────────────
-  // ══════════════════════════════════════════════════════════════════════════
+  // ==========================================================================
+  // -- RESUME PROMPT ---------------------------------------------------------
+  // ==========================================================================
   if (resuming) return (
     <div style={{fontFamily:"'Georgia',serif",minHeight:"100vh",background:C.bg,color:C.text,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:24}}>
       <div style={{fontSize:48,marginBottom:16}}>⛳</div>
       <div style={{fontWeight:700,fontSize:22,marginBottom:8,textAlign:"center"}}>Round In Progress</div>
       <div style={{fontSize:14,color:C.muted,marginBottom:8,textAlign:"center"}}>{COURSES[courseId]?.name}</div>
       <div style={{fontSize:13,color:C.gold,marginBottom:28,textAlign:"center"}}>
-        Hole {currentHole} · {opponents.map(o=>o.name).join(", ")}
+        Hole {currentHole} - {opponents.map(o=>o.name).join(", ")}
       </div>
       <div style={{width:"100%",maxWidth:340,display:"flex",flexDirection:"column",gap:10}}>
-        <BigBtn onClick={()=>{setResuming(false);setStep("playing");}}>Resume Round →</BigBtn>
+        <BigBtn onClick={()=>{setResuming(false);setStep("playing");}}>Resume Round -></BigBtn>
         <GhostBtn onClick={()=>{setResuming(false);setStep("summary");}}>Go to Summary</GhostBtn>
         <GhostBtn onClick={()=>{
           if(window.confirm("Are you sure you want to discard this round? All scores will be lost and cannot be recovered.")) {
@@ -537,9 +537,9 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
     </div>
   );
 
-  // ══════════════════════════════════════════════════════════════════════════
-  // ── SETUP SCREEN ──────────────────────────────────────────────────────────
-  // ══════════════════════════════════════════════════════════════════════════
+  // ==========================================================================
+  // -- SETUP SCREEN ----------------------------------------------------------
+  // ==========================================================================
   if (step === "setup") return (
     <div style={{fontFamily:"'Georgia',serif",minHeight:"100vh",background:C.bg,color:C.text,paddingBottom:60}}>
       <div style={{background:`linear-gradient(180deg,${C.card} 0%,transparent 100%)`,padding:"44px 20px 20px"}}>
@@ -556,7 +556,7 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
           <Lbl>Select Course</Lbl>
           <select value={courseId} onChange={e=>setCourseId(e.target.value)} style={selStyle}>
             {Object.entries(COURSES).map(([id,c])=>(
-              <option key={id} value={id}>{c.name} — {c.city}</option>
+              <option key={id} value={id}>{c.name} - {c.city}</option>
             ))}
           </select>
           {COURSES[courseId]?.note && <div style={{fontSize:11,color:C.gold,marginTop:6}}>{COURSES[courseId].note}</div>}
@@ -584,7 +584,7 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
                 <div>
                   <div style={{fontWeight:700,fontSize:17,marginBottom:3}}>{opp.name}</div>
                   <div style={{fontSize:12,color:C.muted,marginBottom:2}}>
-                    {strokeLabel} · {
+                    {strokeLabel} - {
                       opp.betType === "match" ? "$" + opp.betAmount + "/hole"
                       : opp.betType === "nassau" ? "Nassau $" + opp.betAmount
                       : opp.betType === "nassau-press" ? "Nassau - Auto Press " + (opp.pressDown||2) + "D $" + opp.betAmount
@@ -616,7 +616,7 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
           <div>
             <Lbl>Select Player</Lbl>
             <select value={addOppId} onChange={e=>setAddOppId(e.target.value)} style={selStyle}>
-              <option value="">— Choose opponent —</option>
+              <option value="">- Choose opponent -</option>
               {players.filter(p=>!opponents.find(o=>o.playerId===p.id)).map(p=>(
                 <option key={p.id} value={p.id}>{p.name}</option>
               ))}
@@ -651,7 +651,7 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
             </div>
           </div>
 
-          {/* Press trigger selector — only show for nassau-press */}
+          {/* Press trigger selector - only show for nassau-press */}
           {addBetType === "nassau-press" && (
             <div>
               <Lbl>Auto Press Triggers When</Lbl>
@@ -681,7 +681,7 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
                 <div style={{fontSize:11,color:C.muted}}>
                   {addSameGroup
                     ? "Can enter scores & call manual press"
-                    : "Different group — scores optional, no manual press"}
+                    : "Different group - scores optional, no manual press"}
                 </div>
               </div>
               <button
@@ -709,9 +709,9 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
     </div>
   );
 
-  // ══════════════════════════════════════════════════════════════════════════
-  // ── PLAYING SCREEN ────────────────────────────────────────────────────────
-  // ══════════════════════════════════════════════════════════════════════════
+  // ==========================================================================
+  // -- PLAYING SCREEN --------------------------------------------------------
+  // ==========================================================================
   if (step === "playing" && holeData) {
     const myScore   = getScore("me", currentHole);
     const canAdvance = myScore !== null;
@@ -726,7 +726,7 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
             <div style={{textAlign:"center"}}>
               <div style={{fontSize:11,color:C.muted,letterSpacing:2,textTransform:"uppercase"}}>Hole</div>
               <div style={{fontSize:48,fontWeight:800,color:C.text,lineHeight:1}}>{currentHole}</div>
-              <div style={{fontSize:12,color:C.green,fontWeight:600}}>Par {holeData.par} · Hdcp {holeData.hdcp}</div>
+              <div style={{fontSize:12,color:C.green,fontWeight:600}}>Par {holeData.par} - Hdcp {holeData.hdcp}</div>
             </div>
             <div style={{display:"flex",flexDirection:"column",gap:6,alignItems:"flex-end"}}>
               <button onClick={onBack} style={{background:"rgba(123,180,80,0.15)",border:`1px solid ${C.green}`,color:C.green,fontSize:11,cursor:"pointer",padding:"5px 10px",borderRadius:12,fontWeight:700}}>🏠 Home</button>
@@ -743,17 +743,17 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
 
         <div style={{padding:"14px 18px"}}>
 
-          {/* ── MY SCORE ── */}
+          {/* -- MY SCORE -- */}
           <div style={{background:C.card,border:`2px solid ${C.green}`,borderRadius:14,padding:"16px",marginBottom:12}}>
             <div style={{fontSize:11,color:C.green,letterSpacing:2,textTransform:"uppercase",marginBottom:12,fontWeight:600}}>⛳ Your Score</div>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
-              <ScoreButton label="−" size={60} onClick={()=>{
+              <ScoreButton label="-" size={60} onClick={()=>{
                 const cur = myScore !== null ? myScore : holeData.par;
                 setScore("me", currentHole, cur - 1);
               }}/>
               <div style={{flex:1,textAlign:"center"}}>
                 <div style={{fontSize:72,fontWeight:800,color:C.text,lineHeight:1}}>
-                  {myScore !== null ? myScore : "—"}
+                  {myScore !== null ? myScore : "-"}
                 </div>
                 {myScore !== null && (
                   <div style={{fontSize:14,color:scoreColor(myScore,holeData.par),marginTop:4,fontWeight:700}}>
@@ -771,7 +771,7 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
             </div>
           </div>
 
-          {/* ── OPPONENT SCORES ── */}
+          {/* -- OPPONENT SCORES -- */}
           {opponents.map(opp => {
             const oppScore    = getScore(opp.playerId, currentHole);
             const getsStroke  = oppGetsStrokeOnHole(opp, currentHole);
@@ -789,7 +789,7 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
                     </div>
                     {getsStroke && <div style={{fontSize:11,color:C.gold,marginTop:2}}>⭐ {opp.name} gets a stroke this hole</div>}
                     {iGetStroke && <div style={{fontSize:11,color:C.green,marginTop:2}}>⭐ You get a stroke this hole</div>}
-                    {!getsStroke && !iGetStroke && !opp.sameGroup && <div style={{fontSize:10,color:C.dim,marginTop:2}}>different group — scores optional</div>}
+                    {!getsStroke && !iGetStroke && !opp.sameGroup && <div style={{fontSize:10,color:C.dim,marginTop:2}}>different group - scores optional</div>}
                   </div>
                   <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:6}}>
                     <div style={{textAlign:"right"}}>
@@ -797,7 +797,7 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
                         tally.label==="Even" ? C.muted :
                         tally.label?.includes("Up") ? C.green : C.red
                       }}>
-                        {tally.label || "—"}
+                        {tally.label || "-"}
                       </div>
                       {/* Show press count if nassau-press */}
                       {opp.betType === "nassau-press" && tally.pressDetail && (
@@ -809,7 +809,7 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
                       )}
                       <div style={{fontSize:10,color:C.muted}}>standing</div>
                     </div>
-                    {/* Manual Press button — only for same group Nassau bets */}
+                    {/* Manual Press button - only for same group Nassau bets */}
                     {opp.sameGroup && (opp.betType === "nassau" || opp.betType === "nassau-press") && (
                       <button
                         onClick={() => callManualPress(opp.playerId)}
@@ -819,25 +819,25 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
                           fontSize:11,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"
                         }}
                       >
-                        {(opp.manualPresses||[]).some(p=>p.hole===currentHole) ? "✓ Pressed" : "🤜 Press"}
+                        {(opp.manualPresses||[]).some(p=>p.hole===currentHole) ? "v Pressed" : "🤜 Press"}
                       </button>
                     )}
                   </div>
                 {/* Score row */}
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
-                  <ScoreButton label="−" size={52} onClick={()=>{
+                  <ScoreButton label="-" size={52} onClick={()=>{
                     const cur = oppScore !== null ? oppScore : holeData.par;
                     setScore(opp.playerId, currentHole, cur - 1);
                   }}/>
                   <div style={{flex:1,textAlign:"center"}}>
                     <div style={{fontSize:52,fontWeight:800,color:oppScore!==null?C.text:C.dim,lineHeight:1}}>
-                      {oppScore !== null ? oppScore : "—"}
+                      {oppScore !== null ? oppScore : "-"}
                     </div>
                     {oppScore !== null && getsStroke && (
                       <div style={{fontSize:11,color:C.gold,marginTop:2}}>Net score: {oppScore - 1}</div>
                     )}
                     {oppScore !== null && iGetStroke && (
-                      <div style={{fontSize:11,color:C.green,marginTop:2}}>Your net: {myScore !== null ? myScore - 1 : "—"}</div>
+                      <div style={{fontSize:11,color:C.green,marginTop:2}}>Your net: {myScore !== null ? myScore - 1 : "-"}</div>
                     )}
                     {oppScore === null && <div style={{fontSize:11,color:C.dim,marginTop:2}}>tap + to enter</div>}
                   </div>
@@ -859,21 +859,21 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
             style={{marginTop:8}}
           >
             {!canAdvance ? "Enter your score to continue"
-              : isLastHole ? "Finish Round 🏆"
-              : "Next — Hole " + (currentHole + 1)}
+              : isLastHole ? "Finish Round "
+              : "Next - Hole " + (currentHole + 1)}
           </BigBtn>
 
           <div style={{textAlign:"center",fontSize:11,color:C.dim,marginTop:8}}>
-            Auto-saving · Round is safe if you close the app
+            Auto-saving - Round is safe if you close the app
           </div>
         </div>
       </div>
     );
   }
 
-  // ══════════════════════════════════════════════════════════════════════════
-  // ── SUMMARY SCREEN ────────────────────────────────────────────────────────
-  // ══════════════════════════════════════════════════════════════════════════
+  // ==========================================================================
+  // -- SUMMARY SCREEN --------------------------------------------------------
+  // ==========================================================================
   if (step === "summary") {
     const results = opponents.map(opp => ({
       ...opp,
@@ -886,7 +886,7 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
         <div style={{background:`linear-gradient(180deg,${C.card} 0%,transparent 100%)`,padding:"44px 20px 20px"}}>
           <button onClick={()=>setStep("playing")} style={{background:"rgba(123,180,80,0.15)",border:`1px solid ${C.green}`,color:C.green,fontSize:14,cursor:"pointer",padding:"8px 16px",borderRadius:20,display:"flex",alignItems:"center",gap:6,fontWeight:700,marginBottom:20}}>‹ Back to Round</button>
           <div style={{textAlign:"center"}}>
-            <div style={{fontSize:32,marginBottom:6}}>🏆</div>
+            <div style={{fontSize:32,marginBottom:6}}></div>
             <div style={{fontSize:22,fontWeight:800}}>Round Summary</div>
             <div style={{fontSize:13,color:C.muted}}>{course.name}</div>
           </div>
@@ -897,7 +897,7 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
           <div style={{background:C.card,border:`2px solid ${grandTotal>=0?C.green:C.red}`,borderRadius:14,padding:"20px",marginBottom:16,textAlign:"center"}}>
             <div style={{fontSize:12,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Overall</div>
             <div style={{fontSize:52,fontWeight:800,color:grandTotal>=0?C.green:C.red,letterSpacing:-2}}>
-              {grandTotal>=0?"+":"−"}${Math.abs(grandTotal).toFixed(2)}
+              {grandTotal>=0?"+":"-"}${Math.abs(grandTotal).toFixed(2)}
             </div>
             <div style={{fontSize:13,color:C.muted,marginTop:4}}>{grandTotal>=0?"You collect":"You owe"}</div>
           </div>
@@ -908,7 +908,7 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
                 <div style={{fontWeight:700,fontSize:17}}>{r.name}</div>
                 <div style={{fontSize:22,fontWeight:800,color:r.tally.total>=0?C.green:C.red}}>
-                  {r.tally.total>=0?"+":"−"}${Math.abs(r.tally.total).toFixed(2)}
+                  {r.tally.total>=0?"+":"-"}${Math.abs(r.tally.total).toFixed(2)}
                 </div>
               </div>
               <div style={{fontSize:12,color:C.muted,marginBottom:8}}>
@@ -916,7 +916,7 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
                   : r.betType==="nassau" ? "Nassau $" + r.betAmount
                   : r.betType==="nassau-press" ? "Nassau - Auto Press " + (r.pressDown||2) + "D $" + r.betAmount
                   : "Skins $" + r.betAmount}
-                {" · "}
+                {" - "}
                 {r.strokes===0?"Even":r.strokes>0?"You gave " + (r.strokes/2) + "/side":"You got " + (Math.abs(r.strokes)/2) + "/side"}
               </div>
 
@@ -931,13 +931,13 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
                         <div key={i} style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:2}}>
                           <span style={{color:C.muted}}>{i===0 ? ("Original $" + r.betAmount) : (b.label || ("Press " + i)) + " (hole " + b.startHole + ")"}</span>
                           <span style={{color:b.amount>=0?C.green:C.red,fontWeight:700}}>
-                            {b.amount>=0?"+":"−"}${Math.abs(b.amount).toFixed(2)}
+                            {b.amount>=0?"+":"-"}${Math.abs(b.amount).toFixed(2)}
                           </span>
                         </div>
                       ))}
                     </div>
                   )}
-                  {/* 18-hole total — never pressed */}
+                  {/* 18-hole total - never pressed */}
                   {/* Back bets */}
                   {r.tally.pressDetail.back?.bets?.length > 0 && (
                     <div style={{marginBottom:6}}>
@@ -946,17 +946,17 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
                         <div key={i} style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:2}}>
                           <span style={{color:C.muted}}>{i===0 ? ("Original $" + r.betAmount) : (b.label || ("Press " + i)) + " (hole " + b.startHole + ")"}</span>
                           <span style={{color:b.amount>=0?C.green:C.red,fontWeight:700}}>
-                            {b.amount>=0?"+":"−"}${Math.abs(b.amount).toFixed(2)}
+                            {b.amount>=0?"+":"-"}${Math.abs(b.amount).toFixed(2)}
                           </span>
                         </div>
                       ))}
                     </div>
                   )}
-                  {/* 18-hole total — never pressed */}
+                  {/* 18-hole total - never pressed */}
                   <div style={{display:"flex",justifyContent:"space-between",fontSize:12,borderTop:`1px solid ${C.border}`,paddingTop:6,marginTop:4}}>
                     <span style={{color:C.muted}}>18-hole total (no press)</span>
                     <span style={{color:r.tally.pressDetail.total>=0?C.green:C.red,fontWeight:700}}>
-                      {r.tally.pressDetail.total>=0?"+":"−"}${Math.abs(r.tally.pressDetail.total||0).toFixed(2)}
+                      {r.tally.pressDetail.total>=0?"+":"-"}${Math.abs(r.tally.pressDetail.total||0).toFixed(2)}
                     </span>
                   </div>
                 </div>
@@ -981,16 +981,16 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
                   const my = getScore("me", h.hole);
                   return (
                     <tr key={h.hole} style={{borderTop:`1px solid ${C.dim}`}}>
-                      <td style={{padding:"4px 6px",color:C.muted,fontSize:11}}>{h.hole}{h.side==="back"&&h.hole===10?" ←":""}</td>
+                      <td style={{padding:"4px 6px",color:C.muted,fontSize:11}}>{h.hole}{h.side==="back"&&h.hole===10?" <-":""}</td>
                       <td style={{padding:"4px 4px",textAlign:"center",color:C.muted}}>{h.par}</td>
                       <td style={{padding:"4px 4px",textAlign:"center",fontWeight:700,color:my!==null?scoreColor(my,h.par):C.dim}}>
-                        {my !== null ? my : "—"}
+                        {my !== null ? my : "-"}
                       </td>
                       {opponents.map(opp=>{
                         const s = getScore(opp.playerId, h.hole);
                         const sh = getStrokeHolesForOpp(opp).includes(h.hole);
                         return <td key={opp.playerId} style={{padding:"4px 4px",textAlign:"center",color:C.text}}>
-                          {s !== null ? s : "—"}{sh?"⭐":""}
+                          {s !== null ? s : "-"}{sh?"⭐":""}
                         </td>;
                       })}
                     </tr>
@@ -1001,11 +1001,11 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
                   <td style={{padding:"6px",color:C.green,fontWeight:800,fontSize:12}}>TOT</td>
                   <td style={{padding:"6px",textAlign:"center",color:C.muted,fontWeight:700}}>{course.par}</td>
                   <td style={{padding:"6px",textAlign:"center",color:C.green,fontWeight:800}}>
-                    {Object.values(scores["me"]||{}).reduce((s,v)=>s+safeInt(v,0),0)||"—"}
+                    {Object.values(scores["me"]||{}).reduce((s,v)=>s+safeInt(v,0),0)||"-"}
                   </td>
                   {opponents.map(opp=>(
                     <td key={opp.playerId} style={{padding:"6px",textAlign:"center",color:C.gold,fontWeight:800}}>
-                      {Object.values(scores[opp.playerId]||{}).reduce((s,v)=>s+safeInt(v,0),0)||"—"}
+                      {Object.values(scores[opp.playerId]||{}).reduce((s,v)=>s+safeInt(v,0),0)||"-"}
                     </td>
                   ))}
                 </tr>
