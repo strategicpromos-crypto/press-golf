@@ -183,6 +183,29 @@ function getTally(scores, course, opp, courseId) {
 
   // ── Nassau: show front/back standing ──
   if (opp.betType === "nassau") {
+    const manualPresses = opp.manualPresses || [];
+
+    // If manual presses exist, use the press calculator with pressDown=99 (never auto triggers)
+    if (manualPresses.length > 0) {
+      const r = calcAutoPressNassau(
+        { me: myScores, opp: oppScores },
+        course.holes,
+        myStrokeHoles,
+        oppStrokeHoles,
+        opp.betAmount,
+        99,
+        manualPresses
+      );
+      function pressLabel(side) {
+        if (!side?.bets?.length) return "—";
+        return side.bets.map((b,i) => {
+          const sym = b.diff < 0 ? `${Math.abs(b.diff)}↓` : b.diff > 0 ? `${b.diff}↑` : "E";
+          return i === 0 ? sym : `P${sym}`;
+        }).join(" / ");
+      }
+      return { label: `F: ${pressLabel(r.front)} · B: ${pressLabel(r.back)}`, total: r.net, pressDetail: r };
+    }
+
     function sideDiff(holes) {
       let myT = 0, oppT = 0, played = 0;
       for (const h of holes) {
@@ -204,7 +227,6 @@ function getTally(scores, course, opp, courseId) {
       return diff < 0 ? `${Math.abs(diff)} Up` : `${diff} Down`;
     }
 
-    // Money calculation for final summary
     function sideAmt(diff, played) {
       if (played === 0) return 0;
       if (diff < 0) return opp.betAmount;
@@ -213,7 +235,6 @@ function getTally(scores, course, opp, courseId) {
     }
     const frontAmt = sideAmt(front.diff, front.played);
     const backAmt  = sideAmt(back.diff,  back.played);
-    // Overall only counts if all 18 played
     const allPlayed = course.holes.filter(h => {
       const my = safeInt(myScores[h.hole], -1);
       const op = safeInt(oppScores[h.hole], -1);
@@ -254,7 +275,8 @@ function getTally(scores, course, opp, courseId) {
       myStrokeHoles,
       oppStrokeHoles,
       opp.betAmount,
-      opp.pressDown || 2
+      opp.pressDown || 2,
+      opp.manualPresses || []
     );
 
     // Build label showing front/back bets
@@ -294,8 +316,9 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
   const [addStrokes,     setAddStrokes]     = useState("0");
   const [addStrokesDir,  setAddStrokesDir]  = useState("even");
   const [addBetType,     setAddBetType]     = useState("nassau");
-  const [addPressDown,   setAddPressDown]   = useState(2); // 1, 2, or 3 holes down triggers press
+  const [addPressDown,   setAddPressDown]   = useState(2);
   const [addBetAmt,      setAddBetAmt]      = useState("5");
+  const [addSameGroup,   setAddSameGroup]   = useState(true); // same group = can enter scores + manual press
 
   const course = COURSES[courseId];
   const holeData = course?.holes[currentHole - 1];
@@ -413,13 +436,27 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
       betType:     addBetType,
       betAmount:   safeInt(addBetAmt, 5),
       pressDown:   addBetType === "nassau-press" ? addPressDown : 2,
+      sameGroup:   addSameGroup,
+      manualPresses: [], // holes where manual press was called {hole, betIndex}
       linkedUserId: player.linked_user_id || null,
     }]);
     setAddOppId(""); setAddStrokes("0"); setAddStrokesDir("even"); setAddBetAmt("5");
     setSheet(null);
   }
 
-  // ── Post results to ledger ────────────────────────────────────────────────
+  // ── Manual Press ──────────────────────────────────────────────────────────
+  function callManualPress(oppId) {
+    setOpponents(prev => prev.map(opp => {
+      if (opp.playerId !== oppId) return opp;
+      // Only add press if not already pressed this hole
+      const alreadyPressedThisHole = (opp.manualPresses||[]).some(p => p.hole === currentHole);
+      if (alreadyPressedThisHole) return opp;
+      return {
+        ...opp,
+        manualPresses: [...(opp.manualPresses||[]), { hole: currentHole }]
+      };
+    }));
+  }
   async function postToLedger() {
     setPosting(true);
     const today = new Date().toISOString().slice(0, 10);
@@ -631,6 +668,35 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
             <input type="number" min="1" value={addBetAmt} onChange={e=>setAddBetAmt(e.target.value)} placeholder="e.g. 5" style={{width:"100%",padding:"12px",background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,color:C.text,fontSize:20,outline:"none",boxSizing:"border-box",textAlign:"center",fontWeight:700}} inputMode="decimal"/>
           </div>
 
+          {/* Same Group Toggle */}
+          <div style={{background:C.dim,borderRadius:12,padding:"14px 16px"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <div>
+                <div style={{fontWeight:700,fontSize:14,color:C.text,marginBottom:2}}>Same Group</div>
+                <div style={{fontSize:11,color:C.muted}}>
+                  {addSameGroup
+                    ? "Can enter scores & call manual press"
+                    : "Different group — scores optional, no manual press"}
+                </div>
+              </div>
+              <button
+                onClick={()=>setAddSameGroup(g=>!g)}
+                style={{
+                  width:52,height:28,borderRadius:14,border:"none",cursor:"pointer",
+                  background:addSameGroup?C.green:"#333",
+                  position:"relative",transition:"background 0.2s",flexShrink:0,
+                }}
+              >
+                <div style={{
+                  position:"absolute",top:4,
+                  left:addSameGroup?26:4,
+                  width:20,height:20,borderRadius:"50%",
+                  background:"#fff",transition:"left 0.2s",
+                }}/>
+              </button>
+            </div>
+          </div>
+
           <BigBtn onClick={addOpponent} disabled={!addOppId}>Add to Round</BigBtn>
           <GhostBtn onClick={()=>setSheet(null)}>Cancel</GhostBtn>
         </div>
@@ -712,29 +778,46 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
                 {/* Header row */}
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
                   <div>
-                    <div style={{fontWeight:700,fontSize:16}}>{opp.name}</div>
+                    <div style={{display:"flex",alignItems:"center",gap:8}}>
+                      <div style={{fontWeight:700,fontSize:16}}>{opp.name}</div>
+                      {opp.sameGroup && <div style={{fontSize:10,color:C.green,background:"rgba(123,180,80,0.12)",padding:"2px 7px",borderRadius:8}}>Same Group</div>}
+                    </div>
                     {getsStroke && <div style={{fontSize:11,color:C.gold,marginTop:2}}>⭐ {opp.name} gets a stroke this hole</div>}
                     {iGetStroke && <div style={{fontSize:11,color:C.green,marginTop:2}}>⭐ You get a stroke this hole</div>}
-                    {!getsStroke && !iGetStroke && <div style={{fontSize:10,color:C.dim,marginTop:2}}>optional — enter if in same group</div>}
+                    {!getsStroke && !iGetStroke && !opp.sameGroup && <div style={{fontSize:10,color:C.dim,marginTop:2}}>different group — scores optional</div>}
                   </div>
-                  <div style={{textAlign:"right"}}>
-                    <div style={{fontSize:14,fontWeight:700,color:
-                      tally.label==="Even" ? C.muted :
-                      tally.label?.includes("Up") ? C.green : C.red
-                    }}>
-                      {tally.label || "—"}
-                    </div>
-                    {/* Show press bets if nassau-press */}
-                    {opp.betType === "nassau-press" && tally.pressDetail && (
-                      <div style={{fontSize:10,color:C.gold,marginTop:2}}>
-                        {tally.pressDetail.front?.bets?.length > 1 && `F:${tally.pressDetail.front.bets.length} bets `}
-                        {tally.pressDetail.back?.bets?.length > 1 && `B:${tally.pressDetail.back.bets.length} bets`}
+                  <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:6}}>
+                    <div style={{textAlign:"right"}}>
+                      <div style={{fontSize:14,fontWeight:700,color:
+                        tally.label==="Even" ? C.muted :
+                        tally.label?.includes("Up") ? C.green : C.red
+                      }}>
+                        {tally.label || "—"}
                       </div>
+                      {/* Show press count if nassau-press */}
+                      {opp.betType === "nassau-press" && tally.pressDetail && (
+                        <div style={{fontSize:10,color:C.gold,marginTop:2}}>
+                          {(tally.pressDetail.front?.bets?.length||0) + (tally.pressDetail.back?.bets?.length||0) - 2 > 0
+                            ? `${(tally.pressDetail.front?.bets?.length||0) + (tally.pressDetail.back?.bets?.length||0) - 2} presses`
+                            : null}
+                        </div>
+                      )}
+                      <div style={{fontSize:10,color:C.muted}}>standing</div>
+                    </div>
+                    {/* Manual Press button — only for same group Nassau bets */}
+                    {opp.sameGroup && (opp.betType === "nassau" || opp.betType === "nassau-press") && (
+                      <button
+                        onClick={() => callManualPress(opp.playerId)}
+                        style={{
+                          background:(opp.manualPresses||[]).some(p=>p.hole===currentHole)?"#555":C.red,
+                          border:"none",color:"#fff",padding:"6px 10px",borderRadius:8,
+                          fontSize:11,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"
+                        }}
+                      >
+                        {(opp.manualPresses||[]).some(p=>p.hole===currentHole) ? "✓ Pressed" : "🤜 Press"}
+                      </button>
                     )}
-                    <div style={{fontSize:10,color:C.muted}}>standing</div>
                   </div>
-                </div>
-
                 {/* Score row */}
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
                   <ScoreButton label="−" size={52} onClick={()=>{
@@ -838,7 +921,7 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
                       <div style={{fontSize:10,color:C.green,letterSpacing:1,textTransform:"uppercase",marginBottom:4}}>Front 9</div>
                       {r.tally.pressDetail.front.bets.map((b, i) => (
                         <div key={i} style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:2}}>
-                          <span style={{color:C.muted}}>{i===0?`Original $${r.betAmount}`:`Press ${i} (from hole ${b.startHole})`}</span>
+                          <span style={{color:C.muted}}>{i===0?`Original $${r.betAmount}`:`${b.label||('Press '+i)} (hole ${b.startHole})`}</span>
                           <span style={{color:b.amount>=0?C.green:C.red,fontWeight:700}}>
                             {b.amount>=0?"+":"−"}${Math.abs(b.amount).toFixed(2)}
                           </span>
@@ -852,7 +935,7 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
                       <div style={{fontSize:10,color:C.green,letterSpacing:1,textTransform:"uppercase",marginBottom:4}}>Back 9</div>
                       {r.tally.pressDetail.back.bets.map((b, i) => (
                         <div key={i} style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:2}}>
-                          <span style={{color:C.muted}}>{i===0?`Original $${r.betAmount}`:`Press ${i} (from hole ${b.startHole})`}</span>
+                          <span style={{color:C.muted}}>{i===0?`Original $${r.betAmount}`:`${b.label||('Press '+i)} (hole ${b.startHole})`}</span>
                           <span style={{color:b.amount>=0?C.green:C.red,fontWeight:700}}>
                             {b.amount>=0?"+":"−"}${Math.abs(b.amount).toFixed(2)}
                           </span>
