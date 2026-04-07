@@ -1018,6 +1018,50 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
         : "You got "  + (Math.abs(r.strokes)/2) + "/side";
     }
 
+    // Reusable row components — defined outside .map() to avoid React hook violations
+    function BetRow({ label, b, holesStr, oppFirst }) {
+      const won  = b.amount > 0;
+      const lost = b.amount < 0;
+      const standingColor = b.diff > 0 ? C.green : b.diff < 0 ? C.red : C.muted;
+      const standingTxt   = b.diff === 0 ? "All Square"
+        : b.diff > 0 ? "You " + b.diff + " Up"
+        : (oppFirst||"Opp") + " " + Math.abs(b.diff) + " Up";
+      return (
+        <div style={{borderLeft:"3px solid "+(won?C.green:lost?C.red:C.border),paddingLeft:10,marginBottom:6}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+            <div>
+              <div style={{fontSize:11,color:C.muted,marginBottom:1}}>{label}{holesStr?" · holes "+holesStr:""}</div>
+              <div style={{fontSize:14,fontWeight:700,color:standingColor}}>{standingTxt}</div>
+            </div>
+            <div style={{fontSize:15,fontWeight:800,color:won?C.green:lost?C.red:C.muted,background:won?"rgba(123,180,80,0.12)":lost?"rgba(224,80,80,0.12)":"transparent",padding:"3px 10px",borderRadius:8,marginLeft:8,flexShrink:0}}>
+              {b.amount===0?"Tied":(won?"+":"-")+"$"+Math.abs(b.amount).toFixed(2)}
+            </div>
+          </div>
+        </div>
+      );
+    }
+    function SideBlock({ side, label, sideTotal, sideEnd, oppFirst }) {
+      if (!side?.bets?.length) return null;
+      const totalBets = side.bets.length;
+      return (
+        <div style={{marginBottom:12}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+            <div style={{fontSize:10,color:C.green,letterSpacing:1.5,textTransform:"uppercase",fontWeight:700}}>
+              {label}{totalBets>1?" · "+(totalBets-1)+" press"+(totalBets>2?"es":""):""}
+            </div>
+            <div style={{fontSize:13,fontWeight:800,color:sideTotal>0?C.green:sideTotal<0?C.red:C.muted}}>
+              {sideTotal===0?"Even":(sideTotal>0?"+":"-")+"$"+Math.abs(sideTotal).toFixed(2)}
+            </div>
+          </div>
+          {side.bets.map((b,i)=>{
+            const nextStart = side.bets[i+1]?.startHole;
+            const holeEnd   = nextStart ? nextStart-1 : sideEnd;
+            return <BetRow key={i} label={i===0?"Original bet":"Press "+i} b={b} holesStr={b.startHole+"–"+holeEnd} oppFirst={oppFirst}/>;
+          })}
+        </div>
+      );
+    }
+
     return (
       <div style={{fontFamily:"'Georgia',serif",minHeight:"100vh",background:C.bg,color:C.text,paddingBottom:60}}>
         <div style={{background:"linear-gradient(180deg,"+C.card+" 0%,transparent 100%)",padding:"44px 20px 20px"}}>
@@ -1044,60 +1088,6 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
             const pd = r.tally.pressDetail;
             const oppFirst = r.name.split(" ")[0];
 
-            function BetRow({ label, b, betAmount, holesStr }) {
-              const won  = b.amount > 0;
-              const lost = b.amount < 0;
-              // diff: positive = you ahead, negative = you behind
-              const standingColor = b.diff > 0 ? C.green : b.diff < 0 ? C.red : C.muted;
-              const standingTxt   = b.diff === 0 ? "All Square"
-                : b.diff > 0 ? "You " + b.diff + " Up"
-                : oppFirst + " " + Math.abs(b.diff) + " Up";
-              return (
-                <div style={{borderLeft:"3px solid "+(won?C.green:lost?C.red:C.border),paddingLeft:10,marginBottom:6}}>
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
-                    <div>
-                      <div style={{fontSize:11,color:C.muted,marginBottom:1}}>{label}{holesStr?" · holes "+holesStr:""}</div>
-                      <div style={{fontSize:14,fontWeight:700,color:standingColor}}>{standingTxt}</div>
-                    </div>
-                    <div style={{
-                      fontSize:15,fontWeight:800,
-                      color: won ? C.green : lost ? C.red : C.muted,
-                      background: won?"rgba(123,180,80,0.12)":lost?"rgba(224,80,80,0.12)":"transparent",
-                      padding:"3px 10px",borderRadius:8,marginLeft:8,flexShrink:0
-                    }}>
-                      {b.amount===0 ? "Tied" : (won?"+":"-")+"$"+Math.abs(b.amount).toFixed(2)}
-                    </div>
-                  </div>
-                </div>
-              );
-            }
-
-            function SideBlock({ side, label, sideTotal, sideStart, sideEnd }) {
-              if (!side?.bets?.length) return null;
-              const totalBets = side.bets.length;
-              return (
-                <div style={{marginBottom:12}}>
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
-                    <div style={{fontSize:10,color:C.green,letterSpacing:1.5,textTransform:"uppercase",fontWeight:700}}>
-                      {label} {totalBets > 1 ? "· " + (totalBets-1) + " press" + (totalBets>2?"es":"") : ""}
-                    </div>
-                    <div style={{fontSize:13,fontWeight:800,color:sideTotal>0?C.green:sideTotal<0?C.red:C.muted}}>
-                      {sideTotal===0?"Even":(sideTotal>0?"+":"-")+"$"+Math.abs(sideTotal).toFixed(2)}
-                    </div>
-                  </div>
-                  {side.bets.map((b, i) => {
-                    const nextStart = side.bets[i+1]?.startHole;
-                    const holeEnd   = nextStart ? nextStart - 1 : sideEnd;
-                    const holesStr  = b.startHole + "–" + holeEnd;
-                    const rowLabel  = i === 0 ? "Original bet" : "Press " + i;
-                    return (
-                      <BetRow key={i} label={rowLabel} b={b} betAmount={r.betAmount} holesStr={holesStr} />
-                    );
-                  })}
-                </div>
-              );
-            }
-
             return (
               <div key={r.playerId} style={{background:C.card,border:"1px solid "+C.border,borderRadius:14,padding:"16px",marginBottom:12}}>
                 {/* Header */}
@@ -1114,8 +1104,8 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
                 {/* Nassau / press breakdown */}
                 {pd && (
                   <div style={{background:"rgba(0,0,0,0.2)",borderRadius:10,padding:"10px"}}>
-                    <SideBlock side={pd.front} label="FRONT 9" sideTotal={pd.front?.total||0} sideStart={1}  sideEnd={9} />
-                    <SideBlock side={pd.back}  label="BACK 9"  sideTotal={pd.back?.total||0}  sideStart={10} sideEnd={18} />
+                    <SideBlock side={pd.front} label="FRONT 9" sideTotal={pd.front?.total||0} sideEnd={9}  oppFirst={oppFirst} />
+                    <SideBlock side={pd.back}  label="BACK 9"  sideTotal={pd.back?.total||0}  sideEnd={18} oppFirst={oppFirst} />
 
                     {/* 18-hole total */}
                     <div style={{borderTop:"1px solid "+C.border,paddingTop:8,marginTop:4}}>
