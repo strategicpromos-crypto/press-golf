@@ -198,12 +198,12 @@ function getTally(scores, course, opp, courseId) {
       );
       function pressLabel(side) {
         if (!side?.bets?.length) return "-";
-        return side.bets.map((b,i) => {
-          const sym = b.diff < 0 ? (Math.abs(b.diff) + "v") : b.diff > 0 ? (b.diff + "^") : "E";
-          return i === 0 ? sym : "P" + sym;
-        }).join(" / ");
+        const orig = side.bets[0];
+        const origStr = orig.diff === 0 ? "Even" : orig.diff > 0 ? "+" + orig.diff + " ahead" : "-" + Math.abs(orig.diff) + " back";
+        const pressCount = side.bets.length - 1;
+        return origStr + (pressCount > 0 ? " (" + pressCount + "P)" : "");
       }
-      return { label: "F: " + pressLabel(r.front) + " | B: " + pressLabel(r.back), total: r.net, pressDetail: r };
+      return { label: "Front: " + pressLabel(r.front) + "  |  Back: " + pressLabel(r.back), total: r.net, pressDetail: r };
     }
 
     function sideDiff(holes) {
@@ -224,7 +224,7 @@ function getTally(scores, course, opp, courseId) {
     function standingLabel(diff, played) {
       if (played === 0) return "-";
       if (diff === 0) return "Even";
-      return diff < 0 ? Math.abs(diff) + " Up" : diff + " Down";
+      return diff < 0 ? "+" + Math.abs(diff) + " ahead" : "-" + diff + " back";
     }
 
     function sideAmt(diff, played) {
@@ -243,7 +243,12 @@ function getTally(scores, course, opp, courseId) {
     const overall   = sideDiff(course.holes);
     const overallAmt = allPlayed === 18 ? sideAmt(overall.diff, overall.played) : 0;
 
-    const label = "F: " + standingLabel(front.diff, front.played) + " | B: " + standingLabel(back.diff, back.played);
+    function sideLabel(diff, played) {
+      if (played === 0) return "-";
+      return standingLabel(diff, played) + " thru " + played;
+    }
+
+    const label = "F: " + sideLabel(front.diff, front.played) + "  |  B: " + sideLabel(back.diff, back.played);
     return { label, total: frontAmt + backAmt + overallAmt };
   }
 
@@ -282,13 +287,13 @@ function getTally(scores, course, opp, courseId) {
     // Build label showing front/back bets
     function pressLabel(side) {
       if (!side || !side.bets || side.bets.length === 0) return "-";
-      return side.bets.map((b, i) => {
-        const sym = b.diff < 0 ? (Math.abs(b.diff) + "v") : b.diff > 0 ? (b.diff + "^") : "E";
-        return i === 0 ? sym : "P" + sym;
-      }).join(" / ");
+      const orig = side.bets[0];
+      const origStr = orig.diff === 0 ? "Even" : orig.diff > 0 ? "+" + orig.diff + " ahead" : "-" + Math.abs(orig.diff) + " back";
+      const pressCount = side.bets.length - 1;
+      return origStr + (pressCount > 0 ? " (" + pressCount + " press)" : "");
     }
 
-    const label = "F: " + pressLabel(r.front) + " | B: " + pressLabel(r.back);
+    const label = "Front: " + pressLabel(r.front) + "  |  Back: " + pressLabel(r.back);
     return {
       label,
       total: r.net,
@@ -811,20 +816,9 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
                     </div>
                     {/* Manual Press button - only for same group Nassau bets */}
                     {opp.sameGroup && (opp.betType === "nassau" || opp.betType === "nassau-press") && (
-                      (opp.manualPresses||[]).some(p=>p.hole===currentHole)
-                        ? (
-                          <button disabled style={{background:"#555",border:"none",color:"#aaa",padding:"6px 10px",borderRadius:8,fontSize:11,fontWeight:700,cursor:"not-allowed",whiteSpace:"nowrap"}}>
-                            Pressed
-                          </button>
-                        )
-                        : tally.total < 0 && (
-                          <button
-                            onClick={() => callManualPress(opp.playerId)}
-                            style={{background:C.red,border:"none",color:"#fff",padding:"6px 10px",borderRadius:8,fontSize:11,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}
-                          >
-                            Press!
-                          </button>
-                        )
+                      (opp.manualPresses||[]).some(p=>p.hole===currentHole) && (
+                        <div style={{fontSize:10,color:"#aaa",marginTop:2,textAlign:"right"}}>✓ Pressed</div>
+                      )
                     )}
                   </div>
                 </div>
@@ -852,6 +846,23 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
                     setScore(opp.playerId, currentHole, cur + 1);
                   }}/>
                 </div>
+
+                {/* YOUR press call - clearly labeled, separated from Ken's score */}
+                {opp.sameGroup && (opp.betType === "nassau" || opp.betType === "nassau-press") && tally.total < 0 && (
+                  <div style={{marginTop:10,borderTop:"1px solid "+C.border,paddingTop:10}}>
+                    {(opp.manualPresses||[]).some(p=>p.hole===currentHole)
+                      ? <div style={{textAlign:"center",fontSize:12,color:C.muted,fontWeight:600}}>✓ Press called this hole</div>
+                      : (
+                        <button
+                          onClick={() => callManualPress(opp.playerId)}
+                          style={{width:"100%",padding:"10px",background:"rgba(224,80,80,0.15)",border:"1px solid "+C.red,color:C.red,borderRadius:10,fontSize:13,fontWeight:700,cursor:"pointer"}}
+                        >
+                          📢 You Call Press on {opp.name}
+                        </button>
+                      )
+                    }
+                  </div>
+                )}
               </div>
             );
           })}
