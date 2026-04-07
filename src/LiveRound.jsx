@@ -584,7 +584,12 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
                 <div>
                   <div style={{fontWeight:700,fontSize:17,marginBottom:3}}>{opp.name}</div>
                   <div style={{fontSize:12,color:C.muted,marginBottom:2}}>
-                    {strokeLabel} · {opp.betType === "match" ? `$${opp.betAmount}/hole` : opp.betType === "nassau" ? `Nassau $${opp.betAmount}` : opp.betType === "nassau-press" ? `Nassau - Auto Press ${opp.pressDown||2}D $${opp.betAmount}` : `Skins $${opp.betAmount}`}
+                    {strokeLabel} · {
+                      opp.betType === "match" ? "$" + opp.betAmount + "/hole"
+                      : opp.betType === "nassau" ? "Nassau $" + opp.betAmount
+                      : opp.betType === "nassau-press" ? "Nassau - Auto Press " + (opp.pressDown||2) + "D $" + opp.betAmount
+                      : "Skins $" + opp.betAmount
+                    }
                   </div>
                   {opp.strokes !== 0 && sh.length > 0 && (
                     <div style={{fontSize:11,color:C.gold}}>Stroke holes: {sh.join(", ")}</div>
@@ -907,9 +912,12 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
                 </div>
               </div>
               <div style={{fontSize:12,color:C.muted,marginBottom:8}}>
-                {r.betType==="match"?`Match Play $${r.betAmount}/hole`:r.betType==="nassau"?`Nassau $${r.betAmount}`:r.betType==="nassau-press"?`Nassau - Auto Press ${r.pressDown||2}D $${r.betAmount}`:`Skins $${r.betAmount}`}
+                {r.betType==="match" ? "Match Play $" + r.betAmount + "/hole"
+                  : r.betType==="nassau" ? "Nassau $" + r.betAmount
+                  : r.betType==="nassau-press" ? "Nassau - Auto Press " + (r.pressDown||2) + "D $" + r.betAmount
+                  : "Skins $" + r.betAmount}
                 {" · "}
-                {r.strokes===0?"Even":r.strokes>0?`You gave ${r.strokes/2}/side`:(`You got ${Math.abs(r.strokes)/2}/side`)}
+                {r.strokes===0?"Even":r.strokes>0?"You gave " + (r.strokes/2) + "/side":"You got " + (Math.abs(r.strokes)/2) + "/side"}
               </div>
 
               {/* Press bet breakdown for nassau-press */}
@@ -921,7 +929,7 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
                       <div style={{fontSize:10,color:C.green,letterSpacing:1,textTransform:"uppercase",marginBottom:4}}>Front 9</div>
                       {r.tally.pressDetail.front.bets.map((b, i) => (
                         <div key={i} style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:2}}>
-                          <span style={{color:C.muted}}>{i===0?`Original $${r.betAmount}`:`${b.label||('Press '+i)} (hole ${b.startHole})`}</span>
+                          <span style={{color:C.muted}}>{i===0 ? `Original $${r.betAmount}` : (b.label || ("Press " + i)) + " (hole " + b.startHole + ")"}</span>
                           <span style={{color:b.amount>=0?C.green:C.red,fontWeight:700}}>
                             {b.amount>=0?"+":"−"}${Math.abs(b.amount).toFixed(2)}
                           </span>
@@ -929,13 +937,14 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
                       ))}
                     </div>
                   )}
+                  {/* 18-hole total — never pressed */}
                   {/* Back bets */}
                   {r.tally.pressDetail.back?.bets?.length > 0 && (
                     <div style={{marginBottom:6}}>
                       <div style={{fontSize:10,color:C.green,letterSpacing:1,textTransform:"uppercase",marginBottom:4}}>Back 9</div>
                       {r.tally.pressDetail.back.bets.map((b, i) => (
                         <div key={i} style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:2}}>
-                          <span style={{color:C.muted}}>{i===0?`Original $${r.betAmount}`:`${b.label||('Press '+i)} (hole ${b.startHole})`}</span>
+                          <span style={{color:C.muted}}>{i===0 ? `Original $${r.betAmount}` : (b.label || ("Press " + i)) + " (hole " + b.startHole + ")"}</span>
                           <span style={{color:b.amount>=0?C.green:C.red,fontWeight:700}}>
                             {b.amount>=0?"+":"−"}${Math.abs(b.amount).toFixed(2)}
                           </span>
