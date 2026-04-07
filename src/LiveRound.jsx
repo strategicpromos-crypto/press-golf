@@ -20,7 +20,7 @@ function ScoreButton({ label, onClick, size=52 }) {
       onClick={onClick}
       style={{
         width:size, height:size, borderRadius:"50%",
-        background:C.dim, border:`1px solid ${C.border}`,
+        background:C.dim, border:"1px solid "+C.border,
         color:C.text, fontSize:size > 48 ? 32 : 26,
         fontWeight:700, cursor:"pointer", flexShrink:0,
         WebkitTapHighlightColor:"transparent",
@@ -51,7 +51,7 @@ function GhostBtn({ children, onClick, color=C.green }) {
   return (
     <button onClick={onClick} style={{
       width:"100%", padding:"14px", background:"transparent",
-      color, border:`1.5px solid ${color}`, borderRadius:12,
+      color, border:"1.5px solid "+color, borderRadius:12,
       fontSize:14, fontWeight:600, cursor:"pointer"
     }}>
       {children}
@@ -64,7 +64,7 @@ function Sheet({ open, onClose, title, children }) {
   return (
     <div style={{position:"fixed",inset:0,zIndex:400}}>
       <div onClick={onClose} style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.75)"}}/>
-      <div style={{position:"absolute",bottom:0,left:0,right:0,background:C.surface,borderRadius:"22px 22px 0 0",border:`1px solid ${C.border}`,borderBottom:"none",padding:"0 0 44px",maxHeight:"92vh",overflowY:"auto"}}>
+      <div style={{position:"absolute",bottom:0,left:0,right:0,background:C.surface,borderRadius:"22px 22px 0 0",border:"1px solid "+C.border,borderBottom:"none",padding:"0 0 44px",maxHeight:"92vh",overflowY:"auto"}}>
         <div style={{display:"flex",justifyContent:"center",padding:"14px 0 6px"}}><div style={{width:40,height:4,background:C.dim,borderRadius:2}}/></div>
         {title&&<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 20px 16px"}}><div style={{fontWeight:700,fontSize:20,color:C.text}}>{title}</div><button onClick={onClose} style={{background:C.dim,border:"none",color:C.muted,width:32,height:32,borderRadius:"50%",fontSize:16,cursor:"pointer"}}>✕</button></div>}
         <div style={{padding:"0 20px"}}>{children}</div>
@@ -79,7 +79,7 @@ function Lbl({ children }) {
 
 const selStyle = {
   width:"100%", padding:"14px", background:C.surface,
-  border:`1px solid ${C.border}`, borderRadius:10,
+  border:"1px solid "+C.border, borderRadius:10,
   color:C.text, fontSize:15, outline:"none",
   WebkitAppearance:"none", cursor:"pointer",
 };
@@ -91,7 +91,7 @@ function scoreName(score, par) {
   if (score === par)     return "Par v";
   if (score === par + 1) return "Bogey";
   if (score === par + 2) return "Double 😬";
-  return score > par ? `+${score - par}` : `${score - par}`;
+  return score > par ? "+" + (score - par) : "" + (score - par);
 }
 
 function scoreColor(score, par) {
@@ -177,7 +177,7 @@ function getTally(scores, course, opp, courseId) {
       else if (myNet > oppNet) upDown--;
     }
     const label = upDown === 0 ? "Even"
-      : upDown > 0 ? `${upDown} Up` : `${Math.abs(upDown)} Down`;
+      : upDown > 0 ? upDown + " Up" : Math.abs(upDown) + " Down";
     return { label, upDown, played, total: upDown * opp.betAmount };
   }
 
@@ -200,7 +200,7 @@ function getTally(scores, course, opp, courseId) {
         if (!side?.bets?.length) return "-";
         return side.bets.map((b,i) => {
           const sym = b.diff < 0 ? (Math.abs(b.diff) + "v") : b.diff > 0 ? (b.diff + "^") : "E";
-          return i === 0 ? sym : `P${sym}`;
+          return i === 0 ? sym : "P" + sym;
         }).join(" / ");
       }
       return { label: "F: " + pressLabel(r.front) + " | B: " + pressLabel(r.back), total: r.net, pressDetail: r };
@@ -224,7 +224,7 @@ function getTally(scores, course, opp, courseId) {
     function standingLabel(diff, played) {
       if (played === 0) return "-";
       if (diff === 0) return "Even";
-      return diff < 0 ? `${Math.abs(diff)} Up` : `${diff} Down`;
+      return diff < 0 ? Math.abs(diff) + " Up" : diff + " Down";
     }
 
     function sideAmt(diff, played) {
@@ -262,8 +262,8 @@ function getTally(scores, course, opp, courseId) {
       else                     { carry += opp.betAmount; }
     }
     const label = mySkins === oppSkins ? "Even"
-      : mySkins > oppSkins ? `You ${mySkins}-${oppSkins}`
-      : `${opp.name.split(" ")[0]} ${oppSkins}-${mySkins}`;
+      : mySkins > oppSkins ? "You " + mySkins + "-" + oppSkins
+      : opp.name.split(" ")[0] + " " + oppSkins + "-" + mySkins;
     return { label, total: net };
   }
 
@@ -284,7 +284,7 @@ function getTally(scores, course, opp, courseId) {
       if (!side || !side.bets || side.bets.length === 0) return "-";
       return side.bets.map((b, i) => {
         const sym = b.diff < 0 ? (Math.abs(b.diff) + "v") : b.diff > 0 ? (b.diff + "^") : "E";
-        return i === 0 ? sym : `P${sym}`;
+        return i === 0 ? sym : "P" + sym;
       }).join(" / ");
     }
 
@@ -542,8 +542,8 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
   // ==========================================================================
   if (step === "setup") return (
     <div style={{fontFamily:"'Georgia',serif",minHeight:"100vh",background:C.bg,color:C.text,paddingBottom:60}}>
-      <div style={{background:`linear-gradient(180deg,${C.card} 0%,transparent 100%)`,padding:"44px 20px 20px"}}>
-        <button onClick={onBack} style={{background:"rgba(123,180,80,0.15)",border:`1px solid ${C.green}`,color:C.green,fontSize:14,cursor:"pointer",padding:"8px 16px",borderRadius:20,display:"flex",alignItems:"center",gap:6,fontWeight:700,marginBottom:20}}>‹ Back</button>
+      <div style={{background:"linear-gradient(180deg,"+C.card+" 0%,transparent 100%)",padding:"44px 20px 20px"}}>
+        <button onClick={onBack} style={{background:"rgba(123,180,80,0.15)",border:"1px solid "+C.green,color:C.green,fontSize:14,cursor:"pointer",padding:"8px 16px",borderRadius:20,display:"flex",alignItems:"center",gap:6,fontWeight:700,marginBottom:20}}>‹ Back</button>
         <div style={{textAlign:"center"}}>
           <div style={{fontSize:36}}>⛳</div>
           <div style={{fontSize:24,fontWeight:800,marginBottom:4}}>Start Live Round</div>
@@ -567,7 +567,7 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
         </div>
 
         {opponents.length === 0 && (
-          <div style={{textAlign:"center",padding:"20px",background:C.card,border:`1px solid ${C.border}`,borderRadius:12,marginBottom:12,color:C.muted,fontSize:13}}>
+          <div style={{textAlign:"center",padding:"20px",background:C.card,border:"1px solid "+C.border,borderRadius:12,marginBottom:12,color:C.muted,fontSize:13}}>
             Add at least one opponent to start
           </div>
         )}
@@ -579,7 +579,7 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
             : opp.strokes > 0 ? "You give " + perSide + "/side (" + opp.strokes + " total)"
             : "You get " + perSide + "/side (" + Math.abs(opp.strokes) + " total)";
           return (
-            <div key={opp.playerId} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:"14px",marginBottom:10}}>
+            <div key={opp.playerId} style={{background:C.card,border:"1px solid "+C.border,borderRadius:12,padding:"14px",marginBottom:10}}>
               <div style={{display:"flex",justifyContent:"space-between"}}>
                 <div>
                   <div style={{fontWeight:700,fontSize:17,marginBottom:3}}>{opp.name}</div>
@@ -601,7 +601,7 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
           );
         })}
 
-        <button onClick={()=>setSheet("addOpp")} style={{width:"100%",padding:"14px",background:"transparent",border:`1.5px dashed ${C.border}`,borderRadius:12,color:C.green,fontSize:14,fontWeight:600,cursor:"pointer",marginBottom:20}}>
+        <button onClick={()=>setSheet("addOpp")} style={{width:"100%",padding:"14px",background:"transparent",border:"1.5px dashed "+C.border,borderRadius:12,color:C.green,fontSize:14,fontWeight:600,cursor:"pointer",marginBottom:20}}>
           + Add Opponent
         </button>
 
@@ -627,12 +627,12 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
             <Lbl>Strokes Per Side</Lbl>
             <div style={{display:"flex",gap:8,marginBottom:8}}>
               {[["even","Even"],["igive","I Give"],["iget","I Get"]].map(([d,l])=>(
-                <button key={d} onClick={()=>setAddStrokesDir(d)} style={{flex:1,padding:"10px 4px",fontSize:11,fontWeight:addStrokesDir===d?700:500,background:addStrokesDir===d?C.green:C.surface,color:addStrokesDir===d?"#0a1a0f":C.muted,border:`1px solid ${addStrokesDir===d?C.green:C.border}`,cursor:"pointer",borderRadius:8}}>{l}</button>
+                <button key={d} onClick={()=>setAddStrokesDir(d)} style={{flex:1,padding:"10px 4px",fontSize:11,fontWeight:addStrokesDir===d?700:500,background:addStrokesDir===d?C.green:C.surface,color:addStrokesDir===d?"#0a1a0f":C.muted,border:"1px solid "+(addStrokesDir===d?C.green:C.border),cursor:"pointer",borderRadius:8}}>{l}</button>
               ))}
             </div>
             {addStrokesDir !== "even" && (
               <>
-                <input type="number" min="1" max="9" value={addStrokes} onChange={e=>setAddStrokes(e.target.value)} placeholder="# per side" style={{width:"100%",padding:"12px",background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,color:C.text,fontSize:20,outline:"none",boxSizing:"border-box",textAlign:"center",fontWeight:700}} inputMode="numeric"/>
+                <input type="number" min="1" max="9" value={addStrokes} onChange={e=>setAddStrokes(e.target.value)} placeholder="# per side" style={{width:"100%",padding:"12px",background:C.surface,border:"1px solid "+C.border,borderRadius:10,color:C.text,fontSize:20,outline:"none",boxSizing:"border-box",textAlign:"center",fontWeight:700}} inputMode="numeric"/>
                 <div style={{fontSize:11,color:C.muted,marginTop:6,textAlign:"center"}}>
                   {safeInt(addStrokes,0) > 0
                     ? (addStrokesDir==="igive"?"Giving":"Getting") + " " + addStrokes + " per side = " + (safeInt(addStrokes,0)*2) + " total strokes"
@@ -646,7 +646,7 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
             <Lbl>Bet Type</Lbl>
             <div style={{display:"flex",gap:8}}>
               {[["match","Match Play"],["nassau","Nassau"],["nassau-press","Nassau - Auto Press"],["skins","Skins"]].map(([id,label])=>(
-                <button key={id} onClick={()=>setAddBetType(id)} style={{flex:1,padding:"10px 4px",fontSize:11,fontWeight:addBetType===id?700:500,background:addBetType===id?C.green:C.surface,color:addBetType===id?"#0a1a0f":C.muted,border:`1px solid ${addBetType===id?C.green:C.border}`,cursor:"pointer",borderRadius:8}}>{label}</button>
+                <button key={id} onClick={()=>setAddBetType(id)} style={{flex:1,padding:"10px 4px",fontSize:11,fontWeight:addBetType===id?700:500,background:addBetType===id?C.green:C.surface,color:addBetType===id?"#0a1a0f":C.muted,border:"1px solid "+(addBetType===id?C.green:C.border),cursor:"pointer",borderRadius:8}}>{label}</button>
               ))}
             </div>
           </div>
@@ -657,7 +657,7 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
               <Lbl>Auto Press Triggers When</Lbl>
               <div style={{display:"flex",gap:8}}>
                 {[1,2,3].map(n=>(
-                  <button key={n} onClick={()=>setAddPressDown(n)} style={{flex:1,padding:"12px 4px",fontSize:13,fontWeight:addPressDown===n?700:500,background:addPressDown===n?C.gold:C.surface,color:addPressDown===n?"#0a1a0f":C.muted,border:`1px solid ${addPressDown===n?C.gold:C.border}`,cursor:"pointer",borderRadius:8}}>
+                  <button key={n} onClick={()=>setAddPressDown(n)} style={{flex:1,padding:"12px 4px",fontSize:13,fontWeight:addPressDown===n?700:500,background:addPressDown===n?C.gold:C.surface,color:addPressDown===n?"#0a1a0f":C.muted,border:"1px solid "+(addPressDown===n?C.gold:C.border),cursor:"pointer",borderRadius:8}}>
                     {n} Down
                   </button>
                 ))}
@@ -670,7 +670,7 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
 
           <div>
             <Lbl>{addBetType==="match"?"$ Per Hole":addBetType==="nassau"?"$ Per Side/Total":addBetType==="nassau-press"?"$ Per Side/Total/Press":"$ Per Skin"}</Lbl>
-            <input type="number" min="1" value={addBetAmt} onChange={e=>setAddBetAmt(e.target.value)} placeholder="e.g. 5" style={{width:"100%",padding:"12px",background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,color:C.text,fontSize:20,outline:"none",boxSizing:"border-box",textAlign:"center",fontWeight:700}} inputMode="decimal"/>
+            <input type="number" min="1" value={addBetAmt} onChange={e=>setAddBetAmt(e.target.value)} placeholder="e.g. 5" style={{width:"100%",padding:"12px",background:C.surface,border:"1px solid "+C.border,borderRadius:10,color:C.text,fontSize:20,outline:"none",boxSizing:"border-box",textAlign:"center",fontWeight:700}} inputMode="decimal"/>
           </div>
 
           {/* Same Group Toggle */}
@@ -720,17 +720,17 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
     return (
       <div style={{fontFamily:"'Georgia',serif",minHeight:"100vh",background:C.bg,color:C.text,paddingBottom:100}}>
         {/* Header */}
-        <div style={{background:`linear-gradient(180deg,${C.card} 0%,transparent 100%)`,padding:"44px 20px 16px"}}>
+        <div style={{background:"linear-gradient(180deg,"+C.card+" 0%,transparent 100%)",padding:"44px 20px 16px"}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-            <button onClick={()=>currentHole>1?setCurrentHole(h=>h-1):setStep("setup")} style={{background:"rgba(123,180,80,0.15)",border:`1px solid ${C.green}`,color:C.green,fontSize:13,cursor:"pointer",padding:"6px 14px",borderRadius:16,fontWeight:700}}>‹</button>
+            <button onClick={()=>currentHole>1?setCurrentHole(h=>h-1):setStep("setup")} style={{background:"rgba(123,180,80,0.15)",border:"1px solid "+C.green,color:C.green,fontSize:13,cursor:"pointer",padding:"6px 14px",borderRadius:16,fontWeight:700}}>‹</button>
             <div style={{textAlign:"center"}}>
               <div style={{fontSize:11,color:C.muted,letterSpacing:2,textTransform:"uppercase"}}>Hole</div>
               <div style={{fontSize:48,fontWeight:800,color:C.text,lineHeight:1}}>{currentHole}</div>
               <div style={{fontSize:12,color:C.green,fontWeight:600}}>Par {holeData.par} - Hdcp {holeData.hdcp}</div>
             </div>
             <div style={{display:"flex",flexDirection:"column",gap:6,alignItems:"flex-end"}}>
-              <button onClick={onBack} style={{background:"rgba(123,180,80,0.15)",border:`1px solid ${C.green}`,color:C.green,fontSize:11,cursor:"pointer",padding:"5px 10px",borderRadius:12,fontWeight:700}}>🏠 Home</button>
-              <button onClick={()=>setStep("summary")} style={{background:"transparent",border:`1px solid ${C.border}`,color:C.muted,fontSize:11,cursor:"pointer",padding:"5px 10px",borderRadius:12}}>Summary</button>
+              <button onClick={onBack} style={{background:"rgba(123,180,80,0.15)",border:"1px solid "+C.green,color:C.green,fontSize:11,cursor:"pointer",padding:"5px 10px",borderRadius:12,fontWeight:700}}>🏠 Home</button>
+              <button onClick={()=>setStep("summary")} style={{background:"transparent",border:"1px solid "+C.border,color:C.muted,fontSize:11,cursor:"pointer",padding:"5px 10px",borderRadius:12}}>Summary</button>
             </div>
           </div>
           {/* Progress bar */}
@@ -744,7 +744,7 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
         <div style={{padding:"14px 18px"}}>
 
           {/* -- MY SCORE -- */}
-          <div style={{background:C.card,border:`2px solid ${C.green}`,borderRadius:14,padding:"16px",marginBottom:12}}>
+          <div style={{background:C.card,border:"2px solid "+C.green,borderRadius:14,padding:"16px",marginBottom:12}}>
             <div style={{fontSize:11,color:C.green,letterSpacing:2,textTransform:"uppercase",marginBottom:12,fontWeight:600}}>⛳ Your Score</div>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
               <ScoreButton label="-" size={60} onClick={()=>{
@@ -779,7 +779,7 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
             const tally       = getTally(scores, course, opp, courseId);
 
             return (
-              <div key={opp.playerId} style={{background:C.card,border:`1px solid ${getsStroke||iGetStroke?"rgba(232,184,75,0.5)":C.border}`,borderRadius:14,padding:"14px",marginBottom:10}}>
+              <div key={opp.playerId} style={{background:C.card,border:(getsStroke||iGetStroke?"1px solid rgba(232,184,75,0.5)":"1px solid "+C.border),borderRadius:14,padding:"14px",marginBottom:10}}>
                 {/* Header row */}
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
                   <div>
@@ -883,8 +883,8 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
 
     return (
       <div style={{fontFamily:"'Georgia',serif",minHeight:"100vh",background:C.bg,color:C.text,paddingBottom:60}}>
-        <div style={{background:`linear-gradient(180deg,${C.card} 0%,transparent 100%)`,padding:"44px 20px 20px"}}>
-          <button onClick={()=>setStep("playing")} style={{background:"rgba(123,180,80,0.15)",border:`1px solid ${C.green}`,color:C.green,fontSize:14,cursor:"pointer",padding:"8px 16px",borderRadius:20,display:"flex",alignItems:"center",gap:6,fontWeight:700,marginBottom:20}}>‹ Back to Round</button>
+        <div style={{background:"linear-gradient(180deg,"+C.card+" 0%,transparent 100%)",padding:"44px 20px 20px"}}>
+          <button onClick={()=>setStep("playing")} style={{background:"rgba(123,180,80,0.15)",border:"1px solid "+C.green,color:C.green,fontSize:14,cursor:"pointer",padding:"8px 16px",borderRadius:20,display:"flex",alignItems:"center",gap:6,fontWeight:700,marginBottom:20}}>‹ Back to Round</button>
           <div style={{textAlign:"center"}}>
             <div style={{fontSize:32,marginBottom:6}}></div>
             <div style={{fontSize:22,fontWeight:800}}>Round Summary</div>
@@ -894,7 +894,7 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
 
         <div style={{padding:"0 20px"}}>
           {/* Grand total */}
-          <div style={{background:C.card,border:`2px solid ${grandTotal>=0?C.green:C.red}`,borderRadius:14,padding:"20px",marginBottom:16,textAlign:"center"}}>
+          <div style={{background:C.card,border:"2px solid "+(grandTotal>=0?C.green:C.red),borderRadius:14,padding:"20px",marginBottom:16,textAlign:"center"}}>
             <div style={{fontSize:12,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Overall</div>
             <div style={{fontSize:52,fontWeight:800,color:grandTotal>=0?C.green:C.red,letterSpacing:-2}}>
               {grandTotal>=0?"+":"-"}${Math.abs(grandTotal).toFixed(2)}
@@ -904,7 +904,7 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
 
           {/* Per opponent */}
           {results.map(r => (
-            <div key={r.playerId} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:14,padding:"16px",marginBottom:10}}>
+            <div key={r.playerId} style={{background:C.card,border:"1px solid "+C.border,borderRadius:14,padding:"16px",marginBottom:10}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
                 <div style={{fontWeight:700,fontSize:17}}>{r.name}</div>
                 <div style={{fontSize:22,fontWeight:800,color:r.tally.total>=0?C.green:C.red}}>
@@ -953,7 +953,7 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
                     </div>
                   )}
                   {/* 18-hole total - never pressed */}
-                  <div style={{display:"flex",justifyContent:"space-between",fontSize:12,borderTop:`1px solid ${C.border}`,paddingTop:6,marginTop:4}}>
+                  <div style={{display:"flex",justifyContent:"space-between",fontSize:12,borderTop:"1px solid "+C.border,paddingTop:6,marginTop:4}}>
                     <span style={{color:C.muted}}>18-hole total (no press)</span>
                     <span style={{color:r.tally.pressDetail.total>=0?C.green:C.red,fontWeight:700}}>
                       {r.tally.pressDetail.total>=0?"+":"-"}${Math.abs(r.tally.pressDetail.total||0).toFixed(2)}
@@ -965,7 +965,7 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
           ))}
 
           {/* Scorecard */}
-          <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:14,padding:"14px",marginBottom:16,overflowX:"auto"}}>
+          <div style={{background:C.card,border:"1px solid "+C.border,borderRadius:14,padding:"14px",marginBottom:16,overflowX:"auto"}}>
             <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>Scorecard</div>
             <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
               <thead>
@@ -980,7 +980,7 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
                 {course.holes.map(h=>{
                   const my = getScore("me", h.hole);
                   return (
-                    <tr key={h.hole} style={{borderTop:`1px solid ${C.dim}`}}>
+                    <tr key={h.hole} style={{borderTop:"1px solid "+C.dim}}>
                       <td style={{padding:"4px 6px",color:C.muted,fontSize:11}}>{h.hole}{h.side==="back"&&h.hole===10?" <-":""}</td>
                       <td style={{padding:"4px 4px",textAlign:"center",color:C.muted}}>{h.par}</td>
                       <td style={{padding:"4px 4px",textAlign:"center",fontWeight:700,color:my!==null?scoreColor(my,h.par):C.dim}}>
@@ -997,7 +997,7 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
                   );
                 })}
                 {/* Totals */}
-                <tr style={{borderTop:`2px solid ${C.green}`,background:"rgba(123,180,80,0.05)"}}>
+                <tr style={{borderTop:"2px solid "+C.green,background:"rgba(123,180,80,0.05)"}}>
                   <td style={{padding:"6px",color:C.green,fontWeight:800,fontSize:12}}>TOT</td>
                   <td style={{padding:"6px",textAlign:"center",color:C.muted,fontWeight:700}}>{course.par}</td>
                   <td style={{padding:"6px",textAlign:"center",color:C.green,fontWeight:800}}>
