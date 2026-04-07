@@ -115,6 +115,63 @@ function SettingsCard({title,sub,subExtra,children,danger}){
 }
 
 // ── PRO PAYWALL SCREEN ────────────────────────────────────────────────────────
+function ProInfo({onBack, isPro, onUpgrade}) {
+  const features = [
+    { icon:"👥", title:"Unlimited Players", desc:"Free tier is limited to 2 players. Pro gives you unlimited opponents to track." },
+    { icon:"⛳", title:"Live Round Tracker", desc:"Track scores hole by hole with automatic bet calculations for Nassau, Match Play, Skins, and Auto Press." },
+    { icon:"🤜", title:"Nassau Auto Press", desc:"Set 1, 2, or 3 down as your press trigger. New bets start automatically. Manual 'Pissed Press' anytime." },
+    { icon:"🔗", title:"Player Linking & Invites", desc:"Link accounts with your golf buddies. They see their side of every bet, round, and settlement in real time." },
+    { icon:"🔔", title:"Notifications", desc:"Get notified when rounds are posted, settlements are requested, strokes are adjusted, or disputes come in." },
+    { icon:"✅", title:"Mutual Cancel & Disputes", desc:"Linked players can request to cancel a round or dispute an amount. Both sides must agree before changes are made." },
+    { icon:"⭐", title:"Stroke Approval", desc:"When accounts are linked, stroke adjustments require approval from both players." },
+    { icon:"💳", title:"Venmo / Cash App / Zelle", desc:"One tap to open your payment app with the amount pre-filled. Settle up without leaving Press." },
+    { icon:"📊", title:"Export History", desc:"View and export your full round history, side bets, and settlements." },
+    { icon:"🔄", title:"Season Reset", desc:"Archive your season and start fresh while keeping your history." },
+  ];
+
+  return (
+    <div style={{fontFamily:"'Georgia',serif",minHeight:"100vh",background:C.bg,color:C.text,paddingBottom:60}}>
+      <div style={{background:`linear-gradient(180deg,${C.card} 0%,transparent 100%)`,padding:"50px 20px 24px"}}>
+        <button onClick={onBack} style={{background:"rgba(123,180,80,0.15)",border:`1px solid ${C.green}`,color:C.green,fontSize:14,cursor:"pointer",padding:"8px 16px",borderRadius:20,display:"flex",alignItems:"center",gap:6,fontWeight:700,marginBottom:20}}>‹ Back</button>
+        <div style={{textAlign:"center"}}>
+          <div style={{fontSize:40,marginBottom:8}}>⭐</div>
+          <div style={{fontSize:28,fontWeight:800,color:C.gold,marginBottom:4}}>Press Pro</div>
+          <div style={{fontSize:14,color:C.muted,marginBottom:4}}>$1.99 / month</div>
+          {isPro
+            ? <div style={{background:"rgba(123,180,80,0.15)",border:`1px solid ${C.green}`,color:C.green,padding:"6px 20px",borderRadius:20,fontSize:13,fontWeight:700,display:"inline-block"}}>✅ You're a Pro member</div>
+            : <button onClick={onUpgrade} style={{background:`linear-gradient(135deg,${C.gold},#b8860b)`,border:"none",color:"#0a1a0f",padding:"12px 28px",borderRadius:20,fontSize:14,fontWeight:800,cursor:"pointer"}}>⭐ Upgrade to Pro</button>
+          }
+        </div>
+      </div>
+
+      <div style={{padding:"0 20px"}}>
+        <div style={{fontSize:11,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:16,textAlign:"center"}}>
+          Everything included with Pro
+        </div>
+
+        {features.map((f,i) => (
+          <div key={i} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:14,padding:"16px",marginBottom:10,display:"flex",gap:14,alignItems:"flex-start"}}>
+            <div style={{fontSize:26,flexShrink:0,marginTop:2}}>{f.icon}</div>
+            <div>
+              <div style={{fontWeight:700,fontSize:15,color:C.text,marginBottom:3}}>{f.title}</div>
+              <div style={{fontSize:12,color:C.muted,lineHeight:1.5}}>{f.desc}</div>
+            </div>
+          </div>
+        ))}
+
+        {!isPro && (
+          <div style={{marginTop:20}}>
+            <button onClick={onUpgrade} style={{width:"100%",padding:"16px",background:`linear-gradient(135deg,${C.gold},#b8860b)`,border:"none",color:"#0a1a0f",borderRadius:12,fontSize:15,fontWeight:800,cursor:"pointer"}}>
+              ⭐ Upgrade to Press Pro — $1.99/mo
+            </button>
+            <div style={{fontSize:11,color:C.muted,textAlign:"center",marginTop:8}}>Cancel anytime. No commitment.</div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function ProPaywall({onBack,onUpgrade,saving}){
   return(
     <div style={{fontFamily:"'Georgia',serif",minHeight:"100vh",background:C.bg,color:C.text,padding:"44px 20px 60px"}}>
@@ -316,6 +373,7 @@ export default function App(){
   const [showPrivacy,setShowPrivacy]=useState(false);
   const [showPaywall,setShowPaywall]=useState(false);
   const [isPro,setIsPro]=useState(false);
+  const [showProInfo,setShowProInfo]=useState(false);
   const [stripeSaving,setStripeSaving]=useState(false);
 
   const urlParams=new URLSearchParams(window.location.search);
@@ -367,6 +425,7 @@ export default function App(){
   if(loading)return(<div style={{background:C.bg,minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:16}}><div style={{fontSize:46,fontWeight:800,color:C.green,letterSpacing:-2}}>Press</div><Spinner/></div>);
   if(showPrivacy)return <PrivacyPolicy onBack={()=>setShowPrivacy(false)}/>;
   if(showPaywall)return <ProPaywall onBack={()=>setShowPaywall(false)} onUpgrade={handleUpgrade} saving={stripeSaving}/>;
+  if(showProInfo)return <ProInfo onBack={()=>setShowProInfo(false)} isPro={isPro} onUpgrade={()=>{setShowProInfo(false);setShowPaywall(true);}}/>;
   if(!user)return <AuthScreen onAuth={setUser} onPrivacy={()=>setShowPrivacy(true)}/>;
   if(inviteCode)return <AcceptInviteScreen code={inviteCode} user={user}/>;
   return <Press user={user} onSignOut={()=>sb.auth.signOut()} onPrivacy={()=>setShowPrivacy(true)} onUpgrade={()=>setShowPaywall(true)} isPro={isPro} setIsPro={setIsPro}/>;
@@ -854,8 +913,18 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,isPro,setIsPro}){
           <button onClick={()=>{setShowNotifs(true);markNotifsRead();}} style={{background:"none",border:"none",color:C.muted,fontSize:11,cursor:"pointer",display:"flex",alignItems:"center"}}>🔔<NotifBadge count={unreadNotifs+pendingActions}/></button>
         </div>
         {!isPro&&(
-          <button onClick={onUpgrade} style={{background:`linear-gradient(135deg,${C.gold},#b8860b)`,border:"none",color:"#0a1a0f",padding:"8px 20px",borderRadius:20,fontSize:12,fontWeight:700,cursor:"pointer",marginBottom:12}}>
-            ⭐ Upgrade to Pro — $1.99/mo
+          <div style={{display:"flex",gap:8,justifyContent:"center",marginBottom:12,flexWrap:"wrap"}}>
+            <button onClick={onUpgrade} style={{background:`linear-gradient(135deg,${C.gold},#b8860b)`,border:"none",color:"#0a1a0f",padding:"8px 20px",borderRadius:20,fontSize:12,fontWeight:700,cursor:"pointer"}}>
+              ⭐ Upgrade to Pro — $1.99/mo
+            </button>
+            <button onClick={()=>setShowProInfo(true)} style={{background:"transparent",border:`1px solid ${C.gold}`,color:C.gold,padding:"8px 16px",borderRadius:20,fontSize:12,fontWeight:600,cursor:"pointer"}}>
+              What's included?
+            </button>
+          </div>
+        )}
+        {isPro&&(
+          <button onClick={()=>setShowProInfo(true)} style={{background:"transparent",border:`1px solid ${C.gold}44`,color:C.gold,padding:"6px 16px",borderRadius:20,fontSize:11,fontWeight:600,cursor:"pointer",marginBottom:12}}>
+            ⭐ View Pro Features
           </button>
         )}
         {/* Live Round Button */}
