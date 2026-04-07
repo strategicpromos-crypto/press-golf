@@ -290,14 +290,14 @@ export function calcNassau(scores, holeData, myStrokeHoles, oppStrokeHoles, betA
 // - 18-hole total NEVER gets pressed
 // - Each bet result: +betAmount (won), -betAmount (lost), 0 (tied)
 
-export function calcAutoPressNassau(scores, holeData, myStrokeHoles, oppStrokeHoles, betAmount, pressDown = 2) {
+export function calcAutoPressNassau(scores, holeData, myStrokeHoles, oppStrokeHoles, betAmount, pressDown = 2, manualPresses = []) {
 
   function calcSideWithPress(sideHoles) {
     if (!sideHoles || sideHoles.length === 0) return { bets: [], total: 0 };
 
     // Each bet: { startHole, diff, pressed }
     // pressed = true means this bet already triggered a press (prevent double-trigger)
-    const bets = [{ startHole: sideHoles[0].hole, diff: 0, pressed: false }];
+    const bets = [{ startHole: sideHoles[0].hole, diff: 0, pressed: false, label: "Original" }];
 
     for (const h of sideHoles) {
       const myScore  = scores.me[h.hole];
@@ -320,15 +320,25 @@ export function calcAutoPressNassau(scores, holeData, myStrokeHoles, oppStrokeHo
         }
       }
 
-      // Check for press triggers — fires when either player reaches pressDown holes up/down
+      // Check for AUTO press triggers (±pressDown)
       const isLastHole = h.hole === sideHoles[sideHoles.length - 1].hole;
       for (let i = 0; i < betsThisHole; i++) {
         const bet = bets[i];
         if (bet.startHole <= h.hole && (bet.diff === pressDown || bet.diff === -pressDown) && !bet.pressed) {
           bet.pressed = true;
           if (!isLastHole) {
-            bets.push({ startHole: h.hole + 1, diff: 0, pressed: false });
+            bets.push({ startHole: h.hole + 1, diff: 0, pressed: false, label: `Auto Press` });
           }
+        }
+      }
+
+      // Check for MANUAL press — starts on this hole
+      const manualThisHole = manualPresses.filter(p => p.hole === h.hole);
+      for (const mp of manualThisHole) {
+        // Manual press starts on the current hole (already scored above)
+        // so new bet starts next hole to not double-count
+        if (!isLastHole) {
+          bets.push({ startHole: h.hole + 1, diff: 0, pressed: false, label: `Pissed Press h${h.hole}` });
         }
       }
     }
@@ -338,7 +348,7 @@ export function calcAutoPressNassau(scores, holeData, myStrokeHoles, oppStrokeHo
       betNum:    i + 1,
       startHole: bet.startHole,
       diff:      bet.diff,
-      // Flat bet: win $betAmount, lose $betAmount, tie $0
+      label:     bet.label || `Press ${i}`,
       amount:    bet.diff > 0 ? betAmount : bet.diff < 0 ? -betAmount : 0,
     }));
 
