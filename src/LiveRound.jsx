@@ -847,17 +847,22 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
                   }}/>
                 </div>
 
-                {/* YOUR press call - clearly labeled, separated from Ken's score */}
-                {opp.sameGroup && (opp.betType === "nassau" || opp.betType === "nassau-press") && tally.total < 0 && (
+                {/* Press call - shows for whichever player is losing */}
+                {opp.sameGroup && (opp.betType === "nassau" || opp.betType === "nassau-press") && tally.total !== 0 && (
                   <div style={{marginTop:10,borderTop:"1px solid "+C.border,paddingTop:10}}>
                     {(opp.manualPresses||[]).some(p=>p.hole===currentHole)
                       ? <div style={{textAlign:"center",fontSize:12,color:C.muted,fontWeight:600}}>✓ Press called this hole</div>
                       : (
                         <button
                           onClick={() => callManualPress(opp.playerId)}
-                          style={{width:"100%",padding:"10px",background:"rgba(224,80,80,0.15)",border:"1px solid "+C.red,color:C.red,borderRadius:10,fontSize:13,fontWeight:700,cursor:"pointer"}}
+                          style={{
+                            width:"100%",padding:"10px",borderRadius:10,fontSize:13,fontWeight:700,cursor:"pointer",
+                            background: tally.total < 0 ? "rgba(224,80,80,0.15)" : "rgba(232,184,75,0.15)",
+                            border: "1px solid " + (tally.total < 0 ? C.red : C.gold),
+                            color: tally.total < 0 ? C.red : C.gold,
+                          }}
                         >
-                          📢 You Call Press on {opp.name}
+                          📢 {tally.total < 0 ? "You Call Press on " + opp.name : opp.name + " Calls Press"}
                         </button>
                       )
                     }
