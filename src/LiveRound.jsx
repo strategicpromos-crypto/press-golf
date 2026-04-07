@@ -435,9 +435,11 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
     const side     = currentHole <= 9 ? "front" : "back";
 
     // Find opponents eligible for a press decision right now
+    // NOTE: only skip if they ACCEPTED a press this hole — declining never blocks future offers
     const pressable = opponents.filter(opp => {
       if (!opp.sameGroup) return false;
       if (opp.betType !== "nassau" && opp.betType !== "nassau-press") return false;
+      // Skip only if they already pressed on THIS hole (accepted)
       if ((opp.manualPresses||[]).some(p => p.hole === currentHole)) return false;
       const tally = getTally(scores, course, opp, courseId);
       const lastDiff = side === "front" ? tally.lastFrontDiff : tally.lastBackDiff;
@@ -445,6 +447,7 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
     });
 
     if (pressable.length > 0) {
+      // Fresh pressCheck each hole — declined list resets so they can be asked again next hole
       setPressCheck({ opps: pressable, nextHole, pressed: [], declined: [] });
     } else {
       setCurrentHole(nextHole);
