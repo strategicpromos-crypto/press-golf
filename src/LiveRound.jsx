@@ -525,7 +525,7 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
         Hole {currentHole} - {opponents.map(o=>o.name).join(", ")}
       </div>
       <div style={{width:"100%",maxWidth:340,display:"flex",flexDirection:"column",gap:10}}>
-        <BigBtn onClick={()=>{setResuming(false);setStep("playing");}}>Resume Round -></BigBtn>
+        <BigBtn onClick={()=>{setResuming(false);setStep("playing");}}>Resume Round</BigBtn>
         <GhostBtn onClick={()=>{setResuming(false);setStep("summary");}}>Go to Summary</GhostBtn>
         <GhostBtn onClick={()=>{
           if(window.confirm("Are you sure you want to discard this round? All scores will be lost and cannot be recovered.")) {
@@ -819,10 +819,12 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
                           fontSize:11,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"
                         }}
                       >
-                        {(opp.manualPresses||[]).some(p=>p.hole===currentHole) ? "v Pressed" : "🤜 Press"}
+                        {(opp.manualPresses||[]).some(p=>p.hole===currentHole) ? "Pressed" : "Press!"}
                       </button>
                     )}
                   </div>
+                </div>
+
                 {/* Score row */}
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
                   <ScoreButton label="-" size={52} onClick={()=>{
