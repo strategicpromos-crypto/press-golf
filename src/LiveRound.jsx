@@ -631,14 +631,14 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
               ))}
             </div>
             {addStrokesDir !== "even" && (
-              <>
+              <div>
                 <input type="number" min="1" max="9" value={addStrokes} onChange={e=>setAddStrokes(e.target.value)} placeholder="# per side" style={{width:"100%",padding:"12px",background:C.surface,border:"1px solid "+C.border,borderRadius:10,color:C.text,fontSize:20,outline:"none",boxSizing:"border-box",textAlign:"center",fontWeight:700}} inputMode="numeric"/>
                 <div style={{fontSize:11,color:C.muted,marginTop:6,textAlign:"center"}}>
                   {safeInt(addStrokes,0) > 0
                     ? (addStrokesDir==="igive"?"Giving":"Getting") + " " + addStrokes + " per side = " + (safeInt(addStrokes,0)*2) + " total strokes"
                     : "1 per side = stroke on #1 hdcp hole each side"}
                 </div>
-              </>
+              </div>
             )}
           </div>
 
