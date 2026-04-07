@@ -576,8 +576,8 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
           const sh = getStrokeHolesForOpp(opp).sort((a,b)=>a-b);
           const perSide = Math.abs(opp.strokes) / 2;
           const strokeLabel = opp.strokes === 0 ? "Even"
-            : opp.strokes > 0 ? `You give ${perSide}/side (${opp.strokes} total)`
-            : `You get ${perSide}/side (${Math.abs(opp.strokes)} total)`;
+            : opp.strokes > 0 ? "You give " + perSide + "/side (" + opp.strokes + " total)"
+            : "You get " + perSide + "/side (" + Math.abs(opp.strokes) + " total)";
           return (
             <div key={opp.playerId} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:"14px",marginBottom:10}}>
               <div style={{display:"flex",justifyContent:"space-between"}}>
@@ -635,7 +635,7 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
                 <input type="number" min="1" max="9" value={addStrokes} onChange={e=>setAddStrokes(e.target.value)} placeholder="# per side" style={{width:"100%",padding:"12px",background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,color:C.text,fontSize:20,outline:"none",boxSizing:"border-box",textAlign:"center",fontWeight:700}} inputMode="numeric"/>
                 <div style={{fontSize:11,color:C.muted,marginTop:6,textAlign:"center"}}>
                   {safeInt(addStrokes,0) > 0
-                    ? `${addStrokesDir==="igive"?"Giving":"Getting"} ${addStrokes} per side = ${safeInt(addStrokes,0)*2} total strokes`
+                    ? (addStrokesDir==="igive"?"Giving":"Getting") + " " + addStrokes + " per side = " + (safeInt(addStrokes,0)*2) + " total strokes"
                     : "1 per side = stroke on #1 hdcp hole each side"}
                 </div>
               </>
@@ -803,7 +803,7 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
                       {opp.betType === "nassau-press" && tally.pressDetail && (
                         <div style={{fontSize:10,color:C.gold,marginTop:2}}>
                           {(tally.pressDetail.front?.bets?.length||0) + (tally.pressDetail.back?.bets?.length||0) - 2 > 0
-                            ? `${(tally.pressDetail.front?.bets?.length||0) + (tally.pressDetail.back?.bets?.length||0) - 2} presses`
+                            ? ((tally.pressDetail.front?.bets?.length||0) + (tally.pressDetail.back?.bets?.length||0) - 2) + " presses"
                             : null}
                         </div>
                       )}
@@ -929,7 +929,7 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
                       <div style={{fontSize:10,color:C.green,letterSpacing:1,textTransform:"uppercase",marginBottom:4}}>Front 9</div>
                       {r.tally.pressDetail.front.bets.map((b, i) => (
                         <div key={i} style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:2}}>
-                          <span style={{color:C.muted}}>{i===0 ? `Original $${r.betAmount}` : (b.label || ("Press " + i)) + " (hole " + b.startHole + ")"}</span>
+                          <span style={{color:C.muted}}>{i===0 ? ("Original $" + r.betAmount) : (b.label || ("Press " + i)) + " (hole " + b.startHole + ")"}</span>
                           <span style={{color:b.amount>=0?C.green:C.red,fontWeight:700}}>
                             {b.amount>=0?"+":"−"}${Math.abs(b.amount).toFixed(2)}
                           </span>
@@ -944,7 +944,7 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
                       <div style={{fontSize:10,color:C.green,letterSpacing:1,textTransform:"uppercase",marginBottom:4}}>Back 9</div>
                       {r.tally.pressDetail.back.bets.map((b, i) => (
                         <div key={i} style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:2}}>
-                          <span style={{color:C.muted}}>{i===0 ? `Original $${r.betAmount}` : (b.label || ("Press " + i)) + " (hole " + b.startHole + ")"}</span>
+                          <span style={{color:C.muted}}>{i===0 ? ("Original $" + r.betAmount) : (b.label || ("Press " + i)) + " (hole " + b.startHole + ")"}</span>
                           <span style={{color:b.amount>=0?C.green:C.red,fontWeight:700}}>
                             {b.amount>=0?"+":"−"}${Math.abs(b.amount).toFixed(2)}
                           </span>
