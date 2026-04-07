@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { sb } from "./supabase.js";
 import { COURSES, getStrokeHoles, calcAutoPressNassau } from "./golf.js";
 
