@@ -942,43 +942,82 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
                 {r.strokes===0?"Even":r.strokes>0?"You gave " + (r.strokes/2) + "/side":"You got " + (Math.abs(r.strokes)/2) + "/side"}
               </div>
 
-              {/* Press bet breakdown for nassau-press */}
-              {r.betType === "nassau-press" && r.tally.pressDetail && (
-                <div style={{background:"rgba(0,0,0,0.2)",borderRadius:8,padding:"10px 12px"}}>
-                  {/* Front bets */}
+              {/* Press/bet breakdown - shows whenever pressDetail exists (nassau with manual presses OR nassau-press) */}
+              {r.tally.pressDetail && (
+                <div style={{background:"rgba(0,0,0,0.25)",borderRadius:10,padding:"12px 14px",marginTop:4}}>
+
+                  {/* Front 9 */}
                   {r.tally.pressDetail.front?.bets?.length > 0 && (
-                    <div style={{marginBottom:6}}>
-                      <div style={{fontSize:10,color:C.green,letterSpacing:1,textTransform:"uppercase",marginBottom:4}}>Front 9</div>
-                      {r.tally.pressDetail.front.bets.map((b, i) => (
-                        <div key={i} style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:2}}>
-                          <span style={{color:C.muted}}>{i===0 ? ("Original $" + r.betAmount) : (b.label || ("Press " + i)) + " (hole " + b.startHole + ")"}</span>
-                          <span style={{color:b.amount>=0?C.green:C.red,fontWeight:700}}>
-                            {b.amount>=0?"+":"-"}${Math.abs(b.amount).toFixed(2)}
-                          </span>
-                        </div>
-                      ))}
+                    <div style={{marginBottom:10}}>
+                      <div style={{fontSize:10,color:C.green,letterSpacing:1.5,textTransform:"uppercase",marginBottom:6,fontWeight:700}}>
+                        ▸ Front 9
+                        <span style={{color:r.tally.pressDetail.front.total>=0?C.green:C.red,marginLeft:10,fontSize:11}}>
+                          {r.tally.pressDetail.front.total>=0?"+":"-"}${Math.abs(r.tally.pressDetail.front.total).toFixed(2)}
+                        </span>
+                      </div>
+                      {r.tally.pressDetail.front.bets.map((b, i) => {
+                        const won  = b.amount > 0;
+                        const tied = b.amount === 0;
+                        return (
+                          <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:12,marginBottom:4,paddingLeft:8}}>
+                            <span style={{color:C.muted}}>
+                              {i===0 ? "Original bet" : (b.label || "Press " + i) + " (starting hole " + b.startHole + ")"}
+                            </span>
+                            <span style={{
+                              fontWeight:700,fontSize:13,
+                              color: tied ? C.muted : won ? C.green : C.red,
+                              background: tied?"transparent": won?"rgba(123,180,80,0.12)":"rgba(224,80,80,0.12)",
+                              padding:"2px 8px",borderRadius:6
+                            }}>
+                              {tied ? "Tied" : (won?"+":"-")+"$"+Math.abs(b.amount).toFixed(2)}
+                            </span>
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
-                  {/* 18-hole total - never pressed */}
-                  {/* Back bets */}
+
+                  {/* Back 9 */}
                   {r.tally.pressDetail.back?.bets?.length > 0 && (
-                    <div style={{marginBottom:6}}>
-                      <div style={{fontSize:10,color:C.green,letterSpacing:1,textTransform:"uppercase",marginBottom:4}}>Back 9</div>
-                      {r.tally.pressDetail.back.bets.map((b, i) => (
-                        <div key={i} style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:2}}>
-                          <span style={{color:C.muted}}>{i===0 ? ("Original $" + r.betAmount) : (b.label || ("Press " + i)) + " (hole " + b.startHole + ")"}</span>
-                          <span style={{color:b.amount>=0?C.green:C.red,fontWeight:700}}>
-                            {b.amount>=0?"+":"-"}${Math.abs(b.amount).toFixed(2)}
-                          </span>
-                        </div>
-                      ))}
+                    <div style={{marginBottom:10}}>
+                      <div style={{fontSize:10,color:C.green,letterSpacing:1.5,textTransform:"uppercase",marginBottom:6,fontWeight:700}}>
+                        ▸ Back 9
+                        <span style={{color:r.tally.pressDetail.back.total>=0?C.green:C.red,marginLeft:10,fontSize:11}}>
+                          {r.tally.pressDetail.back.total>=0?"+":"-"}${Math.abs(r.tally.pressDetail.back.total).toFixed(2)}
+                        </span>
+                      </div>
+                      {r.tally.pressDetail.back.bets.map((b, i) => {
+                        const won  = b.amount > 0;
+                        const tied = b.amount === 0;
+                        return (
+                          <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:12,marginBottom:4,paddingLeft:8}}>
+                            <span style={{color:C.muted}}>
+                              {i===0 ? "Original bet" : (b.label || "Press " + i) + " (starting hole " + b.startHole + ")"}
+                            </span>
+                            <span style={{
+                              fontWeight:700,fontSize:13,
+                              color: tied ? C.muted : won ? C.green : C.red,
+                              background: tied?"transparent": won?"rgba(123,180,80,0.12)":"rgba(224,80,80,0.12)",
+                              padding:"2px 8px",borderRadius:6
+                            }}>
+                              {tied ? "Tied" : (won?"+":"-")+"$"+Math.abs(b.amount).toFixed(2)}
+                            </span>
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
-                  {/* 18-hole total - never pressed */}
-                  <div style={{display:"flex",justifyContent:"space-between",fontSize:12,borderTop:"1px solid "+C.border,paddingTop:6,marginTop:4}}>
-                    <span style={{color:C.muted}}>18-hole total (no press)</span>
-                    <span style={{color:r.tally.pressDetail.total>=0?C.green:C.red,fontWeight:700}}>
-                      {r.tally.pressDetail.total>=0?"+":"-"}${Math.abs(r.tally.pressDetail.total||0).toFixed(2)}
+
+                  {/* 18-hole total */}
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:12,borderTop:"1px solid "+C.border,paddingTop:8,marginTop:4}}>
+                    <span style={{color:C.muted}}>▸ 18-hole total (no press)</span>
+                    <span style={{
+                      fontWeight:700,fontSize:13,
+                      color: r.tally.pressDetail.total===0?C.muted:r.tally.pressDetail.total>0?C.green:C.red,
+                      background: r.tally.pressDetail.total===0?"transparent":r.tally.pressDetail.total>0?"rgba(123,180,80,0.12)":"rgba(224,80,80,0.12)",
+                      padding:"2px 8px",borderRadius:6
+                    }}>
+                      {r.tally.pressDetail.total===0?"Tied":(r.tally.pressDetail.total>0?"+":"-")+"$"+Math.abs(r.tally.pressDetail.total||0).toFixed(2)}
                     </span>
                   </div>
                 </div>
