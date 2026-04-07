@@ -709,6 +709,7 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
     const isLastHole = currentHole === course.holes.length;
 
     return (
+      <>
       <div style={{fontFamily:"'Georgia',serif",minHeight:"100vh",background:C.bg,color:C.text,paddingBottom:100}}>
         {/* Header */}
         <div style={{background:"linear-gradient(180deg,"+C.card+" 0%,transparent 100%)",padding:"44px 20px 16px"}}>
@@ -945,6 +946,7 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
           </div>
         </div>
       )}
+      </>
     );
   }
 
