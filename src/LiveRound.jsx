@@ -277,6 +277,8 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
   const [posting,     setPosting]     = useState(false);
   const [liveRoundId, setLiveRoundId] = useState(null);
   const [resuming,    setResuming]    = useState(false);
+  // Press interstitial: list of opponents needing a press decision before next hole
+  const [pressCheck,  setPressCheck]  = useState(null); // null | { opps: [...], nextHole: N }
 
   // Add opponent form
   const [addOppId,       setAddOppId]       = useState("");
@@ -411,18 +413,40 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
     setSheet(null);
   }
 
-  // -- Manual Press ----------------------------------------------------------
-  function callManualPress(oppId) {
+  // -- Manual Press - records press starting on given hole -------------------
+  function callManualPress(oppId, onHole) {
+    const pressHole = onHole ?? currentHole;
     setOpponents(prev => prev.map(opp => {
       if (opp.playerId !== oppId) return opp;
-      // Only add press if not already pressed this hole
-      const alreadyPressedThisHole = (opp.manualPresses||[]).some(p => p.hole === currentHole);
-      if (alreadyPressedThisHole) return opp;
-      return {
-        ...opp,
-        manualPresses: [...(opp.manualPresses||[]), { hole: currentHole }]
-      };
+      const alreadyPressed = (opp.manualPresses||[]).some(p => p.hole === pressHole);
+      if (alreadyPressed) return opp;
+      return { ...opp, manualPresses: [...(opp.manualPresses||[]), { hole: pressHole }] };
     }));
+  }
+
+  // -- Advance to next hole - check for press decisions first ----------------
+  function advanceHole() {
+    if (isLastHole) { setStep("summary"); return; }
+    const nextHole = currentHole + 1;
+    const side     = currentHole <= 9 ? "front" : "back";
+
+    // Find opponents who are eligible for a press decision right now
+    const pressable = opponents.filter(opp => {
+      if (!opp.sameGroup) return false;
+      if (opp.betType !== "nassau" && opp.betType !== "nassau-press") return false;
+      // Don't offer if already pressed on this hole
+      if ((opp.manualPresses||[]).some(p => p.hole === currentHole)) return false;
+      const tally = getTally(scores, course, opp, courseId);
+      const lastDiff = side === "front" ? tally.lastFrontDiff : tally.lastBackDiff;
+      // Offer press when EITHER player is exactly 1 down on the current bet
+      return lastDiff === -1 || lastDiff === 1;
+    });
+
+    if (pressable.length > 0) {
+      setPressCheck({ opps: pressable, nextHole, pressed: [] });
+    } else {
+      setCurrentHole(nextHole);
+    }
   }
   async function postToLedger() {
     setPosting(true);
@@ -758,31 +782,6 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
                     {iGetStroke && <div style={{fontSize:11,color:C.green,marginTop:2}}>⭐ You get a stroke this hole</div>}
                     {!getsStroke && !iGetStroke && !opp.sameGroup && <div style={{fontSize:10,color:C.dim,marginTop:2}}>different group - scores optional</div>}
                   </div>
-                  <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:6}}>
-                    <div style={{textAlign:"right"}}>
-                      <div style={{fontSize:14,fontWeight:700,color:
-                        tally.label==="Even" ? C.muted :
-                        tally.label?.includes("Up") ? C.green : C.red
-                      }}>
-                        {tally.label || "-"}
-                      </div>
-                      {/* Show press count if nassau-press */}
-                      {opp.betType === "nassau-press" && tally.pressDetail && (
-                        <div style={{fontSize:10,color:C.gold,marginTop:2}}>
-                          {(tally.pressDetail.front?.bets?.length||0) + (tally.pressDetail.back?.bets?.length||0) - 2 > 0
-                            ? ((tally.pressDetail.front?.bets?.length||0) + (tally.pressDetail.back?.bets?.length||0) - 2) + " presses"
-                            : null}
-                        </div>
-                      )}
-                      <div style={{fontSize:10,color:C.muted}}>standing</div>
-                    </div>
-                    {/* Manual Press button - only for same group Nassau bets */}
-                    {opp.sameGroup && (opp.betType === "nassau" || opp.betType === "nassau-press") && (
-                      (opp.manualPresses||[]).some(p=>p.hole===currentHole) && (
-                        <div style={{fontSize:10,color:"#aaa",marginTop:2,textAlign:"right"}}>✓ Pressed</div>
-                      )
-                    )}
-                  </div>
                 </div>
 
                 {/* Score row */}
@@ -808,65 +807,144 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
                     setScore(opp.playerId, currentHole, cur + 1);
                   }}/>
                 </div>
-
-                {/* Press call - only when the LAST active bet on this side is exactly 1 down */}
-                {opp.sameGroup && (opp.betType === "nassau" || opp.betType === "nassau-press") && (() => {
-                  // Which side are we on?
-                  const side = currentHole <= 9 ? "front" : "back";
-                  // diff > 0 = you ahead, diff < 0 = you behind
-                  const lastDiff = side === "front" ? tally.lastFrontDiff : tally.lastBackDiff;
-                  // Only offer press when EXACTLY 1 down on the current active bet
-                  const youAreDown  = lastDiff === -1;
-                  const kenIsDown   = lastDiff === 1;
-                  const pressable   = youAreDown || kenIsDown;
-                  if (!pressable) return null;
-
-                  const alreadyPressed = (opp.manualPresses||[]).some(p=>p.hole===currentHole);
-                  return (
-                    <div style={{marginTop:10,borderTop:"1px solid "+C.border,paddingTop:10}}>
-                      {alreadyPressed
-                        ? <div style={{textAlign:"center",fontSize:12,color:C.muted,fontWeight:600}}>✓ Press called this hole</div>
-                        : (
-                          <button
-                            onClick={() => callManualPress(opp.playerId)}
-                            style={{
-                              width:"100%",padding:"10px",borderRadius:10,fontSize:13,fontWeight:700,cursor:"pointer",
-                              background: youAreDown ? "rgba(224,80,80,0.15)" : "rgba(232,184,75,0.15)",
-                              border: "1px solid " + (youAreDown ? C.red : C.gold),
-                              color: youAreDown ? C.red : C.gold,
-                            }}
-                          >
-                            📢 {youAreDown
-                              ? "You're 1 Down — Call Press on " + opp.name
-                              : opp.name + " is 1 Down — " + opp.name.split(" ")[0] + " Presses"}
-                          </button>
-                        )
-                      }
-                    </div>
-                  );
-                })()}
               </div>
             );
           })}
 
           {/* Next / Finish */}
           <BigBtn
-            onClick={()=>isLastHole?setStep("summary"):setCurrentHole(h=>h+1)}
+            onClick={advanceHole}
             disabled={!canAdvance}
             color={isLastHole?C.gold:C.green}
             textColor="#0a1a0f"
             style={{marginTop:8}}
           >
             {!canAdvance ? "Enter your score to continue"
-              : isLastHole ? "Finish Round "
+              : isLastHole ? "Finish Round ⛳"
               : "Next - Hole " + (currentHole + 1)}
           </BigBtn>
 
-          <div style={{textAlign:"center",fontSize:11,color:C.dim,marginTop:8}}>
-            Auto-saving - Round is safe if you close the app
+          {/* Standing bar - shows below the Next button */}
+          {canAdvance && opponents.length > 0 && (
+            <div style={{marginTop:10,display:"flex",gap:8,flexWrap:"wrap",justifyContent:"center"}}>
+              {opponents.map(opp => {
+                const t = getTally(scores, course, opp, courseId);
+                const side = currentHole <= 9 ? "front" : "back";
+                const lastDiff = side === "front" ? t.lastFrontDiff : t.lastBackDiff;
+                const diffLabel = lastDiff === 0 ? "All Square"
+                  : lastDiff > 0 ? "You " + lastDiff + " Up"
+                  : opp.name.split(" ")[0] + " " + Math.abs(lastDiff) + " Up";
+                const pressCount = (t.pressDetail?.front?.bets?.length||1) + (t.pressDetail?.back?.bets?.length||1) - 2;
+                const pressBadge = pressCount > 0 ? " · " + pressCount + "P" : "";
+                return (
+                  <div key={opp.playerId} style={{
+                    background:C.card,border:"1px solid "+C.border,borderRadius:20,
+                    padding:"5px 12px",fontSize:12,display:"flex",alignItems:"center",gap:6
+                  }}>
+                    <span style={{color:C.muted,fontWeight:600}}>{opp.name.split(" ")[0]}:</span>
+                    <span style={{fontWeight:700,color:lastDiff>0?C.green:lastDiff<0?C.red:C.muted}}>
+                      {diffLabel}{pressBadge}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          <div style={{textAlign:"center",fontSize:11,color:C.dim,marginTop:10}}>
+            Auto-saving · Round is safe if you close the app
           </div>
         </div>
       </div>
+
+      {/* Press Interstitial Modal - appears between holes when press is available */}
+      {pressCheck && (
+        <div style={{position:"fixed",inset:0,zIndex:500,display:"flex",alignItems:"flex-end"}}>
+          <div onClick={()=>{setCurrentHole(pressCheck.nextHole);setPressCheck(null);}} style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.8)"}}/>
+          <div style={{position:"relative",width:"100%",background:C.surface,borderRadius:"22px 22px 0 0",border:"1px solid "+C.border,borderBottom:"none",padding:"24px 20px 44px"}}>
+
+            {/* Pill handle */}
+            <div style={{display:"flex",justifyContent:"center",marginBottom:16}}>
+              <div style={{width:40,height:4,background:C.dim,borderRadius:2}}/>
+            </div>
+
+            <div style={{textAlign:"center",marginBottom:4}}>
+              <div style={{fontSize:13,color:C.muted,letterSpacing:1,textTransform:"uppercase"}}>Heading to Hole {pressCheck.nextHole}</div>
+              <div style={{fontSize:20,fontWeight:800,marginTop:4}}>Press Decision</div>
+              <div style={{fontSize:12,color:C.muted,marginTop:4}}>
+                Press starts on hole {pressCheck.nextHole} · decide before teeing off
+              </div>
+            </div>
+
+            <div style={{height:1,background:C.border,margin:"16px 0"}}/>
+
+            {pressCheck.opps.map(opp => {
+              const tally = getTally(scores, course, opp, courseId);
+              const side  = currentHole <= 9 ? "front" : "back";
+              const lastDiff = side === "front" ? tally.lastFrontDiff : tally.lastBackDiff;
+              const youAreDown = lastDiff === -1;
+              const kenIsDown  = lastDiff === 1;
+              const alreadyIn      = pressCheck.pressed?.includes(opp.playerId);
+              const alreadyDeclined = pressCheck.declined?.includes(opp.playerId);
+
+              return (
+                <div key={opp.playerId} style={{marginBottom:16,background:C.card,borderRadius:14,padding:"14px",border:"1px solid "+C.border}}>
+                  <div style={{fontWeight:700,fontSize:15,marginBottom:2}}>{opp.name}</div>
+                  <div style={{fontSize:12,color:C.muted,marginBottom:12}}>
+                    {youAreDown
+                      ? "You are 1 Down on the current bet — you may press"
+                      : opp.name.split(" ")[0] + " is 1 Down — " + opp.name.split(" ")[0] + " may press"}
+                  </div>
+                  {alreadyIn ? (
+                    <div style={{textAlign:"center",padding:"10px",background:"rgba(123,180,80,0.1)",borderRadius:10,border:"1px solid "+C.green,color:C.green,fontWeight:700,fontSize:13}}>
+                      ✓ Press On — starts hole {pressCheck.nextHole}
+                    </div>
+                  ) : alreadyDeclined ? (
+                    <div style={{textAlign:"center",padding:"10px",background:"rgba(255,255,255,0.03)",borderRadius:10,border:"1px solid "+C.border,color:C.muted,fontWeight:600,fontSize:13}}>
+                      No Press — continuing
+                    </div>
+                  ) : (
+                    <div style={{display:"flex",gap:10}}>
+                      <button
+                        onClick={() => setPressCheck(pc => ({...pc, pressed: [...(pc.pressed||[]), opp.playerId]}))}
+                        style={{flex:1,padding:"12px",borderRadius:10,fontSize:14,fontWeight:700,cursor:"pointer",
+                          background: youAreDown?"rgba(224,80,80,0.15)":"rgba(232,184,75,0.15)",
+                          border:"1px solid "+(youAreDown?C.red:C.gold),
+                          color: youAreDown?C.red:C.gold}}
+                      >
+                        📢 Yes, Press
+                      </button>
+                      <button
+                        onClick={() => setPressCheck(pc => {
+                          // Mark as "declined" so the card shows No Press and we skip
+                          const declined = [...(pc.declined||[]), opp.playerId];
+                          return {...pc, declined};
+                        })}
+                        style={{flex:1,padding:"12px",borderRadius:10,fontSize:14,fontWeight:700,cursor:"pointer",
+                          background:"transparent",border:"1px solid "+C.border,color:C.muted}}
+                      >
+                        No Press
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+
+            <BigBtn
+              color={C.green}
+              onClick={() => {
+                // Record all presses on current hole (bet starts on nextHole in calcAutoPressNassau)
+                (pressCheck.pressed || []).forEach(oppId => callManualPress(oppId, currentHole));
+                setCurrentHole(pressCheck.nextHole);
+                setPressCheck(null);
+              }}
+            >
+              Continue to Hole {pressCheck.nextHole} →
+            </BigBtn>
+          </div>
+        </div>
+      )}
     );
   }
 
