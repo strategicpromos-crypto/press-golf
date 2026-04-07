@@ -811,16 +811,20 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
                     </div>
                     {/* Manual Press button - only for same group Nassau bets */}
                     {opp.sameGroup && (opp.betType === "nassau" || opp.betType === "nassau-press") && (
-                      <button
-                        onClick={() => callManualPress(opp.playerId)}
-                        style={{
-                          background:(opp.manualPresses||[]).some(p=>p.hole===currentHole)?"#555":C.red,
-                          border:"none",color:"#fff",padding:"6px 10px",borderRadius:8,
-                          fontSize:11,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"
-                        }}
-                      >
-                        {(opp.manualPresses||[]).some(p=>p.hole===currentHole) ? "Pressed" : "Press!"}
-                      </button>
+                      (opp.manualPresses||[]).some(p=>p.hole===currentHole)
+                        ? (
+                          <button disabled style={{background:"#555",border:"none",color:"#aaa",padding:"6px 10px",borderRadius:8,fontSize:11,fontWeight:700,cursor:"not-allowed",whiteSpace:"nowrap"}}>
+                            Pressed
+                          </button>
+                        )
+                        : tally.total < 0 && (
+                          <button
+                            onClick={() => callManualPress(opp.playerId)}
+                            style={{background:C.red,border:"none",color:"#fff",padding:"6px 10px",borderRadius:8,fontSize:11,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}
+                          >
+                            Press!
+                          </button>
+                        )
                     )}
                   </div>
                 </div>
