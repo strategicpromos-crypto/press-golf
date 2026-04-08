@@ -201,10 +201,10 @@ export default function TeamTournament({onBack, user}){
 
   // HOME
   if(screen==="home"){
-    const active=savedTourneys.filter(t=>t.status==="active");
-    const setups=savedTourneys.filter(t=>t.status==="setup");
+    const active=(savedTourneys||[]).filter(t=>t.status==="active");
+    const setups=(savedTourneys||[]).filter(t=>t.status==="setup");
     return(
-      <div style={{fontFamily:"Georgia,serif",minHeight:"100vh",background:C.bg,color:C.text,paddingBottom:40}}>
+      <div style={{fontFamily:"Georgia,serif",minHeight:"100vh",background:C.bg,color:C.text,paddingBottom:40,position:"relative"}}>
         <div style={{background:"linear-gradient(180deg,"+C.card+" 0%,transparent 100%)",padding:"50px 24px 24px"}}>
           <button onClick={onBack} style={{background:"rgba(123,180,80,0.15)",border:"1px solid "+C.green,color:C.green,fontSize:13,cursor:"pointer",padding:"8px 16px",borderRadius:20,fontWeight:700,marginBottom:20}}>‹ Back</button>
           <div style={{textAlign:"center"}}>
@@ -290,10 +290,10 @@ export default function TeamTournament({onBack, user}){
           </button>
         </div>
 
-        {/* Help overlay */}
+        {/* Help overlay - uses normal flow div not position:fixed */}
         {showHelp&&(
-          <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:600,overflowY:"auto"}}>
-            <div style={{background:C.surface,margin:"20px",borderRadius:20,padding:"24px",border:"1px solid "+C.border}}>
+          <div style={{position:"absolute",top:0,left:0,right:0,minHeight:"100%",background:"rgba(0,0,0,0.92)",zIndex:600,overflowY:"auto",padding:"20px"}}>
+            <div style={{background:C.surface,borderRadius:20,padding:"24px",border:"1px solid "+C.border}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
                 <div style={{fontSize:18,fontWeight:800}}>How It Works</div>
                 <button onClick={()=>setShowHelp(false)} style={{background:C.dim,border:"none",color:C.muted,width:32,height:32,borderRadius:"50%",fontSize:16,cursor:"pointer"}}>✕</button>
