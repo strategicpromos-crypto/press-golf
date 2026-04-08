@@ -497,6 +497,25 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
   const [fDate,setFDate]=useState(today); const [fDir,setFDir]=useState("received"); const [fStr,setFStr]=useState("1"); const [fMoney,setFMoney]=useState(""); const [fNotes,setFNotes]=useState(""); const [fWon,setFWon]=useState(true);
   const [bDate,setBDate]=useState(today); const [bType,setBType]=useState(BET_TYPES[0]); const [bAmt,setBAmt]=useState(""); const [bNotes,setBNotes]=useState(""); const [bWon,setBWon]=useState(true);
   const [eDir,setEDir]=useState("even"); const [eStr,setEStr]=useState("1");
+  const [installPrompt,setInstallPrompt]=useState(null);
+  const [showInstall,setShowInstall]=useState(false);
+  const [isIOS]=useState(()=>/iphone|ipad|ipod/i.test(navigator.userAgent));
+  const [isInstalled]=useState(()=>window.matchMedia("(display-mode: standalone)").matches||window.navigator.standalone===true);
+
+  useEffect(()=>{
+    const handler=(e)=>{e.preventDefault();setInstallPrompt(e);if(!isInstalled)setShowInstall(true);};
+    window.addEventListener("beforeinstallprompt",handler);
+    if(isIOS&&!isInstalled)setShowInstall(true);
+    return()=>window.removeEventListener("beforeinstallprompt",handler);
+  },[]);
+
+  async function handleInstall(){
+    if(installPrompt){
+      installPrompt.prompt();
+      const r=await installPrompt.userChoice;
+      if(r.outcome==="accepted"){setShowInstall(false);setInstallPrompt(null);}
+    }
+  }
 
   function t2(msg,error=false){setToast({msg,error});setTimeout(()=>setToast({msg:"",error:false}),2400);}
 
@@ -988,6 +1007,29 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
       </div>
 
       <div style={{padding:"0 16px"}}>
+        {/* PWA Install Banner */}
+        {showInstall&&!isInstalled&&(
+          <div style={{background:`linear-gradient(135deg,rgba(123,180,80,0.15),rgba(123,180,80,0.08))`,border:`1px solid ${C.green}44`,borderRadius:14,padding:"14px 16px",marginBottom:14}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12}}>
+              <div style={{flex:1}}>
+                <div style={{fontWeight:700,fontSize:14,color:C.green,marginBottom:2}}>⛳ Add Press to your home screen</div>
+                {isIOS?(
+                  <div style={{fontSize:12,color:C.muted,lineHeight:1.5}}>
+                    Tap <span style={{fontWeight:700,color:C.text}}>Share ↑</span> in Safari → <span style={{fontWeight:700,color:C.text}}>Add to Home Screen</span>
+                  </div>
+                ):(
+                  <div style={{fontSize:12,color:C.muted}}>Works like a native app — free to install</div>
+                )}
+              </div>
+              {!isIOS&&installPrompt?(
+                <button onClick={handleInstall} style={{background:C.green,border:"none",color:"#0a1a0f",padding:"10px 16px",borderRadius:10,fontSize:13,fontWeight:800,cursor:"pointer",flexShrink:0}}>Install</button>
+              ):(
+                <button onClick={()=>setShowInstall(false)} style={{background:"transparent",border:"none",color:C.muted,fontSize:20,cursor:"pointer",padding:"0 4px",flexShrink:0}}>✕</button>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Resume Round banner */}
         {activeRound&&(
           <div style={{background:`linear-gradient(135deg,rgba(123,180,80,0.15),rgba(123,180,80,0.05))`,border:`1px solid ${C.green}44`,borderRadius:14,padding:"14px 16px",marginBottom:14,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
