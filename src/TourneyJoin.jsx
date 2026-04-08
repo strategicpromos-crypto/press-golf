@@ -54,42 +54,44 @@ export default function TourneyJoin({ code, teamIdx, onDirector, onCaptain, onSp
     setError("");
     const upper = raw.trim().toUpperCase();
 
-    // Spectator: starts with S, rest matches a director code (no dash)
-    const isSpectator = upper.startsWith("S") && !upper.includes("-") && upper.length >= 5;
+    // Director: contains # → e.g. WEDS48-ABC#XQ7
+    const isDirector = upper.includes("#");
 
-    // Captain code: WEDS48-T3 format
-    const captainMatch = upper.match(/^([A-Z]+\d+)-T(\d+)$/);
+    // Captain: ends in -T1, -T2 etc → e.g. WEDS48-ABC-T2
+    const captainMatch = upper.match(/^(.+)-T(\d+)$/);
+
+    // Spectator: public code, no # and no -T suffix → e.g. WEDS48-ABC
+    const isSpectator = !isDirector && !captainMatch;
+
+    // Derive the public code to look up spectator_code in DB
+    let lookupCode;
+    if (isDirector) {
+      lookupCode = upper; // look up by director_code
+    } else if (captainMatch) {
+      lookupCode = captainMatch[1]; // base code before -T2
+    } else {
+      lookupCode = upper; // bare public code
+    }
 
     // Director code: plain 6 chars
     const dirCode = isSpectator ? upper.slice(1)
       : captainMatch ? captainMatch[1]
       : upper;
 
-    // Spectator & captain: look up by spectator_code (public code e.g. WEDS48)
-    // Director: look up by director_code (secret e.g. WEDS48#7XQ)
-    const isDirector = upper.includes("#");
-
     let data;
     if (isDirector) {
       const res = await sb.from("team_tournaments").select("*").eq("director_code", upper).single();
       data = res.data;
     } else {
-      // public code — used by spectators AND captains
-      const dirCode = isSpectator ? upper.slice(1) : captainMatch ? captainMatch[1] : upper;
-      const res = await sb.from("team_tournaments").select("*").eq("spectator_code", dirCode).single();
+      const res = await sb.from("team_tournaments").select("*").eq("spectator_code", lookupCode).single();
       data = res.data;
     }
 
     if (!data) { setStatus("invalid"); setError("Code not found. Check the code and try again."); return; }
     setTourney(data);
 
-    // Director: has # in code → full access, no PIN needed (code itself is the secret)
     if (isDirector) { onDirector(data); return; }
 
-    // Spectator: starts with S prefix
-    if (isSpectator) { onSpectator(data); return; }
-
-    // Captain: WEDS48-T2 format → ask for PIN
     if (captainMatch) {
       const idx = parseInt(captainMatch[2], 10) - 1;
       const team = (data.teams || [])[idx];
@@ -109,7 +111,7 @@ export default function TourneyJoin({ code, teamIdx, onDirector, onCaptain, onSp
       return;
     }
 
-    // Bare public code (e.g. WEDS48) → spectator only, no team picker
+    // Bare public code → spectator
     onSpectator(data);
   }
 
@@ -127,36 +129,62 @@ export default function TourneyJoin({ code, teamIdx, onDirector, onCaptain, onSp
   if (status === "pin" && pendingCaptain) {
     const team = (pendingCaptain.tourney.teams || [])[pendingCaptain.idx];
     return (
-      <div style={{ fontFamily:"Georgia,serif", minHeight:"100vh", background:C.bg, color:C.text, display:"flex", alignItems:"center", justifyContent:"center", padding:24 }}>
-        <div style={{ width:"100%", maxWidth:340, textAlign:"center" }}>
-          <div style={{ fontSize:40, marginBottom:12 }}>🔐</div>
-          <div style={{ fontSize:22, fontWeight:800, marginBottom:4 }}>{team?.name}</div>
-          <div style={{ fontSize:14, color:C.muted, marginBottom:28 }}>Enter your 4-digit captain PIN</div>
-          <input
-            value={pinInput}
-            onChange={e => setPinInput(e.target.value.replace(/\D/g,"").slice(0,4))}
-            placeholder="----"
-            maxLength={4}
-            inputMode="numeric"
-            style={{ width:"100%", padding:"18px", background:C.surface, border:`2px solid ${C.border}`, borderRadius:14, color:C.text, fontSize:36, fontWeight:800, outline:"none", textAlign:"center", letterSpacing:12, boxSizing:"border-box", marginBottom:12 }}
-          />
-          {error && <div style={{ color:C.red, fontSize:13, marginBottom:12 }}>{error}</div>}
-          <button onClick={() => {
-            const correctPin = team?.pin;
-            if (pinInput === correctPin) {
-              onCaptain(pendingCaptain.tourney, pendingCaptain.idx);
-            } else {
-              setError("Wrong PIN. Check with your tournament director.");
-              setPinInput("");
-            }
-          }} disabled={pinInput.length !== 4} style={{
-            width:"100%", padding:"18px", background:pinInput.length===4?C.green:"#1a2a1a",
-            color:pinInput.length===4?"#0a1a0f":C.muted, border:"none", borderRadius:14,
-            fontSize:17, fontWeight:800, cursor:pinInput.length===4?"pointer":"not-allowed", marginBottom:12
-          }}>Enter →</button>
-          <button onClick={() => { setStatus("prompt"); setPinInput(""); setError(""); }} style={{ background:"transparent", border:"none", color:C.muted, fontSize:13, cursor:"pointer" }}>
-            ← Try a different code
-          </button>
+      <div style={{ fontFamily:"Georgia,serif", minHeight:"100vh", background:C.bg, color:C.text, display:"flex", flexDirection:"column" }}>
+
+        {/* Install banner */}
+        {showInstall && !isInstalled && (
+          <div style={{ background:"linear-gradient(135deg,rgba(123,180,80,0.18),rgba(123,180,80,0.08))", borderBottom:`1px solid ${C.green}44`, padding:"14px 20px" }}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:12 }}>
+              <div style={{ flex:1 }}>
+                <div style={{ fontWeight:700, fontSize:13, color:C.green, marginBottom:2 }}>⛳ Add Press to your home screen</div>
+                {isIOS
+                  ? <div style={{ fontSize:11, color:C.muted }}>Tap <b style={{color:C.text}}>Share ↑</b> → <b style={{color:C.text}}>Add to Home Screen</b></div>
+                  : <div style={{ fontSize:11, color:C.muted }}>Free golf bet tracker — works like a native app</div>
+                }
+              </div>
+              {!isIOS && installPrompt
+                ? <button onClick={handleInstall} style={{ background:C.green, border:"none", color:"#0a1a0f", padding:"8px 14px", borderRadius:8, fontSize:12, fontWeight:800, cursor:"pointer", flexShrink:0 }}>Install</button>
+                : <button onClick={()=>setShowInstall(false)} style={{ background:"transparent", border:"none", color:C.muted, fontSize:18, cursor:"pointer" }}>✕</button>
+              }
+            </div>
+          </div>
+        )}
+
+        <div style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", padding:24 }}>
+          <div style={{ width:"100%", maxWidth:340, textAlign:"center" }}>
+            <div style={{ fontSize:40, marginBottom:12 }}>🏆</div>
+            <div style={{ fontSize:22, fontWeight:800, marginBottom:4 }}>{pendingCaptain.tourney.name}</div>
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:8, marginBottom:20 }}>
+              <div style={{ width:12, height:12, borderRadius:"50%", background:team?.color }}/>
+              <div style={{ fontSize:16, fontWeight:700, color:team?.color }}>{team?.name}</div>
+            </div>
+            <div style={{ fontSize:14, color:C.muted, marginBottom:28 }}>Enter your 4-digit captain PIN</div>
+            <input
+              autoFocus
+              value={pinInput}
+              onChange={e => setPinInput(e.target.value.replace(/\D/g,"").slice(0,4))}
+              placeholder="· · · ·"
+              maxLength={4}
+              inputMode="numeric"
+              style={{ width:"100%", padding:"20px", background:C.surface, border:`2px solid ${pinInput.length===4?C.green:C.border}`, borderRadius:14, color:C.text, fontSize:40, fontWeight:800, outline:"none", textAlign:"center", letterSpacing:16, boxSizing:"border-box", marginBottom:12, transition:"border-color 0.2s" }}
+            />
+            {error && <div style={{ color:C.red, fontSize:13, marginBottom:12 }}>{error}</div>}
+            <button onClick={() => {
+              if (pinInput === team?.pin) {
+                onCaptain(pendingCaptain.tourney, pendingCaptain.idx);
+              } else {
+                setError("Wrong PIN — check the text from your director.");
+                setPinInput("");
+              }
+            }} disabled={pinInput.length !== 4} style={{
+              width:"100%", padding:"18px", background:pinInput.length===4?C.green:"#1a2a1a",
+              color:pinInput.length===4?"#0a1a0f":C.muted, border:"none", borderRadius:14,
+              fontSize:17, fontWeight:800, cursor:pinInput.length===4?"pointer":"not-allowed", marginBottom:16
+            }}>Enter Tournament →</button>
+            <button onClick={() => { setStatus("prompt"); setPinInput(""); setError(""); }} style={{ background:"transparent", border:"none", color:C.muted, fontSize:13, cursor:"pointer" }}>
+              Wrong tournament? Enter a different code
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -232,9 +260,9 @@ export default function TourneyJoin({ code, teamIdx, onDirector, onCaptain, onSp
         <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:14, padding:"16px" }}>
           <div style={{ fontSize:11, color:C.green, letterSpacing:1.5, textTransform:"uppercase", marginBottom:12, fontWeight:600 }}>What code do I use?</div>
           {[
-            { code:"WEDS48", label:"Spectator", desc:"Watch the live leaderboard — read only", color:C.muted },
-            { code:"WEDS48-T2", label:"Team Captain", desc:"Enter scores for your team (you'll need your PIN too)", color:C.green },
-            { code:"WEDS48#7XQ", label:"Director", desc:"Full access — create and manage the tournament", color:C.gold },
+            { code:"WEDS48-ABC", label:"Spectator", desc:"Watch the live leaderboard — read only", color:C.muted },
+            { code:"WEDS48-ABC-T2", label:"Team Captain", desc:"Enter scores for your team (you'll need your PIN too)", color:C.green },
+            { code:"WEDS48-ABC#XQ7", label:"Director", desc:"Full access — create and manage the tournament", color:C.gold },
           ].map((r,i)=>(
             <div key={i} style={{ display:"flex", alignItems:"center", gap:12, marginBottom:i<2?12:0 }}>
               <div style={{ fontFamily:"monospace", fontSize:13, fontWeight:800, color:r.color, width:110, flexShrink:0 }}>{r.code}</div>
