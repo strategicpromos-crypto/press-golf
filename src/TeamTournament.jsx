@@ -125,12 +125,15 @@ export default function TeamTournament({onBack, user}){
   async function createTourney(builtTeams){
     if(!user?.id)return null;
 
-    // Generate day-based code: e.g. WEDS48 (Wed + month4 + day8)
+    // Generate codes
     const now     = new Date();
     const days    = ["SUN","MON","TUES","WEDS","THUR","FRI","SAT"];
     const dayStr  = days[now.getDay()];
     const dateStr = String(now.getMonth()+1) + String(now.getDate());
-    const dirCode = dayStr + dateStr; // e.g. WEDS48
+    const publicCode = dayStr + dateStr;          // e.g. WEDS48  ← spectators use this
+    const chars   = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    const secret  = Array.from({length:3},()=>chars[Math.floor(Math.random()*chars.length)]).join("");
+    const dirCode = publicCode + "#" + secret;    // e.g. WEDS48#7XQ ← director only
 
     // Generate a 4-digit PIN for each team captain (sent privately)
     const makePin = () => String(Math.floor(1000 + Math.random() * 9000));
@@ -145,8 +148,8 @@ export default function TeamTournament({onBack, user}){
       teams:teamsWithPins,
       current_hole:1,
       status:"setup",
-      director_code:dirCode,
-      spectator_code:"S"+dirCode,
+      director_code:dirCode,       // WEDS48#7XQ — director only
+      spectator_code:publicCode,   // WEDS48 — public
     }).select().single();
     if(data){
       setDirectorCode(dirCode);
@@ -434,28 +437,47 @@ export default function TeamTournament({onBack, user}){
           {/* Share Codes Panel */}
           {tourneyId&&directorCode&&(()=>{
             const appUrl="https://press-golf.vercel.app";
-            const spectatorLink=`${appUrl}?tourney=S${directorCode}`;
+            // Public code = everything before the # e.g. WEDS48
+            const publicCode=directorCode.split("#")[0];
+            const captainBase=publicCode; // captain codes use public code, not secret
+            const spectatorLink=`${appUrl}?tourney=${publicCode}`;
             return(
               <div style={{background:"rgba(123,180,80,0.06)",border:"1px solid rgba(123,180,80,0.2)",borderRadius:14,padding:"16px",marginBottom:16}}>
                 <div style={{fontSize:11,color:C.green,letterSpacing:1.5,textTransform:"uppercase",marginBottom:12,fontWeight:600}}>🔗 Share Tournament</div>
+
+                {/* Director code — secret */}
                 <div style={{marginBottom:12}}>
-                  <div style={{fontSize:11,color:C.muted,marginBottom:4}}>Your director code (keep private)</div>
-                  <div style={{background:C.card,border:"1px solid "+C.border,borderRadius:8,padding:"10px 14px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                    <div style={{fontSize:22,fontWeight:800,letterSpacing:4,color:C.gold}}>{directorCode}</div>
+                  <div style={{fontSize:11,color:C.red,marginBottom:4,fontWeight:600}}>🔒 Your director code — KEEP PRIVATE</div>
+                  <div style={{background:C.card,border:"1px solid rgba(224,80,80,0.3)",borderRadius:8,padding:"10px 14px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                    <div style={{fontSize:20,fontWeight:800,letterSpacing:2,color:C.red}}>{directorCode}</div>
                     <button onClick={()=>navigator.clipboard?.writeText(directorCode)} style={{background:"transparent",border:"none",color:C.muted,fontSize:12,cursor:"pointer"}}>Copy</button>
                   </div>
+                  <div style={{fontSize:10,color:C.muted,marginTop:4}}>Never share this — it gives full control over all scores</div>
                 </div>
+
+                {/* Public code — announce to everyone */}
                 <div style={{marginBottom:12}}>
-                  <div style={{fontSize:11,color:C.muted,marginBottom:4}}>Spectator link — share with anyone to watch live</div>
+                  <div style={{fontSize:11,color:C.green,marginBottom:4,fontWeight:600}}>📢 Public code — announce to everyone</div>
+                  <div style={{background:C.card,border:"1px solid "+C.green+"44",borderRadius:8,padding:"10px 14px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                    <div style={{fontSize:22,fontWeight:800,letterSpacing:4,color:C.green}}>{publicCode}</div>
+                    <button onClick={()=>navigator.clipboard?.writeText(publicCode)} style={{background:"transparent",border:"none",color:C.muted,fontSize:12,cursor:"pointer"}}>Copy</button>
+                  </div>
+                  <div style={{fontSize:10,color:C.muted,marginTop:4}}>Spectators type this to watch the leaderboard. Captains use it + team number + PIN.</div>
+                </div>
+
+                {/* Spectator link */}
+                <div style={{marginBottom:12}}>
+                  <div style={{fontSize:11,color:C.muted,marginBottom:6}}>Spectator link (tap to open leaderboard)</div>
                   <div style={{display:"flex",gap:8}}>
                     <button onClick={()=>navigator.clipboard?.writeText(spectatorLink)} style={{flex:1,padding:"10px",background:C.card,border:"1px solid "+C.border,borderRadius:8,color:C.text,fontSize:11,cursor:"pointer",fontWeight:600}}>📋 Copy Link</button>
-                    <button onClick={()=>window.open(`sms:?&body=${encodeURIComponent("Watch live: "+spectatorLink)}`)} style={{flex:1,padding:"10px",background:C.card,border:"1px solid "+C.border,borderRadius:8,color:C.text,fontSize:11,cursor:"pointer",fontWeight:600}}>📱 Text It</button>
+                    <button onClick={()=>window.open(`sms:?&body=${encodeURIComponent("Watch the leaderboard live: "+spectatorLink)}`)} style={{flex:1,padding:"10px",background:C.card,border:"1px solid "+C.border,borderRadius:8,color:C.text,fontSize:11,cursor:"pointer",fontWeight:600}}>📱 Text It</button>
                   </div>
                 </div>
-                <div style={{fontSize:11,color:C.muted,marginBottom:8}}>Team captain codes — text privately with PIN</div>
+
+                <div style={{fontSize:11,color:C.muted,marginBottom:8,fontWeight:600}}>Captain codes — text privately with PIN</div>
                 {teams.map((team,i)=>{
-                  const captainCode=`${directorCode}-T${i+1}`;
-                  const captainLink=`${appUrl}?tourney=${directorCode}&team=${i}`;
+                  const captainCode=`${captainBase}-T${i+1}`;
+                  const captainLink=`${appUrl}?tourney=${captainBase}&team=${i}`;
                   const pin=team.pin||"----";
                   return(
                     <div key={i} style={{background:C.card,border:`1px solid ${team.color}33`,borderRadius:10,padding:"10px 12px",marginBottom:8}}>
