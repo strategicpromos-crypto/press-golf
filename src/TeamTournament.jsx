@@ -173,19 +173,19 @@ export default function TeamTournament({onBack, user}){
   }
 
   // ── Delete a saved tournament ──────────────────────────────────────────────
-  const[confirmDelete,setConfirmDelete]=useState(null);
+  const[confirmDelete,setConfirmDelete]=useState(null); // id of tourney to delete
   const[deleteInput,setDeleteInput]=useState("");
 
   async function deleteTourney(id){
-    const t=savedTourneys.find(s=>s.id===id);
     setDeleteInput("");
-    setConfirmDelete(t||{id});
+    setConfirmDelete(id);
   }
 
-  async function confirmDeleteTourney(id){
-    await sb.from("team_tournaments").delete().eq("id",id);
-    setSavedTourneys(prev=>prev.filter(t=>t.id!==id));
-    if(tourneyId===id){setTourneyId(null);setTeams([]);setDirectorCode(null);}
+  async function confirmDeleteTourney(){
+    if(deleteInput.toUpperCase()!=="DELETE")return;
+    await sb.from("team_tournaments").delete().eq("id",confirmDelete);
+    setSavedTourneys(prev=>prev.filter(t=>t.id!==confirmDelete));
+    if(tourneyId===confirmDelete){setTourneyId(null);setTeams([]);setDirectorCode(null);}
     setConfirmDelete(null);
     setDeleteInput("");
   }
@@ -242,21 +242,38 @@ export default function TeamTournament({onBack, user}){
               <div style={{fontSize:11,color:C.gold,letterSpacing:1.5,textTransform:"uppercase",marginBottom:10,fontWeight:600}}>▶ In Progress</div>
               {active.map(t=>(
                 <div key={t.id} style={{background:"rgba(232,184,75,0.08)",border:"1px solid "+C.gold+"44",borderRadius:14,padding:"14px 16px",marginBottom:8}}>
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
-                    <div style={{fontWeight:700,fontSize:15,color:C.gold}}>{t.name||"Tournament"}</div>
-                    <button onClick={()=>deleteTourney(t.id)} style={{background:"transparent",border:"none",color:C.muted,fontSize:18,cursor:"pointer",padding:"0 4px"}}>✕</button>
-                  </div>
-                  <div style={{fontSize:11,color:C.muted,marginBottom:10}}>
-                    {COURSES[t.course_id]?.name||t.course_id} · Hole {t.current_hole} · {(t.teams||[]).length} teams
-                  </div>
-                  <div style={{display:"flex",gap:8}}>
-                    <button onClick={()=>resumeTourney(t)} disabled={loading} style={{flex:2,padding:"11px",background:C.gold,color:"#0a1a0f",border:"none",borderRadius:10,fontSize:14,fontWeight:800,cursor:"pointer"}}>
-                      {loading?"Loading...":"▶ Resume Round"}
-                    </button>
-                    <button onClick={async()=>{await resumeTourney(t);setScreen("leaderboard");}} style={{flex:1,padding:"11px",background:"transparent",color:C.gold,border:"1px solid "+C.gold+"44",borderRadius:10,fontSize:13,fontWeight:700,cursor:"pointer"}}>
-                      📊 Board
-                    </button>
-                  </div>
+                  {confirmDelete===t.id?(
+                    <div>
+                      <div style={{fontSize:13,color:C.red,fontWeight:700,marginBottom:8,textAlign:"center"}}>⚠️ Type DELETE to confirm</div>
+                      <input autoFocus value={deleteInput} onChange={e=>setDeleteInput(e.target.value)}
+                        placeholder="Type DELETE" autoCapitalize="characters"
+                        style={{width:"100%",padding:"12px",background:C.bg,border:`2px solid ${deleteInput.toUpperCase()==="DELETE"?"rgba(224,80,80,0.6)":C.border}`,borderRadius:8,color:C.red,fontSize:16,fontWeight:800,outline:"none",textAlign:"center",letterSpacing:3,boxSizing:"border-box",fontFamily:"monospace",marginBottom:10}}
+                      />
+                      <div style={{display:"flex",gap:8}}>
+                        <button onClick={()=>{setConfirmDelete(null);setDeleteInput("");}} style={{flex:2,padding:"12px",background:C.green,color:"#0a1a0f",border:"none",borderRadius:10,fontSize:14,fontWeight:800,cursor:"pointer"}}>Keep It ✓</button>
+                        <button onClick={confirmDeleteTourney} disabled={deleteInput.toUpperCase()!=="DELETE"}
+                          style={{flex:1,padding:"12px",background:deleteInput.toUpperCase()==="DELETE"?"rgba(224,80,80,0.2)":"transparent",color:deleteInput.toUpperCase()==="DELETE"?C.red:C.dim,border:`1px solid ${deleteInput.toUpperCase()==="DELETE"?"rgba(224,80,80,0.5)":C.border}`,borderRadius:10,fontSize:13,fontWeight:700,cursor:deleteInput.toUpperCase()==="DELETE"?"pointer":"not-allowed"}}>Delete</button>
+                      </div>
+                    </div>
+                  ):(
+                    <>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+                        <div style={{fontWeight:700,fontSize:15,color:C.gold}}>{t.name||"Tournament"}</div>
+                        <button onClick={()=>deleteTourney(t.id)} style={{background:"transparent",border:"none",color:C.muted,fontSize:18,cursor:"pointer",padding:"0 4px"}}>✕</button>
+                      </div>
+                      <div style={{fontSize:11,color:C.muted,marginBottom:10}}>
+                        {COURSES[t.course_id]?.name||t.course_id} · Hole {t.current_hole} · {(t.teams||[]).length} teams
+                      </div>
+                      <div style={{display:"flex",gap:8}}>
+                        <button onClick={()=>resumeTourney(t)} disabled={loading} style={{flex:2,padding:"11px",background:C.gold,color:"#0a1a0f",border:"none",borderRadius:10,fontSize:14,fontWeight:800,cursor:"pointer"}}>
+                          {loading?"Loading...":"▶ Resume Round"}
+                        </button>
+                        <button onClick={async()=>{await resumeTourney(t);setScreen("leaderboard");}} style={{flex:1,padding:"11px",background:"transparent",color:C.gold,border:"1px solid "+C.gold+"44",borderRadius:10,fontSize:13,fontWeight:700,cursor:"pointer"}}>
+                          📊 Board
+                        </button>
+                      </div>
+                    </>
+                  )}
                 </div>
               ))}
             </div>
@@ -268,25 +285,38 @@ export default function TeamTournament({onBack, user}){
               <div style={{fontSize:11,color:C.green,letterSpacing:1.5,textTransform:"uppercase",marginBottom:10,fontWeight:600}}>📋 Saved Setups</div>
               {setups.map(t=>(
                 <div key={t.id} style={{background:C.card,border:"1px solid "+C.border,borderRadius:14,padding:"14px 16px",marginBottom:8}}>
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
-                    <div style={{fontWeight:700,fontSize:15}}>{t.name||"Tournament Setup"}</div>
-                    <button onClick={()=>deleteTourney(t.id)} style={{background:"transparent",border:"none",color:C.muted,fontSize:18,cursor:"pointer",padding:"0 4px"}}>✕</button>
-                  </div>
-                  <div style={{fontSize:11,color:C.muted,marginBottom:10}}>
-                    {COURSES[t.course_id]?.name||t.course_id} · {(t.teams||[]).length} teams · Last edited {new Date(t.updated_at).toLocaleDateString()}
-                  </div>
-                  <div style={{display:"flex",gap:8}}>
-                    <button onClick={()=>resumeTourney(t)} disabled={loading} style={{flex:1,padding:"11px",background:C.green,color:"#0a1a0f",border:"none",borderRadius:10,fontSize:13,fontWeight:800,cursor:"pointer"}}>
-                      ✏️ Edit Setup
-                    </button>
-                    <button onClick={async()=>{
-                      await resumeTourney(t);
-                      setCurrentHole(1);setActiveTeam(0);
-                      setScreen("scoring");
-                    }} style={{flex:1,padding:"11px",background:"transparent",color:C.green,border:"1px solid "+C.green+"44",borderRadius:10,fontSize:13,fontWeight:700,cursor:"pointer"}}>
-                      ⛳ Tee Off
-                    </button>
-                  </div>
+                  {confirmDelete===t.id?(
+                    <div>
+                      <div style={{fontSize:13,color:C.red,fontWeight:700,marginBottom:8,textAlign:"center"}}>⚠️ Type DELETE to confirm</div>
+                      <input autoFocus value={deleteInput} onChange={e=>setDeleteInput(e.target.value)}
+                        placeholder="Type DELETE" autoCapitalize="characters"
+                        style={{width:"100%",padding:"12px",background:C.bg,border:`2px solid ${deleteInput.toUpperCase()==="DELETE"?"rgba(224,80,80,0.6)":C.border}`,borderRadius:8,color:C.red,fontSize:16,fontWeight:800,outline:"none",textAlign:"center",letterSpacing:3,boxSizing:"border-box",fontFamily:"monospace",marginBottom:10}}
+                      />
+                      <div style={{display:"flex",gap:8}}>
+                        <button onClick={()=>{setConfirmDelete(null);setDeleteInput("");}} style={{flex:2,padding:"12px",background:C.green,color:"#0a1a0f",border:"none",borderRadius:10,fontSize:14,fontWeight:800,cursor:"pointer"}}>Keep It ✓</button>
+                        <button onClick={confirmDeleteTourney} disabled={deleteInput.toUpperCase()!=="DELETE"}
+                          style={{flex:1,padding:"12px",background:deleteInput.toUpperCase()==="DELETE"?"rgba(224,80,80,0.2)":"transparent",color:deleteInput.toUpperCase()==="DELETE"?C.red:C.dim,border:`1px solid ${deleteInput.toUpperCase()==="DELETE"?"rgba(224,80,80,0.5)":C.border}`,borderRadius:10,fontSize:13,fontWeight:700,cursor:deleteInput.toUpperCase()==="DELETE"?"pointer":"not-allowed"}}>Delete</button>
+                      </div>
+                    </div>
+                  ):(
+                    <>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+                        <div style={{fontWeight:700,fontSize:15}}>{t.name||"Tournament Setup"}</div>
+                        <button onClick={()=>deleteTourney(t.id)} style={{background:"transparent",border:"none",color:C.muted,fontSize:18,cursor:"pointer",padding:"0 4px"}}>✕</button>
+                      </div>
+                      <div style={{fontSize:11,color:C.muted,marginBottom:10}}>
+                        {COURSES[t.course_id]?.name||t.course_id} · {(t.teams||[]).length} teams · Last edited {new Date(t.updated_at).toLocaleDateString()}
+                      </div>
+                      <div style={{display:"flex",gap:8}}>
+                        <button onClick={()=>resumeTourney(t)} disabled={loading} style={{flex:1,padding:"11px",background:C.green,color:"#0a1a0f",border:"none",borderRadius:10,fontSize:13,fontWeight:800,cursor:"pointer"}}>
+                          ✏️ Edit Setup
+                        </button>
+                        <button onClick={async()=>{await resumeTourney(t);setCurrentHole(1);setActiveTeam(0);setScreen("scoring");}} style={{flex:1,padding:"11px",background:"transparent",color:C.green,border:"1px solid "+C.green+"44",borderRadius:10,fontSize:13,fontWeight:700,cursor:"pointer"}}>
+                          ⛳ Tee Off
+                        </button>
+                      </div>
+                    </>
+                  )}
                 </div>
               ))}
             </div>
@@ -310,49 +340,6 @@ export default function TeamTournament({onBack, user}){
           </button>
         </div>
 
-        {/* Delete confirmation modal — fixed overlay above everything */}
-        {confirmDelete&&(
-          <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"rgba(0,0,0,0.92)",zIndex:900,display:"flex",alignItems:"center",justifyContent:"center",padding:24}}
-            onClick={(e)=>{if(e.target===e.currentTarget){setConfirmDelete(null);setDeleteInput("");}}}
-          >
-            <div style={{background:C.surface,borderRadius:20,padding:24,border:"1px solid rgba(224,80,80,0.4)",width:"100%",maxWidth:360}}>
-              <div style={{textAlign:"center",marginBottom:20}}>
-                <div style={{fontSize:40,marginBottom:12}}>⚠️</div>
-                <div style={{fontSize:18,fontWeight:800,color:C.red,marginBottom:8}}>Delete Tournament?</div>
-                <div style={{fontSize:14,color:C.text,fontWeight:600,marginBottom:6}}>{confirmDelete.name||"This tournament"}</div>
-                <div style={{fontSize:13,color:C.muted,lineHeight:1.6}}>Permanently deletes all scores, teams, and share codes. Cannot be undone.</div>
-              </div>
-              <div style={{background:"rgba(224,80,80,0.08)",border:"1px solid rgba(224,80,80,0.2)",borderRadius:10,padding:"12px 14px",marginBottom:16,fontSize:12,color:C.red,textAlign:"center",fontWeight:600}}>
-                All round scores will be lost forever
-              </div>
-              <div style={{marginBottom:16}}>
-                <div style={{fontSize:12,color:C.muted,marginBottom:8,textAlign:"center"}}>
-                  Type <span style={{fontFamily:"monospace",fontWeight:800,color:C.red,letterSpacing:2}}>DELETE</span> to confirm
-                </div>
-                <input
-                  autoFocus
-                  value={deleteInput}
-                  onChange={e=>setDeleteInput(e.target.value)}
-                  placeholder="Type DELETE here"
-                  autoCapitalize="characters"
-                  style={{width:"100%",padding:"14px",background:C.bg,border:`2px solid ${deleteInput.toUpperCase()==="DELETE"?"rgba(224,80,80,0.6)":C.border}`,borderRadius:10,color:deleteInput.toUpperCase()==="DELETE"?C.red:C.text,fontSize:18,fontWeight:800,outline:"none",textAlign:"center",letterSpacing:4,boxSizing:"border-box",fontFamily:"monospace"}}
-                />
-              </div>
-              <div style={{display:"flex",gap:10}}>
-                <button onClick={()=>{setConfirmDelete(null);setDeleteInput("");}} style={{flex:2,padding:"16px",background:C.green,color:"#0a1a0f",border:"none",borderRadius:12,fontSize:15,fontWeight:800,cursor:"pointer"}}>
-                  Keep It ✓
-                </button>
-                <button
-                  onClick={()=>{if(deleteInput.toUpperCase()==="DELETE")confirmDeleteTourney(confirmDelete.id);}}
-                  disabled={deleteInput.toUpperCase()!=="DELETE"}
-                  style={{flex:1,padding:"16px",background:deleteInput.toUpperCase()==="DELETE"?"rgba(224,80,80,0.2)":"transparent",color:deleteInput.toUpperCase()==="DELETE"?C.red:C.dim,border:`1px solid ${deleteInput.toUpperCase()==="DELETE"?"rgba(224,80,80,0.5)":C.border}`,borderRadius:12,fontSize:13,fontWeight:700,cursor:deleteInput.toUpperCase()==="DELETE"?"pointer":"not-allowed"}}
-                >
-                  Delete
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
         {showHelp&&(
           <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"rgba(0,0,0,0.92)",zIndex:800,overflowY:"auto",padding:"20px"}}>
             <div style={{background:C.surface,borderRadius:20,padding:"24px",border:"1px solid "+C.border,maxWidth:500,margin:"0 auto"}}>
