@@ -83,6 +83,7 @@ export default function TeamTournament({onBack, user}){
   const[directorCode,setDirectorCode]=useState(null); // stored directly, not via savedTourneys lookup
   const[savedTourneys,setSavedTourneys]=useState([]);
   const[showHelp,setShowHelp]=useState(false);
+  const[loading,setLoading]=useState(false);
   const[saveStatus,setSaveStatus]=useState("");
   const saveTimer=useRef(null);
   const course=COURSES[courseId];
