@@ -191,15 +191,26 @@ export default function TeamTournament({ user, onBack }) {
 
           {/* Number of teams */}
           <div style={{marginBottom:20}}>
-            <div style={{fontSize:11,color:C.green,letterSpacing:1.5,textTransform:"uppercase",marginBottom:8,fontWeight:600}}>Number of Teams</div>
-            <div style={{display:"flex",gap:8}}>
-              {[4,6,8,10,12].map(n=>(
-                <button key={n} onClick={()=>{setNumTeams(n);setTeamNames(Array(n).fill("").map((_,i)=>teamNames[i]||`Team ${i+1}`));setPlayerNames(Array(n).fill(null).map((_,i)=>playerNames[i]||["","","",""]));}}
-                  style={{flex:1,padding:"12px 4px",fontSize:14,fontWeight:numTeams===n?700:500,background:numTeams===n?C.green:C.surface,color:numTeams===n?"#0a1a0f":C.muted,border:`1px solid ${numTeams===n?C.green:C.border}`,cursor:"pointer",borderRadius:8}}>
-                  {n}
-                </button>
-              ))}
+            <div style={{fontSize:11,color:C.green,letterSpacing:1.5,textTransform:"uppercase",marginBottom:8,fontWeight:600}}>Number of Teams (2–20)</div>
+            <div style={{display:"flex",alignItems:"center",gap:12}}>
+              <button onClick={()=>{const n=Math.max(2,numTeams-1);setNumTeams(n);setTeamNames(Array(n).fill("").map((_,i)=>teamNames[i]||`Team ${i+1}`));setPlayerNames(Array(n).fill(null).map((_,i)=>playerNames[i]||["","","",""]));}}
+                style={{width:48,height:48,borderRadius:"50%",background:C.dim,border:`1px solid ${C.border}`,color:C.text,fontSize:28,fontWeight:700,cursor:"pointer",flexShrink:0}}>−</button>
+              <input
+                type="number" min="2" max="20"
+                value={numTeams}
+                onChange={e=>{
+                  const n=Math.min(20,Math.max(2,parseInt(e.target.value)||2));
+                  setNumTeams(n);
+                  setTeamNames(Array(n).fill("").map((_,i)=>teamNames[i]||`Team ${i+1}`));
+                  setPlayerNames(Array(n).fill(null).map((_,i)=>playerNames[i]||["","","",""]));
+                }}
+                style={{flex:1,padding:"14px",background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,color:C.text,fontSize:28,fontWeight:800,outline:"none",textAlign:"center"}}
+                inputMode="numeric"
+              />
+              <button onClick={()=>{const n=Math.min(20,numTeams+1);setNumTeams(n);setTeamNames(Array(n).fill("").map((_,i)=>teamNames[i]||`Team ${i+1}`));setPlayerNames(Array(n).fill(null).map((_,i)=>playerNames[i]||["","","",""]));}}
+                style={{width:48,height:48,borderRadius:"50%",background:C.dim,border:`1px solid ${C.border}`,color:C.text,fontSize:28,fontWeight:700,cursor:"pointer",flexShrink:0}}>+</button>
             </div>
+            <div style={{fontSize:11,color:C.muted,marginTop:6,textAlign:"center"}}>{numTeams} teams · {numTeams*4} players total</div>
           </div>
 
           {/* Team setup */}
