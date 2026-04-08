@@ -1,5 +1,6 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { COURSES } from "./golf.js";
+import { sb } from "./supabase.js";
 
 const C = {
   bg:"#080f0a", surface:"#0e1a10", card:"#121e14",
@@ -70,7 +71,7 @@ function NumStepper({value,onChange,min=0,max=99,label}){
   );
 }
 
-export default function TeamTournament({onBack}){
+export default function TeamTournament({onBack, user}){
   const[screen,setScreen]=useState("home");
   const[courseId,setCourseId]=useState("south-toledo");
   const[birdieBonus,setBirdieBonus]=useState(true);
@@ -78,7 +79,88 @@ export default function TeamTournament({onBack}){
   const[activeTeam,setActiveTeam]=useState(0);
   const[currentHole,setCurrentHole]=useState(1);
   const[teams,setTeams]=useState([]);
+  const[tourneyId,setTourneyId]=useState(null); // Supabase row id
+  const[savedTourneys,setSavedTourneys]=useState([]);
+  const[loading,setLoading]=useState(false);
+  const[saveStatus,setSaveStatus]=useState(""); // "saving" | "saved" | ""
+  const saveTimer=useRef(null);
   const course=COURSES[courseId];
+
+  // ── Load saved tournaments on mount ────────────────────────────────────────
+  useEffect(()=>{
+    loadSaved();
+  },[]);
+
+  async function loadSaved(){
+    if(!user?.id)return;
+    const{data}=await sb.from("team_tournaments")
+      .select("id,name,course_id,created_at,updated_at,status,current_hole,teams")
+      .eq("owner_id",user.id)
+      .order("updated_at",{ascending:false})
+      .limit(10);
+    if(data)setSavedTourneys(data);
+  }
+
+  // ── Auto-save whenever teams/scores/hole change ────────────────────────────
+  useEffect(()=>{
+    if(!tourneyId||screen==="home"||screen==="saved")return;
+    if(saveTimer.current)clearTimeout(saveTimer.current);
+    setSaveStatus("saving");
+    saveTimer.current=setTimeout(async()=>{
+      await sb.from("team_tournaments").update({
+        teams,
+        course_id:courseId,
+        birdie_bonus:birdieBonus,
+        current_hole:currentHole,
+        status:screen==="scoring"?"active":"setup",
+        updated_at:new Date().toISOString(),
+      }).eq("id",tourneyId);
+      setSaveStatus("saved");
+      setTimeout(()=>setSaveStatus(""),2000);
+      loadSaved();
+    },800);
+    return()=>clearTimeout(saveTimer.current);
+  },[teams,currentHole,courseId,birdieBonus,screen,tourneyId]);
+
+  // ── Create new tournament in DB ────────────────────────────────────────────
+  async function createTourney(builtTeams){
+    if(!user?.id)return null;
+    const name=COURSES[courseId]?.name+" · "+new Date().toLocaleDateString("en-US",{month:"short",day:"numeric"});
+    const{data}=await sb.from("team_tournaments").insert({
+      owner_id:user.id,
+      name,
+      course_id:courseId,
+      birdie_bonus:birdieBonus,
+      teams:builtTeams,
+      current_hole:1,
+      status:"setup",
+    }).select().single();
+    return data?.id||null;
+  }
+
+  // ── Resume a saved tournament ──────────────────────────────────────────────
+  async function resumeTourney(t){
+    setLoading(true);
+    const{data}=await sb.from("team_tournaments").select("*").eq("id",t.id).single();
+    if(data){
+      setTourneyId(data.id);
+      setCourseId(data.course_id||"south-toledo");
+      setBirdieBonus(data.birdie_bonus!==false);
+      setTeams(data.teams||[]);
+      setNumTeams((data.teams||[]).length);
+      setCurrentHole(data.current_hole||1);
+      setActiveTeam(0);
+      setScreen(data.status==="active"?"scoring":"setup");
+    }
+    setLoading(false);
+  }
+
+  // ── Delete a saved tournament ──────────────────────────────────────────────
+  async function deleteTourney(id){
+    await sb.from("team_tournaments").delete().eq("id",id);
+    setSavedTourneys(prev=>prev.filter(t=>t.id!==id));
+    if(tourneyId===id){setTourneyId(null);setTeams([]);}
+  }
 
   function buildTeams(n,existing=[]){
     return Array.from({length:n},(_,i)=>existing[i]||{
@@ -111,20 +193,88 @@ export default function TeamTournament({onBack}){
 
   // HOME
   if(screen==="home"){
+    const active=savedTourneys.filter(t=>t.status==="active");
+    const setups=savedTourneys.filter(t=>t.status==="setup");
     return(
-      <div style={{fontFamily:"Georgia,serif",minHeight:"100vh",background:C.bg,color:C.text}}>
-        <div style={{background:"linear-gradient(180deg,"+C.card+" 0%,transparent 100%)",padding:"50px 24px 30px"}}>
-          <button onClick={onBack} style={{background:"rgba(123,180,80,0.15)",border:"1px solid "+C.green,color:C.green,fontSize:13,cursor:"pointer",padding:"8px 16px",borderRadius:20,fontWeight:700,marginBottom:24}}>‹ Back</button>
+      <div style={{fontFamily:"Georgia,serif",minHeight:"100vh",background:C.bg,color:C.text,paddingBottom:40}}>
+        <div style={{background:"linear-gradient(180deg,"+C.card+" 0%,transparent 100%)",padding:"50px 24px 24px"}}>
+          <button onClick={onBack} style={{background:"rgba(123,180,80,0.15)",border:"1px solid "+C.green,color:C.green,fontSize:13,cursor:"pointer",padding:"8px 16px",borderRadius:20,fontWeight:700,marginBottom:20}}>‹ Back</button>
           <div style={{textAlign:"center"}}>
-            <div style={{fontSize:52}}>🏆</div>
-            <div style={{fontSize:28,fontWeight:800,marginTop:8}}>Team Tournament</div>
-            <div style={{fontSize:14,color:C.muted,marginTop:6}}>2 Best Ball · Front / Back / Total</div>
+            <div style={{fontSize:48}}>🏆</div>
+            <div style={{fontSize:26,fontWeight:800,marginTop:8}}>Team Tournament</div>
+            <div style={{fontSize:13,color:C.muted,marginTop:4}}>2 Best Ball · Front / Back / Total</div>
           </div>
         </div>
-        <div style={{padding:"24px",display:"flex",flexDirection:"column",gap:12}}>
-          <BigBtn onClick={()=>{setTeams(buildTeams(numTeams));setCurrentHole(1);setActiveTeam(0);setScreen("setup");}}>⛳ New Tournament Setup</BigBtn>
-          {teams.length>0&&<BigBtn onClick={()=>setScreen("scoring")} color={C.gold}>▶ Continue Tournament</BigBtn>}
-          {teams.length>0&&<BigBtn onClick={()=>setScreen("leaderboard")} color={C.surface} style={{border:"1px solid "+C.border,color:C.text}}>📊 Leaderboard</BigBtn>}
+
+        <div style={{padding:"0 20px"}}>
+
+          {/* Active (in-progress) tournaments */}
+          {active.length>0&&(
+            <div style={{marginBottom:20}}>
+              <div style={{fontSize:11,color:C.gold,letterSpacing:1.5,textTransform:"uppercase",marginBottom:10,fontWeight:600}}>▶ In Progress</div>
+              {active.map(t=>(
+                <div key={t.id} style={{background:"rgba(232,184,75,0.08)",border:"1px solid "+C.gold+"44",borderRadius:14,padding:"14px 16px",marginBottom:8}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+                    <div style={{fontWeight:700,fontSize:15,color:C.gold}}>{t.name||"Tournament"}</div>
+                    <button onClick={()=>deleteTourney(t.id)} style={{background:"transparent",border:"none",color:C.muted,fontSize:18,cursor:"pointer",padding:"0 4px"}}>✕</button>
+                  </div>
+                  <div style={{fontSize:11,color:C.muted,marginBottom:10}}>
+                    {COURSES[t.course_id]?.name||t.course_id} · Hole {t.current_hole} · {(t.teams||[]).length} teams
+                  </div>
+                  <div style={{display:"flex",gap:8}}>
+                    <button onClick={()=>resumeTourney(t)} disabled={loading} style={{flex:2,padding:"11px",background:C.gold,color:"#0a1a0f",border:"none",borderRadius:10,fontSize:14,fontWeight:800,cursor:"pointer"}}>
+                      {loading?"Loading...":"▶ Resume Round"}
+                    </button>
+                    <button onClick={async()=>{await resumeTourney(t);setScreen("leaderboard");}} style={{flex:1,padding:"11px",background:"transparent",color:C.gold,border:"1px solid "+C.gold+"44",borderRadius:10,fontSize:13,fontWeight:700,cursor:"pointer"}}>
+                      📊 Board
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Saved setups (pre-built, not started) */}
+          {setups.length>0&&(
+            <div style={{marginBottom:20}}>
+              <div style={{fontSize:11,color:C.green,letterSpacing:1.5,textTransform:"uppercase",marginBottom:10,fontWeight:600}}>📋 Saved Setups</div>
+              {setups.map(t=>(
+                <div key={t.id} style={{background:C.card,border:"1px solid "+C.border,borderRadius:14,padding:"14px 16px",marginBottom:8}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+                    <div style={{fontWeight:700,fontSize:15}}>{t.name||"Tournament Setup"}</div>
+                    <button onClick={()=>deleteTourney(t.id)} style={{background:"transparent",border:"none",color:C.muted,fontSize:18,cursor:"pointer",padding:"0 4px"}}>✕</button>
+                  </div>
+                  <div style={{fontSize:11,color:C.muted,marginBottom:10}}>
+                    {COURSES[t.course_id]?.name||t.course_id} · {(t.teams||[]).length} teams · Last edited {new Date(t.updated_at).toLocaleDateString()}
+                  </div>
+                  <div style={{display:"flex",gap:8}}>
+                    <button onClick={()=>resumeTourney(t)} disabled={loading} style={{flex:1,padding:"11px",background:C.green,color:"#0a1a0f",border:"none",borderRadius:10,fontSize:13,fontWeight:800,cursor:"pointer"}}>
+                      ✏️ Edit Setup
+                    </button>
+                    <button onClick={async()=>{
+                      await resumeTourney(t);
+                      setCurrentHole(1);setActiveTeam(0);
+                      setScreen("scoring");
+                    }} style={{flex:1,padding:"11px",background:"transparent",color:C.green,border:"1px solid "+C.green+"44",borderRadius:10,fontSize:13,fontWeight:700,cursor:"pointer"}}>
+                      ⛳ Tee Off
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* New tournament */}
+          <BigBtn onClick={async()=>{
+            const builtTeams=buildTeams(numTeams);
+            setTeams(builtTeams);
+            setCurrentHole(1);setActiveTeam(0);
+            const id=await createTourney(builtTeams);
+            setTourneyId(id);
+            setScreen("setup");
+          }}>+ New Tournament Setup</BigBtn>
+
+          <div style={{height:10}}/>
           <GhostBtn onClick={onBack}>← Back to Press</GhostBtn>
         </div>
       </div>
@@ -136,8 +286,14 @@ export default function TeamTournament({onBack}){
     return(
       <div style={{fontFamily:"Georgia,serif",minHeight:"100vh",background:C.bg,color:C.text,paddingBottom:60}}>
         <div style={{background:"linear-gradient(180deg,"+C.card+" 0%,transparent 100%)",padding:"50px 20px 20px"}}>
-          <button onClick={()=>setScreen("home")} style={{background:"rgba(123,180,80,0.15)",border:"1px solid "+C.green,color:C.green,fontSize:13,cursor:"pointer",padding:"8px 16px",borderRadius:20,fontWeight:700,marginBottom:16}}>‹ Back</button>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+            <button onClick={()=>setScreen("home")} style={{background:"rgba(123,180,80,0.15)",border:"1px solid "+C.green,color:C.green,fontSize:13,cursor:"pointer",padding:"8px 16px",borderRadius:20,fontWeight:700}}>‹ Home</button>
+            <div style={{fontSize:11,color:saveStatus==="saving"?C.gold:C.green,fontWeight:600}}>
+              {saveStatus==="saving"?"💾 Saving...":saveStatus==="saved"?"✓ Saved":""}
+            </div>
+          </div>
           <div style={{fontSize:22,fontWeight:800,textAlign:"center"}}>Tournament Setup</div>
+          <div style={{fontSize:12,color:C.muted,textAlign:"center",marginTop:4}}>Auto-saved · come back anytime</div>
         </div>
         <div style={{padding:"0 20px"}}>
 
@@ -202,7 +358,14 @@ export default function TeamTournament({onBack}){
           ))}
 
           <div style={{height:20}}/>
-          <BigBtn onClick={()=>{setCurrentHole(1);setActiveTeam(0);setScreen("scoring");}}>Tee It Up! ⛳</BigBtn>
+          <BigBtn onClick={async()=>{
+            setCurrentHole(1);setActiveTeam(0);
+            // Mark as active in DB
+            if(tourneyId){
+              await sb.from("team_tournaments").update({status:"active",current_hole:1}).eq("id",tourneyId);
+            }
+            setScreen("scoring");
+          }}>Tee It Up! ⛳</BigBtn>
         </div>
       </div>
     );
@@ -222,12 +385,13 @@ export default function TeamTournament({onBack}){
         {/* Header */}
         <div style={{background:"linear-gradient(180deg,"+C.card+" 0%,transparent 100%)",padding:"44px 16px 12px"}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-            <button onClick={()=>currentHole>1?setCurrentHole(h=>h-1):setScreen("setup")}
+            <button onClick={()=>currentHole>1?setCurrentHole(h=>h-1):setScreen("home")}
               style={{background:"rgba(123,180,80,0.15)",border:"1px solid "+C.green,color:C.green,fontSize:13,cursor:"pointer",padding:"6px 14px",borderRadius:16,fontWeight:700}}>‹</button>
             <div style={{textAlign:"center"}}>
               <div style={{fontSize:11,color:C.muted,letterSpacing:2,textTransform:"uppercase"}}>Hole</div>
               <div style={{fontSize:48,fontWeight:800,lineHeight:1}}>{currentHole}</div>
               <div style={{fontSize:12,color:C.green,fontWeight:600}}>Par {holeData.par} · Hdcp {holeData.hdcp}</div>
+              {saveStatus&&<div style={{fontSize:10,color:saveStatus==="saving"?C.gold:C.green,marginTop:2}}>{saveStatus==="saving"?"💾 Saving...":"✓ Saved"}</div>}
             </div>
             <button onClick={()=>setScreen("leaderboard")}
               style={{background:"rgba(232,184,75,0.15)",border:"1px solid "+C.gold,color:C.gold,fontSize:11,cursor:"pointer",padding:"6px 12px",borderRadius:12,fontWeight:700}}>📊 Board</button>
