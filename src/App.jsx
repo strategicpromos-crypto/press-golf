@@ -3,6 +3,9 @@ import { sb } from "./supabase.js";
 import { loadStripe } from "https://esm.sh/@stripe/stripe-js@2";
 import LiveRound from "./LiveRound.jsx";
 import TeamTournament from "./TeamTournament.jsx";
+import TourneyJoin from "./TourneyJoin.jsx";
+import TourneyCaptain from "./TourneyCaptain.jsx";
+import TourneySpectator from "./TourneySpectator.jsx";
 
 const STRIPE_PK = "pk_test_51TIp2h2LCsgE9lxhGjdLujrI8YsZTGOtj1mC8fqHFupIOonwdYHqZRf2uImMvdoXCOclEH0ll3zxzOpfs0Jdo1Fh00nFj1I8GW";
 const PRICE_ID  = "price_1Tip7m2LCsgE9Ikh0yUEVgE8";
@@ -377,8 +380,19 @@ export default function App(){
   const [showProInfo,setShowProInfo]=useState(false);
   const [stripeSaving,setStripeSaving]=useState(false);
 
-  const urlParams=new URLSearchParams(window.location.search);
-  const inviteCode=urlParams.get("invite");
+  const urlParams   = new URLSearchParams(window.location.search);
+  const inviteCode  = urlParams.get("invite");
+  const tourneyCode = urlParams.get("tourney");
+  const tourneyTeam = urlParams.get("team");
+
+  // Tourney join routing — handles captain, spectator, and bare code links
+  const [tourneyView,    setTourneyView]    = useState(null); // null | "join" | "captain" | "spectator"
+  const [tourneyData,    setTourneyData]    = useState(null);
+  const [tourneyCaptainIdx, setTourneyCaptainIdx] = useState(null);
+
+  useEffect(() => {
+    if (tourneyCode) setTourneyView("join");
+  }, [tourneyCode]);
   const stripeSuccess=urlParams.get("stripe")==="success";
 
   useEffect(()=>{
@@ -428,6 +442,23 @@ export default function App(){
   if(showPaywall)return <ProPaywall onBack={()=>setShowPaywall(false)} onUpgrade={handleUpgrade} saving={stripeSaving}/>;
   if(showProInfo)return <ProInfo onBack={()=>setShowProInfo(false)} isPro={isPro} onUpgrade={()=>{setShowProInfo(false);setShowPaywall(true);}}/>;
   if(!user)return <AuthScreen onAuth={setUser} onPrivacy={()=>setShowPrivacy(true)}/>;
+  // Tourney views — shown to captains/spectators who open a shared link
+  if (tourneyView === "join") {
+    return <TourneyJoin
+      code={tourneyCode}
+      teamIdx={tourneyTeam}
+      onDirector={(t) => { setTourneyData(t); setTourneyView(null); }}
+      onCaptain={(t,idx) => { setTourneyData(t); setTourneyCaptainIdx(idx); setTourneyView("captain"); }}
+      onSpectator={(t) => { setTourneyData(t); setTourneyView("spectator"); }}
+    />;
+  }
+  if (tourneyView === "captain") {
+    return <TourneyCaptain tourney={tourneyData} teamIdx={tourneyCaptainIdx} onBack={() => setTourneyView("join")} />;
+  }
+  if (tourneyView === "spectator") {
+    return <TourneySpectator tourney={tourneyData} onBack={() => setTourneyView(null)} />;
+  }
+
   if(inviteCode)return <AcceptInviteScreen code={inviteCode} user={user}/>;
   return <Press user={user} onSignOut={()=>sb.auth.signOut()} onPrivacy={()=>setShowPrivacy(true)} onUpgrade={()=>setShowPaywall(true)} onShowProInfo={()=>setShowProInfo(true)} isPro={isPro} setIsPro={setIsPro}/>;
 }
