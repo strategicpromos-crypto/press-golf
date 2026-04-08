@@ -21,31 +21,31 @@ function safeInt(v,f=0){const n=parseInt(v,10);return isNaN(n)?f:n;}
 function relLabel(d){if(d===null||d===undefined)return"—";if(d===0)return"E";return d>0?"+"+d:String(d);}
 function relColor(d){if(d===null||d===undefined)return C.muted;if(d<0)return C.green;if(d>0)return C.red;return C.muted;}
 
-function calcTeamScore(teamScores,teamSize,holeData,birdieBonus){
+function calcTeamScore(teamScores,teamSize,holeData,birdieBonus,countBalls){
   const byHole={};
   let front=0,back=0,total=0;
-  const countBalls=teamSize<=2?1:2; // 2-man teams = 1 best ball; 3+ = 2 best ball
-  const frontPar=holeData.filter(h=>h.side==="front").reduce((s,h)=>s+h.par*countBalls,0);
-  const backPar=holeData.filter(h=>h.side==="back").reduce((s,h)=>s+h.par*countBalls,0);
+  const balls=countBalls||Math.min(teamSize,2); // fallback: min(teamSize,2)
+  const frontPar=holeData.filter(h=>h.side==="front").reduce((s,h)=>s+h.par*balls,0);
+  const backPar=holeData.filter(h=>h.side==="back").reduce((s,h)=>s+h.par*balls,0);
   const totalPar=frontPar+backPar;
   for(const h of holeData){
     const scores=[];
     for(let p=0;p<teamSize;p++){const s=teamScores?.[p]?.[h.hole];if(s!==undefined&&s!==null)scores.push(safeInt(s));}
     if(scores.length===0){byHole[h.hole]=null;continue;}
     scores.sort((a,b)=>a-b);
-    const bestN=scores.slice(0,countBalls);
+    const bestN=scores.slice(0,balls);
     let raw=bestN.reduce((s,v)=>s+v,0);
     let bonusApplied=0;
     if(birdieBonus){
-      const extraBirdies=scores.slice(countBalls).filter(s=>s<=h.par-1);
+      const extraBirdies=scores.slice(balls).filter(s=>s<=h.par-1);
       if(extraBirdies.length>0){bonusApplied=extraBirdies.reduce((sum,s)=>sum+(h.par-s),0);raw-=bonusApplied;}
     }
-    const diff=raw-(h.par*countBalls);
+    const diff=raw-(h.par*balls);
     byHole[h.hole]={raw,diff,bonusApplied,scored:true};
     if(h.side==="front")front+=raw;else back+=raw;
     total+=raw;
   }
-  return{byHole,front,frontDiff:front-frontPar,back,backDiff:back-backPar,total,totalDiff:total-totalPar,frontPar,backPar,totalPar,countBalls};
+  return{byHole,front,frontDiff:front-frontPar,back,backDiff:back-backPar,total,totalDiff:total-totalPar,frontPar,backPar,totalPar,countBalls:balls};
 }
 
 function BigBtn({children,onClick,color=C.green,disabled=false,style={}}){
@@ -73,6 +73,7 @@ export default function TeamTournament({onBack, user}){
   const[screen,setScreen]=useState("home");
   const[courseId,setCourseId]=useState("south-toledo");
   const[birdieBonus,setBirdieBonus]=useState(true);
+  const[countBalls,setCountBalls]=useState(2); // how many best ball scores count per hole
   const[numTeams,setNumTeams]=useState(8);
   const[activeTeam,setActiveTeam]=useState(0);
   const[currentHole,setCurrentHole]=useState(1);
@@ -111,6 +112,7 @@ export default function TeamTournament({onBack, user}){
         teams,
         course_id:courseId,
         birdie_bonus:birdieBonus,
+        count_balls:countBalls,
         current_hole:currentHole,
         status:screen==="scoring"?"active":"setup",
         updated_at:new Date().toISOString(),
@@ -147,6 +149,7 @@ export default function TeamTournament({onBack, user}){
       name,
       course_id:courseId,
       birdie_bonus:birdieBonus,
+      count_balls:countBalls,
       teams:teamsWithPins,
       current_hole:1,
       status:"setup",
@@ -169,6 +172,7 @@ export default function TeamTournament({onBack, user}){
       setTourneyId(data.id);
       setCourseId(data.course_id||"south-toledo");
       setBirdieBonus(data.birdie_bonus!==false);
+      setCountBalls(data.count_balls||2);
       setTeams(data.teams||[]);
       setNumTeams((data.teams||[]).length);
       setCurrentHole(data.current_hole||1);
@@ -219,7 +223,7 @@ export default function TeamTournament({onBack, user}){
   }
 
   function getLeaderboard(){
-    return teams.map(t=>({...t,sc:calcTeamScore(t.scores,t.size,course.holes,birdieBonus)}))
+    return teams.map(t=>({...t,sc:calcTeamScore(t.scores,t.size,course.holes,birdieBonus,countBalls)}))
       .sort((a,b)=>a.sc.totalDiff-b.sc.totalDiff);
   }
 
@@ -469,6 +473,33 @@ export default function TeamTournament({onBack, user}){
             </div>
           </div>
 
+          {/* Scores to count per hole */}
+          <div style={{background:C.card,border:"1px solid "+C.border,borderRadius:12,padding:"14px 16px",marginBottom:16}}>
+            <div style={{marginBottom:10}}>
+              <div style={{fontWeight:700,fontSize:15,marginBottom:2}}>Scores That Count Per Hole</div>
+              <div style={{fontSize:11,color:C.muted}}>
+                {countBalls===1?"Low ball — 1 best score counts":countBalls===2?"2 best ball — 2 lowest scores count":`${countBalls} best ball — ${countBalls} lowest scores count`}
+              </div>
+            </div>
+            <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+              {[1,2,3,4,5].map(n=>(
+                <button key={n} onClick={()=>setCountBalls(n)} style={{
+                  flex:1, minWidth:48, padding:"12px 4px",
+                  background:countBalls===n?C.green:C.surface,
+                  color:countBalls===n?"#0a1a0f":C.muted,
+                  border:`1px solid ${countBalls===n?C.green:C.border}`,
+                  borderRadius:10, fontSize:15, fontWeight:countBalls===n?800:500,
+                  cursor:"pointer"
+                }}>
+                  {n}
+                </button>
+              ))}
+            </div>
+            <div style={{fontSize:10,color:C.dim,marginTop:8,textAlign:"center"}}>
+              Tap to select how many scores count from each team on every hole
+            </div>
+          </div>
+
           {/* Num teams */}
           <div style={{background:C.card,border:"1px solid "+C.border,borderRadius:12,padding:"14px 16px",marginBottom:16}}>
             <Lbl>Number of Teams</Lbl>
@@ -593,9 +624,9 @@ export default function TeamTournament({onBack, user}){
   // SCORING
   if(screen==="scoring"&&holeData){
     const team=teams[activeTeam];
-    const sc=calcTeamScore(team.scores,team.size,course.holes,birdieBonus);
+    const sc=calcTeamScore(team.scores,team.size,course.holes,birdieBonus,countBalls);
     const thisHoleScores=Array.from({length:team.size},(_,j)=>({j,s:getPlayerScore(team,j,currentHole)})).filter(x=>x.s!==null).sort((a,b)=>a.s-b.s);
-    const best2Set=new Set(thisHoleScores.slice(0,2).map(x=>x.j));
+    const best2Set=new Set(thisHoleScores.slice(0,countBalls).map(x=>x.j));
     const birdieCount=thisHoleScores.filter(x=>x.s<=holeData.par-1).length;
     const bonusThisHole=birdieBonus&&birdieCount>=3?birdieCount-2:0;
 
@@ -693,7 +724,7 @@ export default function TeamTournament({onBack, user}){
               <div style={{background:"rgba(123,180,80,0.06)",border:"1px solid rgba(123,180,80,0.2)",borderRadius:10,padding:"12px 16px",marginBottom:14}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                   <div>
-                    <div style={{fontSize:12,color:C.muted}}>2 Best Ball this hole</div>
+                    <div style={{fontSize:12,color:C.muted}}>{countBalls} Best Ball this hole</div>
                     {bonusThisHole>0&&<div style={{fontSize:11,color:C.green}}>+ birdie bonus −{bonusThisHole}</div>}
                   </div>
                   <div style={{textAlign:"right"}}>
