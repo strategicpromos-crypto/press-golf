@@ -79,22 +79,20 @@ export default function TeamTournament({onBack, user}){
   const[activeTeam,setActiveTeam]=useState(0);
   const[currentHole,setCurrentHole]=useState(1);
   const[teams,setTeams]=useState([]);
-  const[tourneyId,setTourneyId]=useState(null); // Supabase row id
+  const[tourneyId,setTourneyId]=useState(null);
+  const[directorCode,setDirectorCode]=useState(null); // stored directly, not via savedTourneys lookup
   const[savedTourneys,setSavedTourneys]=useState([]);
   const[loading,setLoading]=useState(false);
-  const[saveStatus,setSaveStatus]=useState(""); // "saving" | "saved" | ""
+  const[saveStatus,setSaveStatus]=useState("");
   const saveTimer=useRef(null);
   const course=COURSES[courseId];
 
-  // ── Load saved tournaments on mount ────────────────────────────────────────
-  useEffect(()=>{
-    loadSaved();
-  },[]);
+  useEffect(()=>{ loadSaved(); },[]);
 
   async function loadSaved(){
     if(!user?.id)return;
     const{data}=await sb.from("team_tournaments")
-      .select("id,name,course_id,created_at,updated_at,status,current_hole,teams")
+      .select("id,name,course_id,created_at,updated_at,status,current_hole,teams,director_code,spectator_code")
       .eq("owner_id",user.id)
       .order("updated_at",{ascending:false})
       .limit(10);
@@ -125,10 +123,9 @@ export default function TeamTournament({onBack, user}){
   // ── Create new tournament in DB ────────────────────────────────────────────
   async function createTourney(builtTeams){
     if(!user?.id)return null;
-    // Generate unique 6-char code
     const chars="ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
     const makeCode=()=>Array.from({length:6},()=>chars[Math.floor(Math.random()*chars.length)]).join("");
-    let dirCode=makeCode();
+    const dirCode=makeCode();
     const name=COURSES[courseId]?.name+" · "+new Date().toLocaleDateString("en-US",{month:"short",day:"numeric"});
     const{data}=await sb.from("team_tournaments").insert({
       owner_id:user.id,
@@ -141,6 +138,10 @@ export default function TeamTournament({onBack, user}){
       director_code:dirCode,
       spectator_code:"S"+dirCode,
     }).select().single();
+    if(data){
+      setDirectorCode(dirCode); // set immediately so share panel shows right away
+      await loadSaved();
+    }
     return data?.id||null;
   }
 
@@ -156,6 +157,7 @@ export default function TeamTournament({onBack, user}){
       setNumTeams((data.teams||[]).length);
       setCurrentHole(data.current_hole||1);
       setActiveTeam(0);
+      setDirectorCode(data.director_code||null); // restore share code
       setScreen(data.status==="active"?"scoring":"setup");
     }
     setLoading(false);
@@ -364,20 +366,17 @@ export default function TeamTournament({onBack, user}){
           ))}
 
           {/* Share Codes Panel */}
-          {tourneyId&&teams.length>0&&(()=>{
-            const saved=savedTourneys.find(t=>t.id===tourneyId);
-            const dirCode=saved?.director_code;
-            if(!dirCode)return null;
+          {tourneyId&&directorCode&&(()=>{
             const appUrl="https://press-golf.vercel.app";
-            const spectatorLink=`${appUrl}?tourney=S${dirCode}`;
+            const spectatorLink=`${appUrl}?tourney=S${directorCode}`;
             return(
               <div style={{background:"rgba(123,180,80,0.06)",border:"1px solid rgba(123,180,80,0.2)",borderRadius:14,padding:"16px",marginBottom:16}}>
                 <div style={{fontSize:11,color:C.green,letterSpacing:1.5,textTransform:"uppercase",marginBottom:12,fontWeight:600}}>🔗 Share Tournament</div>
                 <div style={{marginBottom:12}}>
                   <div style={{fontSize:11,color:C.muted,marginBottom:4}}>Your director code (keep private)</div>
                   <div style={{background:C.card,border:"1px solid "+C.border,borderRadius:8,padding:"10px 14px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                    <div style={{fontSize:22,fontWeight:800,letterSpacing:4,color:C.gold}}>{dirCode}</div>
-                    <button onClick={()=>navigator.clipboard?.writeText(dirCode)} style={{background:"transparent",border:"none",color:C.muted,fontSize:12,cursor:"pointer"}}>Copy</button>
+                    <div style={{fontSize:22,fontWeight:800,letterSpacing:4,color:C.gold}}>{directorCode}</div>
+                    <button onClick={()=>navigator.clipboard?.writeText(directorCode)} style={{background:"transparent",border:"none",color:C.muted,fontSize:12,cursor:"pointer"}}>Copy</button>
                   </div>
                 </div>
                 <div style={{marginBottom:12}}>
@@ -389,7 +388,7 @@ export default function TeamTournament({onBack, user}){
                 </div>
                 <div style={{fontSize:11,color:C.muted,marginBottom:8}}>Team captain links — text each captain their link</div>
                 {teams.map((team,i)=>{
-                  const captainLink=`${appUrl}?tourney=${dirCode}&team=${i}`;
+                  const captainLink=`${appUrl}?tourney=${directorCode}&team=${i}`;
                   return(
                     <div key={i} style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
                       <div style={{width:10,height:10,borderRadius:"50%",background:team.color,flexShrink:0}}/>
