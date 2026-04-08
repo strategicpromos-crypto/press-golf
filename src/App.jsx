@@ -1,7 +1,8 @@
-import { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { sb } from "./supabase.js";
 import { loadStripe } from "https://esm.sh/@stripe/stripe-js@2";
 import LiveRound from "./LiveRound.jsx";
+import TeamTournament from "./TeamTournament.jsx";
 
 const STRIPE_PK = "pk_test_51TIp2h2LCsgE9lxhGjdLujrI8YsZTGOtj1mC8fqHFupIOonwdYHqZRf2uImMvdoXCOclEH0ll3zxzOpfs0Jdo1Fh00nFj1I8GW";
 const PRICE_ID  = "price_1Tip7m2LCsgE9Ikh0yUEVgE8";
@@ -446,7 +447,7 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
   const [loading,setLoading]=useState(true);
   const [saving,setSaving]=useState(false);
   const [toast,setToast]=useState({msg:"",error:false});
-  const [view,setView]=useState("roster"); // roster | profile | liveround
+  const [view,setView]=useState("roster"); // roster | profile | liveround | tournament
   const [activeRound, setActiveRound]=useState(null); // stores active live round info
   const [pid,setPid]=useState(null);
   const [ptab,setPtab]=useState("overview");
@@ -890,6 +891,10 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
   }
 
   // ── LIVE ROUND VIEW ──────────────────────────────────────────────────────────
+  if(view==="tournament") return(
+    <TeamTournament user={user} onBack={()=>setView("roster")}/>
+  );
+
   if(view==="liveround") return(
     <LiveRound
       user={user}
@@ -928,7 +933,12 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
           </button>
         )}
         {/* Live Round Button */}
-        <button onClick={()=>setView("liveround")} style={{background:`linear-gradient(135deg,${C.green},#4a8030)`,border:"none",color:"#0a1a0f",padding:"12px 24px",borderRadius:20,fontSize:14,fontWeight:800,cursor:"pointer",marginBottom:12,boxShadow:`0 4px 16px ${C.green}44`,letterSpacing:0.5}}>
+        <button onClick={()=>setView("liveround")} style={{background:`linear-gradient(135deg,${C.green},#4a8030)`,border:"none",color:"#0a1a0f",padding:"12px 24px",borderRadius:20,fontSize:14,fontWeight:800,cursor:"pointer",marginBottom:8,boxShadow:`0 4px 16px ${C.green}44`,letterSpacing:0.5}}>
+          ⛳ Live Round
+        </button>
+        <button onClick={()=>setView("tournament")} style={{background:`linear-gradient(135deg,${C.gold},#b8860b)`,border:"none",color:"#0a1a0f",padding:"10px 20px",borderRadius:20,fontSize:13,fontWeight:800,cursor:"pointer",marginBottom:12,boxShadow:`0 4px 16px ${C.gold}44`,letterSpacing:0.5}}>
+          🏆 Team Tournament
+        </button>
           ⛳ Start Live Round
         </button>
 
@@ -1204,9 +1214,19 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
                 <button onClick={onUpgrade} style={{background:`linear-gradient(135deg,${C.gold},#b8860b)`,border:"none",color:"#0a1a0f",padding:"10px 20px",borderRadius:20,fontSize:13,fontWeight:700,cursor:"pointer"}}>Upgrade — $1.99/mo</button>
               </div>
             )}
-            <SettingsCard title="Invite to Press" sub={player?.linked_user_id?`✅ Linked · ${player.linked_email||""}`:"Not linked yet"}>
-              {!player?.linked_user_id&&<BigBtn onClick={generateInvite} disabled={saving} color={isPro?C.green:C.gold} textColor="#0a1a0f">{isPro?(saving?"Generating...":"Generate Invite Link 🔗"):"⭐ Pro Feature — Upgrade"}</BigBtn>}
-            </SettingsCard>
+            {/* LINK STATUS */}
+            <LinkStatusPanel player={player} user={user} isPro={isPro} saving={saving}
+              onGenerateInvite={generateInvite}
+              onUnlink={async()=>{
+                if(!window.confirm("Unlink "+player.name+"?"))return;
+                await sb.from("players").update({linked_user_id:null,linked_email:null}).eq("id",player.id);
+                await sb.from("invites").update({accepted:false,invitee_id:null}).eq("player_id",player.id);
+                setPlayers(prev=>prev.map(p=>p.id===player.id?{...p,linked_user_id:null,linked_email:null}:p));
+                t2("Unlinked");
+              }}
+            />
+
+
             <SettingsCard title="Stroke Handicap" sub={player?.strokes===0?"Even":player?.strokes<0?`You receive ${Math.abs(player.strokes)}`:`You give ${player?.strokes}`}>
               <GhostBtn onClick={openEditStrokes}>{player?.linked_user_id?"Request Stroke Change":"Edit Strokes"}</GhostBtn>
             </SettingsCard>
@@ -1416,6 +1436,115 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
 }
 
 // ── Activity Item ─────────────────────────────────────────────────────────────
+// ── LINK STATUS PANEL ────────────────────────────────────────────────────────
+function LinkStatusPanel({ player, user, isPro, saving, onGenerateInvite, onUnlink }) {
+  const [pendingInvite, setPendingInvite] = React.useState(null);
+  const [checking, setChecking] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!player?.id) return;
+    async function checkInvite() {
+      const { data } = await sb.from("invites")
+        .select("*")
+        .eq("player_id", player.id)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      setPendingInvite(data || null);
+    }
+    checkInvite();
+  }, [player?.id, player?.linked_user_id]);
+
+  async function refresh() {
+    setChecking(true);
+    const { data: inv } = await sb.from("invites")
+      .select("*")
+      .eq("player_id", player.id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    setPendingInvite(inv || null);
+
+    // Also refresh player row to pick up linked_user_id if they just accepted
+    const { data: p } = await sb.from("players").select("*").eq("id", player.id).single();
+    if (p) {
+      // bubble up — parent will need a reload; simplest is page reload
+      if (p.linked_user_id && !player.linked_user_id) {
+        window.location.reload();
+      }
+    }
+    setChecking(false);
+  }
+
+  const isLinked = !!player?.linked_user_id;
+
+  if (isLinked) {
+    return (
+      <div style={{background:"rgba(123,180,80,0.07)",border:"1px solid rgba(123,180,80,0.25)",borderRadius:12,padding:"14px 16px",marginBottom:10}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+          <div style={{fontWeight:700,fontSize:14,color:C.green}}>🔗 Linked Account</div>
+          <button onClick={onUnlink} style={{background:"transparent",border:"none",color:C.red,fontSize:11,cursor:"pointer",fontWeight:600}}>Unlink</button>
+        </div>
+        <div style={{fontSize:12,color:C.muted,marginBottom:4}}>
+          {player.linked_email
+            ? <span>Connected as <span style={{color:C.text,fontWeight:600}}>{player.linked_email}</span></span>
+            : "Account linked — email not available"}
+        </div>
+        <div style={{fontSize:11,color:C.green,marginTop:6}}>
+          ✅ Auto-syncing · Disputes, stroke requests & settlements active
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:"14px 16px",marginBottom:10}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+        <div style={{fontWeight:700,fontSize:14}}>Invite to Press</div>
+        <button onClick={refresh} disabled={checking} style={{background:"transparent",border:"none",color:C.muted,fontSize:11,cursor:"pointer",fontWeight:600}}>
+          {checking ? "Checking..." : "↻ Refresh"}
+        </button>
+      </div>
+
+      {/* Invite status */}
+      {pendingInvite ? (
+        <div style={{marginBottom:10}}>
+          {pendingInvite.accepted ? (
+            <div style={{background:"rgba(123,180,80,0.1)",borderRadius:8,padding:"8px 12px",fontSize:12,color:C.green,fontWeight:600}}>
+              ✅ Invite accepted — tap Refresh to confirm link
+            </div>
+          ) : (
+            <div style={{background:"rgba(232,184,75,0.08)",border:`1px solid ${C.gold}33`,borderRadius:8,padding:"8px 12px",fontSize:12}}>
+              <div style={{color:C.gold,fontWeight:600,marginBottom:2}}>⏳ Invite sent — waiting for {player.name}</div>
+              <div style={{color:C.muted,fontSize:11}}>They haven't accepted yet. Tap Refresh to check.</div>
+              <div style={{color:C.dim,fontSize:10,marginTop:4,wordBreak:"break-all"}}>
+                Code: {pendingInvite.code}
+              </div>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div style={{fontSize:12,color:C.muted,marginBottom:10}}>
+          No invite sent yet. Generate a link to connect {player.name}'s account.
+        </div>
+      )}
+
+      {/* Action buttons */}
+      {isPro ? (
+        <div style={{display:"flex",gap:8}}>
+          <BigBtn onClick={onGenerateInvite} disabled={saving} style={{flex:1}}>
+            {saving ? "Generating..." : pendingInvite ? "New Invite Link 🔗" : "Generate Invite Link 🔗"}
+          </BigBtn>
+        </div>
+      ) : (
+        <div style={{background:`rgba(232,184,75,0.08)`,border:`1px solid ${C.gold}33`,borderRadius:8,padding:"10px 12px",fontSize:12,color:C.muted,textAlign:"center"}}>
+          ⭐ Pro feature — upgrade to invite players
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ActivityItem({item}){
   const isArchived=item.kind==="archived_round"||item.kind==="archived_bet";
   const isRound=item.kind==="round"||item.kind==="archived_round";
