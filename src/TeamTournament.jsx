@@ -82,7 +82,7 @@ export default function TeamTournament({onBack, user}){
   const[tourneyId,setTourneyId]=useState(null);
   const[directorCode,setDirectorCode]=useState(null); // stored directly, not via savedTourneys lookup
   const[savedTourneys,setSavedTourneys]=useState([]);
-  const[loading,setLoading]=useState(false);
+  const[showHelp,setShowHelp]=useState(false);
   const[saveStatus,setSaveStatus]=useState("");
   const saveTimer=useRef(null);
   const course=COURSES[courseId];
@@ -284,10 +284,62 @@ export default function TeamTournament({onBack, user}){
 
           <div style={{height:10}}/>
           <GhostBtn onClick={onBack}>← Back to Press</GhostBtn>
+          <div style={{height:8}}/>
+          <button onClick={()=>setShowHelp(true)} style={{width:"100%",padding:"12px",background:"transparent",color:C.muted,border:"none",fontSize:13,cursor:"pointer"}}>
+            ❓ How does this work?
+          </button>
         </div>
-      </div>
-    );
-  }
+
+        {/* Help overlay */}
+        {showHelp&&(
+          <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:600,overflowY:"auto"}}>
+            <div style={{background:C.surface,margin:"20px",borderRadius:20,padding:"24px",border:"1px solid "+C.border}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
+                <div style={{fontSize:18,fontWeight:800}}>How It Works</div>
+                <button onClick={()=>setShowHelp(false)} style={{background:C.dim,border:"none",color:C.muted,width:32,height:32,borderRadius:"50%",fontSize:16,cursor:"pointer"}}>✕</button>
+              </div>
+
+              {[
+                {icon:"🎯",title:"Director",desc:"Creates the tournament, sets teams and players, shares codes. Can edit any score."},
+                {icon:"⛳",title:"Team Captain",desc:"Gets a private code + PIN. Enters their team's scores hole by hole. Can fix any hole anytime."},
+                {icon:"👀",title:"Spectator",desc:"Uses the public code to watch the live leaderboard. No account needed. Pull down to refresh."},
+              ].map((r,i)=>(
+                <div key={i} style={{background:C.card,border:"1px solid "+C.border,borderRadius:12,padding:"14px",marginBottom:10}}>
+                  <div style={{fontSize:13,fontWeight:700,marginBottom:4}}>{r.icon} {r.title}</div>
+                  <div style={{fontSize:12,color:C.muted,lineHeight:1.6}}>{r.desc}</div>
+                </div>
+              ))}
+
+              <div style={{fontSize:11,color:C.green,letterSpacing:1.5,textTransform:"uppercase",margin:"16px 0 8px",fontWeight:600}}>Codes</div>
+              {[
+                {code:"WEDS48",label:"Public code",desc:"Announce to everyone. Spectators use this to watch."},
+                {code:"WEDS48-T1",label:"Captain code",desc:"Send privately to Team 1 captain along with their 4-digit PIN."},
+              ].map((r,i)=>(
+                <div key={i} style={{background:C.card,border:"1px solid "+C.border,borderRadius:12,padding:"14px",marginBottom:8}}>
+                  <div style={{fontFamily:"monospace",fontSize:16,fontWeight:800,color:C.gold,marginBottom:4}}>{r.code}</div>
+                  <div style={{fontSize:12,color:C.green,fontWeight:600,marginBottom:2}}>{r.label}</div>
+                  <div style={{fontSize:12,color:C.muted}}>{r.desc}</div>
+                </div>
+              ))}
+
+              <div style={{fontSize:11,color:C.green,letterSpacing:1.5,textTransform:"uppercase",margin:"16px 0 8px",fontWeight:600}}>Scoring Rules</div>
+              {[
+                {title:"2 Best Ball",desc:"The 2 lowest scores on your team count every hole. App picks them automatically — marked with ✓ COUNTS."},
+                {title:"Birdie Bonus",desc:"3+ birdies/eagles on a hole = extra strokes off. Each player beyond the top 2 adds their vs-par value. 3 eagles = −2 bonus."},
+                {title:"Front / Back / Total",desc:"Three separate bets. Scores show as −2, E, +3 vs par. Leaderboard ranks by total."},
+                {title:"Strokes per side",desc:"Set per team. 3-man team typically gets 2 strokes/side vs a 4-man team."},
+              ].map((r,i)=>(
+                <div key={i} style={{background:C.card,border:"1px solid "+C.border,borderRadius:12,padding:"14px",marginBottom:8}}>
+                  <div style={{fontSize:13,fontWeight:700,marginBottom:4}}>{r.title}</div>
+                  <div style={{fontSize:12,color:C.muted,lineHeight:1.6}}>{r.desc}</div>
+                </div>
+              ))}
+
+              <div style={{height:16}}/>
+              <button onClick={()=>setShowHelp(false)} style={{width:"100%",padding:"16px",background:C.green,color:"#0a1a0f",border:"none",borderRadius:12,fontSize:15,fontWeight:800,cursor:"pointer"}}>Got it ✓</button>
+            </div>
+          </div>
+        )}
 
   // SETUP
   if(screen==="setup"){
@@ -386,15 +438,22 @@ export default function TeamTournament({onBack, user}){
                     <button onClick={()=>window.open(`sms:?&body=${encodeURIComponent("Watch live: "+spectatorLink)}`)} style={{flex:1,padding:"10px",background:C.card,border:"1px solid "+C.border,borderRadius:8,color:C.text,fontSize:11,cursor:"pointer",fontWeight:600}}>📱 Text It</button>
                   </div>
                 </div>
-                <div style={{fontSize:11,color:C.muted,marginBottom:8}}>Team captain links — text each captain their link</div>
+                <div style={{fontSize:11,color:C.muted,marginBottom:8}}>Team captain codes — text or read aloud to each captain</div>
                 {teams.map((team,i)=>{
+                  const captainCode=`${directorCode}-T${i+1}`;
                   const captainLink=`${appUrl}?tourney=${directorCode}&team=${i}`;
                   return(
-                    <div key={i} style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
-                      <div style={{width:10,height:10,borderRadius:"50%",background:team.color,flexShrink:0}}/>
-                      <div style={{flex:1,fontSize:12,fontWeight:600,color:C.text}}>{team.name}</div>
-                      <button onClick={()=>navigator.clipboard?.writeText(captainLink)} style={{padding:"6px 10px",background:C.card,border:"1px solid "+C.border,borderRadius:6,color:C.muted,fontSize:11,cursor:"pointer"}}>Copy</button>
-                      <button onClick={()=>window.open(`sms:?&body=${encodeURIComponent(team.name+": "+captainLink)}`)} style={{padding:"6px 10px",background:C.card,border:"1px solid "+C.border,borderRadius:6,color:C.muted,fontSize:11,cursor:"pointer"}}>Text</button>
+                    <div key={i} style={{background:C.card,border:`1px solid ${team.color}33`,borderRadius:10,padding:"10px 12px",marginBottom:8}}>
+                      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+                        <div style={{width:10,height:10,borderRadius:"50%",background:team.color,flexShrink:0}}/>
+                        <div style={{fontWeight:700,fontSize:13,color:C.text,flex:1}}>{team.name}</div>
+                        <div style={{fontSize:16,fontWeight:800,letterSpacing:2,color:team.color}}>{captainCode}</div>
+                      </div>
+                      <div style={{display:"flex",gap:6}}>
+                        <button onClick={()=>navigator.clipboard?.writeText(captainCode)} style={{flex:1,padding:"7px",background:C.surface,border:"1px solid "+C.border,borderRadius:6,color:C.muted,fontSize:11,cursor:"pointer"}}>📋 Copy Code</button>
+                        <button onClick={()=>navigator.clipboard?.writeText(captainLink)} style={{flex:1,padding:"7px",background:C.surface,border:"1px solid "+C.border,borderRadius:6,color:C.muted,fontSize:11,cursor:"pointer"}}>🔗 Copy Link</button>
+                        <button onClick={()=>window.open(`sms:?&body=${encodeURIComponent(team.name+" captain code: "+captainCode+"\nOr tap: "+captainLink)}`)} style={{flex:1,padding:"7px",background:C.surface,border:"1px solid "+C.border,borderRadius:6,color:C.muted,fontSize:11,cursor:"pointer"}}>📱 Text</button>
+                      </div>
                     </div>
                   );
                 })}
