@@ -22,14 +22,14 @@ function calcTeamScore(teamScores,teamSize,holeData,birdieBonus){
     for(let p=0;p<teamSize;p++){const s=teamScores?.[p]?.[h.hole];if(s!==undefined&&s!==null)scores.push(safeInt(s));}
     if(scores.length===0){byHole[h.hole]=null;continue;}
     scores.sort((a,b)=>a-b);
-    const best2=scores.slice(0,2);
-    let raw=best2.reduce((s,v)=>s+v,0);
+    const countBalls=teamSize<=2?1:2;const bestN=scores.slice(0,countBalls);
+    let raw=bestN.reduce((s,v)=>s+v,0);
     let bonusApplied=0;
     if(birdieBonus){
-      const extraBirdies=scores.slice(2).filter(s=>s<=h.par-1);
+      const extraBirdies=scores.slice(countBalls).filter(s=>s<=h.par-1);
       if(extraBirdies.length>0){bonusApplied=extraBirdies.reduce((sum,s)=>sum+(h.par-s),0);raw-=bonusApplied;}
     }
-    const diff=raw-(h.par*2);
+    const diff=raw-(h.par*countBalls);
     byHole[h.hole]={raw,diff,bonusApplied,scored:true};
     if(h.side==="front")front+=raw;else back+=raw;
     total+=raw;
@@ -40,8 +40,9 @@ function calcTeamScore(teamScores,teamSize,holeData,birdieBonus){
 export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBack }) {
   const [tourney,      setTourney]      = useState(initialTourney);
   const [currentHole,  setCurrentHole]  = useState(1);
-  const [tab,          setTab]          = useState("scores"); // scores | roster
+  const [tab,          setTab]          = useState("scores");
   const [saveStatus,   setSaveStatus]   = useState("");
+  const [showSummary,  setShowSummary]  = useState(false);
   const saveTimer = useRef(null);
 
   const team      = (tourney.teams || [])[teamIdx];
@@ -183,8 +184,8 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
             <div style={{ fontSize:12, color:C.green, fontWeight:600 }}>Par {holeData.par} · Hdcp {holeData.hdcp}</div>
             {saveStatus && <div style={{ fontSize:10, color:saveStatus==="saving"?C.gold:C.green, marginTop:2 }}>{saveStatus==="saving"?"💾 Saving...":"✓ Saved"}</div>}
           </div>
-          <button onClick={()=>setCurrentHole(h=>Math.min(course.holes.length,h+1))}
-            style={{ background:"rgba(123,180,80,0.15)", border:`1px solid ${C.green}`, color:C.green, fontSize:13, cursor:"pointer", padding:"6px 14px", borderRadius:16, fontWeight:700 }}>›</button>
+          <button onClick={()=>setShowSummary(true)}
+            style={{ background:"rgba(232,184,75,0.15)", border:`1px solid ${C.gold}`, color:C.gold, fontSize:11, cursor:"pointer", padding:"6px 12px", borderRadius:12, fontWeight:700 }}>📊 Board</button>
         </div>
         {/* Progress */}
         <div style={{ display:"flex", gap:2 }}>
@@ -193,6 +194,58 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
           ))}
         </div>
       </div>
+
+      {/* Tournament summary overlay */}
+      {showSummary&&(
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.92)", zIndex:500, overflowY:"auto", fontFamily:"Georgia,serif" }}>
+          <div style={{ padding:"50px 16px 40px" }}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
+              <div style={{ fontSize:20, fontWeight:800, color:C.text }}>🏆 Standings</div>
+              <button onClick={()=>setShowSummary(false)} style={{ background:C.dim, border:"none", color:C.muted, width:34, height:34, borderRadius:"50%", fontSize:16, cursor:"pointer" }}>✕</button>
+            </div>
+            <div style={{ fontSize:12, color:C.muted, marginBottom:16 }}>{tourney.name} · Hole {currentHole}</div>
+
+            {/* Column headers */}
+            <div style={{ display:"flex", padding:"4px 12px", marginBottom:6 }}>
+              <div style={{ flex:1, fontSize:10, color:C.muted, letterSpacing:1.5, textTransform:"uppercase" }}>Team</div>
+              {["F9","B9","TOT"].map(l=><div key={l} style={{ width:44, textAlign:"center", fontSize:10, color:C.muted, letterSpacing:1, textTransform:"uppercase" }}>{l}</div>)}
+            </div>
+
+            {(tourney.teams||[])
+              .map((t,i)=>{
+                const sc=calcTeamScore(t.scores||{},t.size||4,course.holes,tourney.birdie_bonus!==false);
+                return{...t,i,sc};
+              })
+              .sort((a,b)=>a.sc.totalDiff-b.sc.totalDiff)
+              .map((t,rank)=>{
+                const isMyTeam=t.i===teamIdx;
+                const d=t.sc.totalDiff;
+                return(
+                  <div key={t.i} style={{ background:isMyTeam?"rgba(123,180,80,0.1)":rank===0?"rgba(232,184,75,0.08)":C.card, border:`1px solid ${isMyTeam?C.green+"66":rank===0?C.gold+"44":C.border}`, borderRadius:12, padding:"12px 14px", marginBottom:8, display:"flex", alignItems:"center", gap:10 }}>
+                    <div style={{ width:26,height:26,borderRadius:"50%",flexShrink:0,background:rank===0?C.gold:rank===1?"#aaa":rank===2?"#cd7f32":C.dim,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:800,fontSize:12,color:rank<3?"#0a1a0f":C.muted }}>{rank+1}</div>
+                    <div style={{ flex:1,minWidth:0 }}>
+                      <div style={{ display:"flex",alignItems:"center",gap:6 }}>
+                        <div style={{ width:10,height:10,borderRadius:"50%",background:t.color,flexShrink:0 }}/>
+                        <div style={{ fontWeight:800,fontSize:14,color:isMyTeam?C.green:rank===0?C.gold:C.text }}>{t.name}{isMyTeam?" ★":""}</div>
+                      </div>
+                    </div>
+                    {[t.sc.frontDiff,t.sc.backDiff,t.sc.totalDiff].map((diff,idx)=>{
+                      const raw=idx===0?t.sc.front:idx===1?t.sc.back:t.sc.total;
+                      const label=raw===0?"—":(diff===0?"E":diff>0?"+"+diff:String(diff));
+                      const color=raw===0?C.muted:diff<0?C.green:diff>0?C.red:C.muted;
+                      return<div key={idx} style={{ width:44,textAlign:"center",fontWeight:800,fontSize:15,color }}>{label}</div>;
+                    })}
+                  </div>
+                );
+              })
+            }
+            <div style={{ height:20 }}/>
+            <button onClick={()=>setShowSummary(false)} style={{ width:"100%",padding:"16px",background:C.green,color:"#0a1a0f",border:"none",borderRadius:12,fontSize:15,fontWeight:800,cursor:"pointer" }}>
+              ← Back to Scoring
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Team header */}
       <div style={{ background:C.card, borderBottom:`1px solid ${C.border}`, padding:"12px 16px" }}>
