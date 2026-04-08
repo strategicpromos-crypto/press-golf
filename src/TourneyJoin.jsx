@@ -83,30 +83,34 @@ export default function TourneyJoin({ code, teamIdx, onDirector, onCaptain, onSp
     if (!data) { setStatus("invalid"); setError("Code not found. Check the code and try again."); return; }
     setTourney(data);
 
+    // Director: has # in code → full access, no PIN needed (code itself is the secret)
     if (isDirector) { onDirector(data); return; }
+
+    // Spectator: starts with S prefix
     if (isSpectator) { onSpectator(data); return; }
 
+    // Captain: WEDS48-T2 format → ask for PIN
     if (captainMatch) {
-      const idx = parseInt(captainMatch[2], 10) - 1; // T1 = index 0
+      const idx = parseInt(captainMatch[2], 10) - 1;
       const team = (data.teams || [])[idx];
       if (!team) { setStatus("invalid"); setError("Team not found. Check your code."); return; }
-      // Ask for PIN before granting captain access
       setPendingCaptain({ tourney: data, idx });
       setStatus("pin");
       return;
     }
 
-    // teamIdx provided via URL param
+    // URL param team index (direct link) → ask for PIN
     if (teamIdx !== null && teamIdx !== undefined) {
       const idx = parseInt(teamIdx, 10);
       const team = (data.teams || [])[idx];
       if (!team) { setStatus("invalid"); setError("Team not found."); return; }
-      onCaptain(data, idx);
+      setPendingCaptain({ tourney: data, idx });
+      setStatus("pin");
       return;
     }
 
-    // Bare director code → show team picker
-    setStatus("found");
+    // Bare public code (e.g. WEDS48) → spectator only, no team picker
+    onSpectator(data);
   }
 
   if (status === "loading") {
@@ -171,80 +175,6 @@ export default function TourneyJoin({ code, teamIdx, onDirector, onCaptain, onSp
     );
   }
 
-  if (status === "found" && tourney) {
-    const teams = tourney.teams || [];
-    return (
-      <div style={{ fontFamily:"Georgia,serif", minHeight:"100vh", background:C.bg, color:C.text, paddingBottom:40 }}>
-
-        {/* Install Banner */}
-        {showInstall && !isInstalled && (
-          <div style={{ background:"linear-gradient(135deg,rgba(123,180,80,0.18),rgba(123,180,80,0.08))", borderBottom:`1px solid ${C.green}44`, padding:"14px 20px" }}>
-            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:12 }}>
-              <div style={{ flex:1 }}>
-                <div style={{ fontWeight:700, fontSize:14, color:C.green, marginBottom:2 }}>⛳ Add Press to your home screen</div>
-                {isIOS ? (
-                  <div style={{ fontSize:12, color:C.muted, lineHeight:1.5 }}>
-                    Tap <span style={{ fontWeight:700, color:C.text }}>Share ↑</span> then <span style={{ fontWeight:700, color:C.text }}>Add to Home Screen</span>
-                  </div>
-                ) : (
-                  <div style={{ fontSize:12, color:C.muted }}>Track golf bets · Free to use</div>
-                )}
-              </div>
-              {!isIOS && installPrompt ? (
-                <button onClick={handleInstall} style={{ background:C.green, border:"none", color:"#0a1a0f", padding:"10px 16px", borderRadius:10, fontSize:13, fontWeight:800, cursor:"pointer", flexShrink:0 }}>
-                  Install
-                </button>
-              ) : (
-                <button onClick={() => setShowInstall(false)} style={{ background:"transparent", border:"none", color:C.muted, fontSize:18, cursor:"pointer", padding:"0 4px" }}>✕</button>
-              )}
-            </div>
-          </div>
-        )}
-        <div style={{ background:`linear-gradient(180deg,${C.card} 0%,transparent 100%)`, padding:"50px 24px 24px", textAlign:"center" }}>
-          <div style={{ fontSize:48, marginBottom:8 }}>🏆</div>
-          <div style={{ fontSize:24, fontWeight:800 }}>{tourney.name}</div>
-          <div style={{ fontSize:13, color:C.muted, marginTop:4 }}>Select your role below</div>
-        </div>
-
-        <div style={{ padding:"0 20px" }}>
-
-          {/* Spectator option */}
-          <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:14, padding:"16px", marginBottom:16 }}>
-            <div style={{ fontWeight:700, fontSize:16, marginBottom:4 }}>👀 Watch the Leaderboard</div>
-            <div style={{ fontSize:12, color:C.muted, marginBottom:12 }}>View live scores — read only</div>
-            <button onClick={() => onSpectator(tourney)} style={{ width:"100%", padding:"14px", background:"transparent", color:C.gold, border:`1.5px solid ${C.gold}`, borderRadius:10, fontSize:14, fontWeight:700, cursor:"pointer" }}>
-              View Leaderboard 📊
-            </button>
-          </div>
-
-          {/* Team captain options */}
-          <div style={{ fontSize:11, color:C.green, letterSpacing:1.5, textTransform:"uppercase", marginBottom:10, fontWeight:600 }}>I'm a Team Captain</div>
-          {teams.map((team, i) => (
-            <button key={i} onClick={() => onCaptain(tourney, i)} style={{
-              width:"100%", padding:"14px 16px", background:C.card,
-              border:`1px solid ${team.color}44`, borderRadius:12,
-              marginBottom:8, cursor:"pointer", display:"flex", alignItems:"center", gap:12, textAlign:"left"
-            }}>
-              <div style={{ width:14, height:14, borderRadius:"50%", background:team.color, flexShrink:0 }}/>
-              <div style={{ flex:1 }}>
-                <div style={{ fontWeight:700, fontSize:15, color:C.text }}>{team.name}</div>
-                <div style={{ fontSize:11, color:C.muted }}>{team.players?.filter(Boolean).join(", ") || "No players set"}</div>
-              </div>
-              <div style={{ color:C.muted, fontSize:18 }}>›</div>
-            </button>
-          ))}
-
-          {/* Director option */}
-          <div style={{ marginTop:16 }}>
-            <button onClick={() => onDirector(tourney)} style={{ width:"100%", padding:"12px", background:"transparent", color:C.muted, border:`1px solid ${C.border}`, borderRadius:10, fontSize:13, fontWeight:600, cursor:"pointer" }}>
-              I'm the Tournament Director 🎯
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   // Prompt for code entry
   return (
     <div style={{ fontFamily:"Georgia,serif", minHeight:"100vh", background:C.bg, color:C.text, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:24 }}>
@@ -274,27 +204,46 @@ export default function TourneyJoin({ code, teamIdx, onDirector, onCaptain, onSp
         </div>
       )}
 
-      <div style={{ width:"100%", maxWidth:360, textAlign:"center", marginTop: showInstall && !isInstalled ? 80 : 0 }}>
-        <div style={{ fontSize:52, marginBottom:16 }}>⛳</div>
-        <div style={{ fontSize:26, fontWeight:800, marginBottom:6 }}>Join Tournament</div>
-        <div style={{ fontSize:14, color:C.muted, marginBottom:32 }}>Enter the code your Tournament Director sent you</div>
+      <div style={{ width:"100%", maxWidth:380, marginTop: showInstall && !isInstalled ? 80 : 0 }}>
+        <div style={{ textAlign:"center", marginBottom:28 }}>
+          <div style={{ fontSize:48, marginBottom:12 }}>⛳</div>
+          <div style={{ fontSize:26, fontWeight:800, marginBottom:6 }}>Join Tournament</div>
+          <div style={{ fontSize:14, color:C.muted }}>Enter the code your Tournament Director sent you</div>
+        </div>
+
         <input
           value={codeInput}
-          onChange={e => setCodeInput(e.target.value.toUpperCase())}
-          placeholder="e.g. SUN247"
-          maxLength={8}
-          style={{ width:"100%", padding:"18px", background:C.surface, border:`2px solid ${C.border}`, borderRadius:14, color:C.text, fontSize:28, fontWeight:800, outline:"none", textAlign:"center", letterSpacing:6, boxSizing:"border-box", marginBottom:12 }}
+          onChange={e => setCodeInput(e.target.value.toUpperCase().replace(/\s/g,""))}
+          placeholder="e.g. WEDS48"
+          maxLength={14}
+          autoCapitalize="characters"
+          style={{ width:"100%", padding:"18px", background:C.surface, border:`2px solid ${C.border}`, borderRadius:14, color:C.text, fontSize:26, fontWeight:800, outline:"none", textAlign:"center", letterSpacing:4, boxSizing:"border-box", marginBottom:12 }}
         />
-        {error && <div style={{ color:C.red, fontSize:13, marginBottom:12 }}>{error}</div>}
-        <button onClick={() => resolve(codeInput)} disabled={codeInput.length < 6} style={{
-          width:"100%", padding:"18px", background:codeInput.length>=6?C.green:"#1a2a1a",
-          color:codeInput.length>=6?"#0a1a0f":C.muted, border:"none", borderRadius:14,
-          fontSize:17, fontWeight:800, cursor:codeInput.length>=6?"pointer":"not-allowed"
+        {error && <div style={{ color:C.red, fontSize:13, marginBottom:12, textAlign:"center" }}>{error}</div>}
+        <button onClick={() => resolve(codeInput)} disabled={codeInput.length < 4} style={{
+          width:"100%", padding:"18px", background:codeInput.length>=4?C.green:"#1a2a1a",
+          color:codeInput.length>=4?"#0a1a0f":C.muted, border:"none", borderRadius:14,
+          fontSize:17, fontWeight:800, cursor:codeInput.length>=4?"pointer":"not-allowed", marginBottom:24
         }}>
           Join →
         </button>
-        <div style={{ marginTop:24, fontSize:12, color:C.muted }}>
-          Add Press to your home screen for the best experience
+
+        {/* Code format guide */}
+        <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:14, padding:"16px" }}>
+          <div style={{ fontSize:11, color:C.green, letterSpacing:1.5, textTransform:"uppercase", marginBottom:12, fontWeight:600 }}>What code do I use?</div>
+          {[
+            { code:"WEDS48", label:"Spectator", desc:"Watch the live leaderboard — read only", color:C.muted },
+            { code:"WEDS48-T2", label:"Team Captain", desc:"Enter scores for your team (you'll need your PIN too)", color:C.green },
+            { code:"WEDS48#7XQ", label:"Director", desc:"Full access — create and manage the tournament", color:C.gold },
+          ].map((r,i)=>(
+            <div key={i} style={{ display:"flex", alignItems:"center", gap:12, marginBottom:i<2?12:0 }}>
+              <div style={{ fontFamily:"monospace", fontSize:13, fontWeight:800, color:r.color, width:110, flexShrink:0 }}>{r.code}</div>
+              <div>
+                <div style={{ fontSize:12, fontWeight:700, color:C.text }}>{r.label}</div>
+                <div style={{ fontSize:11, color:C.muted }}>{r.desc}</div>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     </div>
