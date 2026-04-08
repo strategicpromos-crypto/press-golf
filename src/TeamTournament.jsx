@@ -124,23 +124,33 @@ export default function TeamTournament({onBack, user}){
   // ── Create new tournament in DB ────────────────────────────────────────────
   async function createTourney(builtTeams){
     if(!user?.id)return null;
-    const chars="ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-    const makeCode=()=>Array.from({length:6},()=>chars[Math.floor(Math.random()*chars.length)]).join("");
-    const dirCode=makeCode();
-    const name=COURSES[courseId]?.name+" · "+new Date().toLocaleDateString("en-US",{month:"short",day:"numeric"});
+
+    // Generate day-based code: e.g. WEDS48 (Wed + month4 + day8)
+    const now     = new Date();
+    const days    = ["SUN","MON","TUES","WEDS","THUR","FRI","SAT"];
+    const dayStr  = days[now.getDay()];
+    const dateStr = String(now.getMonth()+1) + String(now.getDate());
+    const dirCode = dayStr + dateStr; // e.g. WEDS48
+
+    // Generate a 4-digit PIN for each team captain (sent privately)
+    const makePin = () => String(Math.floor(1000 + Math.random() * 9000));
+    const teamsWithPins = builtTeams.map(t => ({ ...t, pin: makePin() }));
+
+    const name = COURSES[courseId]?.name + " · " + now.toLocaleDateString("en-US",{month:"short",day:"numeric"});
     const{data}=await sb.from("team_tournaments").insert({
       owner_id:user.id,
       name,
       course_id:courseId,
       birdie_bonus:birdieBonus,
-      teams:builtTeams,
+      teams:teamsWithPins,
       current_hole:1,
       status:"setup",
       director_code:dirCode,
       spectator_code:"S"+dirCode,
     }).select().single();
     if(data){
-      setDirectorCode(dirCode); // set immediately so share panel shows right away
+      setDirectorCode(dirCode);
+      setTeams(teamsWithPins);
       await loadSaved();
     }
     return data?.id||null;
@@ -442,21 +452,22 @@ export default function TeamTournament({onBack, user}){
                     <button onClick={()=>window.open(`sms:?&body=${encodeURIComponent("Watch live: "+spectatorLink)}`)} style={{flex:1,padding:"10px",background:C.card,border:"1px solid "+C.border,borderRadius:8,color:C.text,fontSize:11,cursor:"pointer",fontWeight:600}}>📱 Text It</button>
                   </div>
                 </div>
-                <div style={{fontSize:11,color:C.muted,marginBottom:8}}>Team captain codes — text or read aloud to each captain</div>
+                <div style={{fontSize:11,color:C.muted,marginBottom:8}}>Team captain codes — text privately with PIN</div>
                 {teams.map((team,i)=>{
                   const captainCode=`${directorCode}-T${i+1}`;
                   const captainLink=`${appUrl}?tourney=${directorCode}&team=${i}`;
+                  const pin=team.pin||"----";
                   return(
                     <div key={i} style={{background:C.card,border:`1px solid ${team.color}33`,borderRadius:10,padding:"10px 12px",marginBottom:8}}>
                       <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
                         <div style={{width:10,height:10,borderRadius:"50%",background:team.color,flexShrink:0}}/>
                         <div style={{fontWeight:700,fontSize:13,color:C.text,flex:1}}>{team.name}</div>
-                        <div style={{fontSize:16,fontWeight:800,letterSpacing:2,color:team.color}}>{captainCode}</div>
+                        <div style={{fontFamily:"monospace",fontSize:13,fontWeight:800,color:team.color}}>{captainCode}</div>
+                        <div style={{fontFamily:"monospace",fontSize:14,fontWeight:800,color:C.gold,background:"rgba(232,184,75,0.1)",padding:"2px 8px",borderRadius:6}}>PIN {pin}</div>
                       </div>
                       <div style={{display:"flex",gap:6}}>
-                        <button onClick={()=>navigator.clipboard?.writeText(captainCode)} style={{flex:1,padding:"7px",background:C.surface,border:"1px solid "+C.border,borderRadius:6,color:C.muted,fontSize:11,cursor:"pointer"}}>📋 Copy Code</button>
-                        <button onClick={()=>navigator.clipboard?.writeText(captainLink)} style={{flex:1,padding:"7px",background:C.surface,border:"1px solid "+C.border,borderRadius:6,color:C.muted,fontSize:11,cursor:"pointer"}}>🔗 Copy Link</button>
-                        <button onClick={()=>window.open(`sms:?&body=${encodeURIComponent(team.name+" captain code: "+captainCode+"\nOr tap: "+captainLink)}`)} style={{flex:1,padding:"7px",background:C.surface,border:"1px solid "+C.border,borderRadius:6,color:C.muted,fontSize:11,cursor:"pointer"}}>📱 Text</button>
+                        <button onClick={()=>navigator.clipboard?.writeText(`${captainCode}  PIN: ${pin}`)} style={{flex:1,padding:"7px",background:C.surface,border:"1px solid "+C.border,borderRadius:6,color:C.muted,fontSize:11,cursor:"pointer"}}>📋 Copy</button>
+                        <button onClick={()=>window.open(`sms:?&body=${encodeURIComponent(team.name+" captain:\nCode: "+captainCode+"\nPIN: "+pin+"\nScores: "+captainLink)}`)} style={{flex:1,padding:"7px",background:C.surface,border:"1px solid "+C.border,borderRadius:6,color:C.muted,fontSize:11,cursor:"pointer"}}>📱 Text Captain</button>
                       </div>
                     </div>
                   );
