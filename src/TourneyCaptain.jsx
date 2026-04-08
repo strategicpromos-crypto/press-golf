@@ -121,6 +121,23 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
           <div style={{ fontSize:13, color:C.muted, marginTop:4 }}>Edit your roster — updates the leaderboard instantly</div>
         </div>
         <div style={{ padding:"0 16px" }}>
+          <div style={{ fontSize:11, color:C.green, letterSpacing:1.5, textTransform:"uppercase", marginBottom:10, fontWeight:600 }}>Team Name</div>
+          <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:12, padding:"12px 14px", marginBottom:20 }}>
+            <input
+              value={team.name || ""}
+              onChange={e => {
+                const updatedTeams = (tourney.teams || []).map((t, i) =>
+                  i === teamIdx ? { ...t, name: e.target.value } : t
+                );
+                setTourney(prev => ({ ...prev, teams: updatedTeams }));
+                scheduleSync(updatedTeams);
+              }}
+              placeholder="e.g. The Hackers, Dream Team..."
+              style={{ width:"100%", padding:"12px", background:C.surface, border:`1px solid ${C.border}`, borderRadius:8, color:C.text, fontSize:18, fontWeight:800, outline:"none", boxSizing:"border-box" }}
+            />
+            <div style={{ fontSize:11, color:C.muted, marginTop:6 }}>Shows on the leaderboard for everyone to see</div>
+          </div>
+
           <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:12, padding:"14px 16px", marginBottom:14 }}>
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
               <div style={{ fontSize:13, color:C.muted }}>Players on team</div>
