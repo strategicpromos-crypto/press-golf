@@ -340,6 +340,9 @@ export default function TeamTournament({onBack, user}){
             </div>
           </div>
         )}
+      </div>
+    );
+  }
 
   // SETUP
   if(screen==="setup"){
