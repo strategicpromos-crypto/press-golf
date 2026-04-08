@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useRef } from "react";
 import { COURSES } from "./golf.js";
 import { sb } from "./supabase.js";
+import TourneyJoin from "./TourneyJoin.jsx";
+import TourneyCaptain from "./TourneyCaptain.jsx";
+import TourneySpectator from "./TourneySpectator.jsx";
 
 const C = {
   bg:"#080f0a", surface:"#0e1a10", card:"#121e14",
@@ -80,6 +83,9 @@ export default function TeamTournament({onBack, user}){
   const[showHelp,setShowHelp]=useState(false);
   const[loading,setLoading]=useState(false);
   const[saveStatus,setSaveStatus]=useState("");
+  const[captainTourney,setCaptainTourney]=useState(null);
+  const[captainTeamIdx,setCaptainTeamIdx]=useState(0);
+  const[spectatorTourney,setSpectatorTourney]=useState(null);
   const saveTimer=useRef(null);
   const course=COURSES[courseId];
 
@@ -219,6 +225,34 @@ export default function TeamTournament({onBack, user}){
   const holeData=course?.holes[currentHole-1];
   const isLastHole=currentHole===(course?.holes?.length||18);
 
+  // JOIN (spectator / captain / director via code entry)
+  if(screen==="join"){
+    return(
+      <TourneyJoin
+        code={null}
+        teamIdx={null}
+        onDirector={()=>setScreen("home")}
+        onCaptain={(t,idx)=>{
+          setScreen("captainView");
+          setCaptainTourney(t);
+          setCaptainTeamIdx(idx);
+        }}
+        onSpectator={(t)=>{
+          setScreen("spectatorView");
+          setSpectatorTourney(t);
+        }}
+      />
+    );
+  }
+
+  if(screen==="captainView"&&captainTourney){
+    return <TourneyCaptain tourney={captainTourney} teamIdx={captainTeamIdx} onBack={()=>setScreen("join")}/>;
+  }
+
+  if(screen==="spectatorView"&&spectatorTourney){
+    return <TourneySpectator tourney={spectatorTourney} onBack={()=>setScreen("join")}/>;
+  }
+
   // HOME
   if(screen==="home"){
     const active=(savedTourneys||[]).filter(t=>t.status==="active");
@@ -332,6 +366,8 @@ export default function TeamTournament({onBack, user}){
             setScreen("setup");
           }}>+ New Tournament Setup</BigBtn>
 
+          <div style={{height:10}}/>
+          <GhostBtn onClick={()=>setScreen("join")} color={C.green}>🔑 Join a Tournament</GhostBtn>
           <div style={{height:10}}/>
           <GhostBtn onClick={onBack}>← Back to Press</GhostBtn>
           <div style={{height:8}}/>
