@@ -479,7 +479,8 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
   const [saving,setSaving]=useState(false);
   const [toast,setToast]=useState({msg:"",error:false});
   const [view,setView]=useState("roster"); // roster | profile | liveround | tournament
-  const [activeRound, setActiveRound]=useState(null); // stores active live round info
+  const [activeRound, setActiveRound]=useState(null);
+  const [activeTourney, setActiveTourney]=useState(null); // active team tournament
   const [pid,setPid]=useState(null);
   const [ptab,setPtab]=useState("overview");
   const [sheet,setSheet]=useState(null);
@@ -518,6 +519,16 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
     if(ar.data)setArchivedRounds(ar.data); if(ab.data)setArchivedBets(ab.data);
     if(cr.data)setCancelRequests(cr.data);
     if(sr.data)setStrokeRequests(sr.data);
+
+    // Fetch active team tournament
+    const{data:atData}=await sb.from("team_tournaments")
+      .select("id,name,course_id,current_hole,teams,director_code,status")
+      .eq("owner_id",user.id)
+      .eq("status","active")
+      .order("updated_at",{ascending:false})
+      .limit(1)
+      .maybeSingle();
+    setActiveTourney(atData||null);
     setLoading(false);
   },[user.id]);
 
@@ -986,6 +997,20 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
               <div style={{fontSize:11,color:C.dim,marginTop:1}}>{(activeRound.opponents||[]).map(o=>o.name).join(", ")}</div>
             </div>
             <button onClick={()=>setView("liveround")} style={{background:C.green,border:"none",color:"#0a1a0f",padding:"10px 16px",borderRadius:12,fontSize:13,fontWeight:800,cursor:"pointer",flexShrink:0}}>
+              Resume →
+            </button>
+          </div>
+        )}
+
+        {/* Resume Tournament banner */}
+        {activeTourney&&(
+          <div style={{background:`linear-gradient(135deg,rgba(232,184,75,0.15),rgba(232,184,75,0.05))`,border:`1px solid ${C.gold}44`,borderRadius:14,padding:"14px 16px",marginBottom:14,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <div>
+              <div style={{fontWeight:700,fontSize:14,color:C.gold,marginBottom:2}}>🏆 Tournament In Progress</div>
+              <div style={{fontSize:12,color:C.muted}}>{activeTourney.name} · Hole {activeTourney.current_hole}</div>
+              <div style={{fontSize:11,color:C.dim,marginTop:1}}>{(activeTourney.teams||[]).length} teams · Code: {activeTourney.director_code?.split("#")[0]}</div>
+            </div>
+            <button onClick={()=>setView("tournament")} style={{background:C.gold,border:"none",color:"#0a1a0f",padding:"10px 16px",borderRadius:12,fontSize:13,fontWeight:800,cursor:"pointer",flexShrink:0}}>
               Resume →
             </button>
           </div>
