@@ -21,33 +21,28 @@ function relColor(d){if(d===null||d===undefined)return C.muted;if(d<0)return C.g
 function calcTeamScore(teamScores,teamSize,holeData,birdieBonus){
   const byHole={};
   let front=0,back=0,total=0;
-  const frontPar2=holeData.filter(h=>h.side==="front").reduce((s,h)=>s+h.par*2,0);
-  const backPar2=holeData.filter(h=>h.side==="back").reduce((s,h)=>s+h.par*2,0);
-  const totalPar2=frontPar2+backPar2;
+  const countBalls=teamSize<=2?1:2; // 2-man teams = 1 best ball; 3+ = 2 best ball
+  const frontPar=holeData.filter(h=>h.side==="front").reduce((s,h)=>s+h.par*countBalls,0);
+  const backPar=holeData.filter(h=>h.side==="back").reduce((s,h)=>s+h.par*countBalls,0);
+  const totalPar=frontPar+backPar;
   for(const h of holeData){
     const scores=[];
     for(let p=0;p<teamSize;p++){const s=teamScores?.[p]?.[h.hole];if(s!==undefined&&s!==null)scores.push(safeInt(s));}
     if(scores.length===0){byHole[h.hole]=null;continue;}
     scores.sort((a,b)=>a-b);
-    const best2=scores.slice(0,2);
-    let raw=best2.reduce((s,v)=>s+v,0);
+    const bestN=scores.slice(0,countBalls);
+    let raw=bestN.reduce((s,v)=>s+v,0);
     let bonusApplied=0;
     if(birdieBonus){
-      // Players beyond the top 2 who made birdie or better
-      // Each contributes their actual vs-par score as a bonus (e.g. eagle = -2, birdie = -1)
-      const extraBirdies=scores.slice(2).filter(s=>s<=h.par-1);
-      if(extraBirdies.length>0){
-        // bonus = sum of (par - score) for each extra birdie/eagle player
-        bonusApplied=extraBirdies.reduce((sum,s)=>sum+(h.par-s),0);
-        raw-=bonusApplied;
-      }
+      const extraBirdies=scores.slice(countBalls).filter(s=>s<=h.par-1);
+      if(extraBirdies.length>0){bonusApplied=extraBirdies.reduce((sum,s)=>sum+(h.par-s),0);raw-=bonusApplied;}
     }
-    const diff=raw-(h.par*2);
+    const diff=raw-(h.par*countBalls);
     byHole[h.hole]={raw,diff,bonusApplied,scored:true};
     if(h.side==="front")front+=raw;else back+=raw;
     total+=raw;
   }
-  return{byHole,front,frontDiff:front-frontPar2,back,backDiff:back-backPar2,total,totalDiff:total-totalPar2,frontPar2,backPar2,totalPar2};
+  return{byHole,front,frontDiff:front-frontPar,back,backDiff:back-backPar,total,totalDiff:total-totalPar,frontPar,backPar,totalPar,countBalls};
 }
 
 function BigBtn({children,onClick,color=C.green,disabled=false,style={}}){
@@ -178,11 +173,12 @@ export default function TeamTournament({onBack, user}){
   }
 
   // ── Delete a saved tournament ──────────────────────────────────────────────
-  const[confirmDelete,setConfirmDelete]=useState(null); // tourney object to confirm deletion of
+  const[confirmDelete,setConfirmDelete]=useState(null);
+  const[deleteInput,setDeleteInput]=useState("");
 
   async function deleteTourney(id){
-    // Never delete silently — always require confirmation first
-    const t = savedTourneys.find(s=>s.id===id);
+    const t=savedTourneys.find(s=>s.id===id);
+    setDeleteInput("");
     setConfirmDelete(t||{id});
   }
 
@@ -191,6 +187,7 @@ export default function TeamTournament({onBack, user}){
     setSavedTourneys(prev=>prev.filter(t=>t.id!==id));
     if(tourneyId===id){setTourneyId(null);setTeams([]);setDirectorCode(null);}
     setConfirmDelete(null);
+    setDeleteInput("");
   }
 
   function buildTeams(n,existing=[]){
@@ -313,55 +310,52 @@ export default function TeamTournament({onBack, user}){
           </button>
         </div>
 
-        {/* Delete confirmation modal */}
-        {confirmDelete&&(()=>{
-          const[deleteInput,setDeleteInput]=React.useState("");
-          const confirmed=deleteInput.trim().toUpperCase()==="DELETE";
-          return(
-            <div style={{position:"absolute",top:0,left:0,right:0,minHeight:"100%",background:"rgba(0,0,0,0.92)",zIndex:700,display:"flex",alignItems:"center",justifyContent:"center",padding:24}}>
-              <div style={{background:C.surface,borderRadius:20,padding:24,border:"1px solid rgba(224,80,80,0.4)",width:"100%",maxWidth:360}}>
-                <div style={{textAlign:"center",marginBottom:20}}>
-                  <div style={{fontSize:40,marginBottom:12}}>⚠️</div>
-                  <div style={{fontSize:18,fontWeight:800,color:C.red,marginBottom:8}}>Delete Tournament?</div>
-                  <div style={{fontSize:14,color:C.text,fontWeight:600,marginBottom:6}}>{confirmDelete.name||"This tournament"}</div>
-                  <div style={{fontSize:13,color:C.muted,lineHeight:1.6}}>
-                    This will permanently delete all scores, team data, and share codes. This cannot be undone.
-                  </div>
+        {/* Delete confirmation modal — fixed overlay above everything */}
+        {confirmDelete&&(
+          <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"rgba(0,0,0,0.92)",zIndex:900,display:"flex",alignItems:"center",justifyContent:"center",padding:24}}
+            onClick={(e)=>{if(e.target===e.currentTarget){setConfirmDelete(null);setDeleteInput("");}}}
+          >
+            <div style={{background:C.surface,borderRadius:20,padding:24,border:"1px solid rgba(224,80,80,0.4)",width:"100%",maxWidth:360}}>
+              <div style={{textAlign:"center",marginBottom:20}}>
+                <div style={{fontSize:40,marginBottom:12}}>⚠️</div>
+                <div style={{fontSize:18,fontWeight:800,color:C.red,marginBottom:8}}>Delete Tournament?</div>
+                <div style={{fontSize:14,color:C.text,fontWeight:600,marginBottom:6}}>{confirmDelete.name||"This tournament"}</div>
+                <div style={{fontSize:13,color:C.muted,lineHeight:1.6}}>Permanently deletes all scores, teams, and share codes. Cannot be undone.</div>
+              </div>
+              <div style={{background:"rgba(224,80,80,0.08)",border:"1px solid rgba(224,80,80,0.2)",borderRadius:10,padding:"12px 14px",marginBottom:16,fontSize:12,color:C.red,textAlign:"center",fontWeight:600}}>
+                All round scores will be lost forever
+              </div>
+              <div style={{marginBottom:16}}>
+                <div style={{fontSize:12,color:C.muted,marginBottom:8,textAlign:"center"}}>
+                  Type <span style={{fontFamily:"monospace",fontWeight:800,color:C.red,letterSpacing:2}}>DELETE</span> to confirm
                 </div>
-                <div style={{background:"rgba(224,80,80,0.08)",border:"1px solid rgba(224,80,80,0.2)",borderRadius:10,padding:"12px 14px",marginBottom:16,fontSize:12,color:C.red,textAlign:"center",fontWeight:600}}>
-                  All round scores will be lost forever
-                </div>
-                <div style={{marginBottom:16}}>
-                  <div style={{fontSize:12,color:C.muted,marginBottom:8,textAlign:"center"}}>
-                    Type <span style={{fontFamily:"monospace",fontWeight:800,color:C.red,letterSpacing:2}}>DELETE</span> to confirm
-                  </div>
-                  <input
-                    value={deleteInput}
-                    onChange={e=>setDeleteInput(e.target.value)}
-                    placeholder="Type DELETE here"
-                    autoCapitalize="characters"
-                    style={{width:"100%",padding:"14px",background:C.bg,border:`2px solid ${confirmed?"rgba(224,80,80,0.6)":C.border}`,borderRadius:10,color:confirmed?C.red:C.text,fontSize:18,fontWeight:800,outline:"none",textAlign:"center",letterSpacing:4,boxSizing:"border-box",fontFamily:"monospace",transition:"border-color 0.2s"}}
-                  />
-                </div>
-                <div style={{display:"flex",gap:10}}>
-                  <button onClick={()=>{setConfirmDelete(null);setDeleteInput?.("");}} style={{flex:2,padding:"16px",background:C.green,color:"#0a1a0f",border:"none",borderRadius:12,fontSize:15,fontWeight:800,cursor:"pointer"}}>
-                    Keep It ✓
-                  </button>
-                  <button
-                    onClick={()=>confirmed&&confirmDeleteTourney(confirmDelete.id)}
-                    disabled={!confirmed}
-                    style={{flex:1,padding:"16px",background:confirmed?"rgba(224,80,80,0.15)":"transparent",color:confirmed?C.red:C.dim,border:`1px solid ${confirmed?"rgba(224,80,80,0.4)":C.border}`,borderRadius:12,fontSize:13,fontWeight:700,cursor:confirmed?"pointer":"not-allowed",transition:"all 0.2s"}}
-                  >
-                    Delete
-                  </button>
-                </div>
+                <input
+                  autoFocus
+                  value={deleteInput}
+                  onChange={e=>setDeleteInput(e.target.value)}
+                  placeholder="Type DELETE here"
+                  autoCapitalize="characters"
+                  style={{width:"100%",padding:"14px",background:C.bg,border:`2px solid ${deleteInput.toUpperCase()==="DELETE"?"rgba(224,80,80,0.6)":C.border}`,borderRadius:10,color:deleteInput.toUpperCase()==="DELETE"?C.red:C.text,fontSize:18,fontWeight:800,outline:"none",textAlign:"center",letterSpacing:4,boxSizing:"border-box",fontFamily:"monospace"}}
+                />
+              </div>
+              <div style={{display:"flex",gap:10}}>
+                <button onClick={()=>{setConfirmDelete(null);setDeleteInput("");}} style={{flex:2,padding:"16px",background:C.green,color:"#0a1a0f",border:"none",borderRadius:12,fontSize:15,fontWeight:800,cursor:"pointer"}}>
+                  Keep It ✓
+                </button>
+                <button
+                  onClick={()=>{if(deleteInput.toUpperCase()==="DELETE")confirmDeleteTourney(confirmDelete.id);}}
+                  disabled={deleteInput.toUpperCase()!=="DELETE"}
+                  style={{flex:1,padding:"16px",background:deleteInput.toUpperCase()==="DELETE"?"rgba(224,80,80,0.2)":"transparent",color:deleteInput.toUpperCase()==="DELETE"?C.red:C.dim,border:`1px solid ${deleteInput.toUpperCase()==="DELETE"?"rgba(224,80,80,0.5)":C.border}`,borderRadius:12,fontSize:13,fontWeight:700,cursor:deleteInput.toUpperCase()==="DELETE"?"pointer":"not-allowed"}}
+                >
+                  Delete
+                </button>
               </div>
             </div>
-          );
-        })()}
+          </div>
+        )}
         {showHelp&&(
-          <div style={{position:"absolute",top:0,left:0,right:0,minHeight:"100%",background:"rgba(0,0,0,0.92)",zIndex:600,overflowY:"auto",padding:"20px"}}>
-            <div style={{background:C.surface,borderRadius:20,padding:"24px",border:"1px solid "+C.border}}>
+          <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"rgba(0,0,0,0.92)",zIndex:800,overflowY:"auto",padding:"20px"}}>
+            <div style={{background:C.surface,borderRadius:20,padding:"24px",border:"1px solid "+C.border,maxWidth:500,margin:"0 auto"}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
                 <div style={{fontSize:18,fontWeight:800}}>How It Works</div>
                 <button onClick={()=>setShowHelp(false)} style={{background:C.dim,border:"none",color:C.muted,width:32,height:32,borderRadius:"50%",fontSize:16,cursor:"pointer"}}>✕</button>
