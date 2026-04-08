@@ -125,6 +125,10 @@ export default function TeamTournament({onBack, user}){
   // ── Create new tournament in DB ────────────────────────────────────────────
   async function createTourney(builtTeams){
     if(!user?.id)return null;
+    // Generate unique 6-char code
+    const chars="ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    const makeCode=()=>Array.from({length:6},()=>chars[Math.floor(Math.random()*chars.length)]).join("");
+    let dirCode=makeCode();
     const name=COURSES[courseId]?.name+" · "+new Date().toLocaleDateString("en-US",{month:"short",day:"numeric"});
     const{data}=await sb.from("team_tournaments").insert({
       owner_id:user.id,
@@ -134,6 +138,8 @@ export default function TeamTournament({onBack, user}){
       teams:builtTeams,
       current_hole:1,
       status:"setup",
+      director_code:dirCode,
+      spectator_code:"S"+dirCode,
     }).select().single();
     return data?.id||null;
   }
@@ -357,13 +363,50 @@ export default function TeamTournament({onBack, user}){
             </div>
           ))}
 
-          <div style={{height:20}}/>
+          {/* Share Codes Panel */}
+          {tourneyId&&teams.length>0&&(()=>{
+            const saved=savedTourneys.find(t=>t.id===tourneyId);
+            const dirCode=saved?.director_code;
+            if(!dirCode)return null;
+            const appUrl="https://press-golf.vercel.app";
+            const spectatorLink=`${appUrl}?tourney=S${dirCode}`;
+            return(
+              <div style={{background:"rgba(123,180,80,0.06)",border:"1px solid rgba(123,180,80,0.2)",borderRadius:14,padding:"16px",marginBottom:16}}>
+                <div style={{fontSize:11,color:C.green,letterSpacing:1.5,textTransform:"uppercase",marginBottom:12,fontWeight:600}}>🔗 Share Tournament</div>
+                <div style={{marginBottom:12}}>
+                  <div style={{fontSize:11,color:C.muted,marginBottom:4}}>Your director code (keep private)</div>
+                  <div style={{background:C.card,border:"1px solid "+C.border,borderRadius:8,padding:"10px 14px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                    <div style={{fontSize:22,fontWeight:800,letterSpacing:4,color:C.gold}}>{dirCode}</div>
+                    <button onClick={()=>navigator.clipboard?.writeText(dirCode)} style={{background:"transparent",border:"none",color:C.muted,fontSize:12,cursor:"pointer"}}>Copy</button>
+                  </div>
+                </div>
+                <div style={{marginBottom:12}}>
+                  <div style={{fontSize:11,color:C.muted,marginBottom:4}}>Spectator link — share with anyone to watch live</div>
+                  <div style={{display:"flex",gap:8}}>
+                    <button onClick={()=>navigator.clipboard?.writeText(spectatorLink)} style={{flex:1,padding:"10px",background:C.card,border:"1px solid "+C.border,borderRadius:8,color:C.text,fontSize:11,cursor:"pointer",fontWeight:600}}>📋 Copy Link</button>
+                    <button onClick={()=>window.open(`sms:?&body=${encodeURIComponent("Watch live: "+spectatorLink)}`)} style={{flex:1,padding:"10px",background:C.card,border:"1px solid "+C.border,borderRadius:8,color:C.text,fontSize:11,cursor:"pointer",fontWeight:600}}>📱 Text It</button>
+                  </div>
+                </div>
+                <div style={{fontSize:11,color:C.muted,marginBottom:8}}>Team captain links — text each captain their link</div>
+                {teams.map((team,i)=>{
+                  const captainLink=`${appUrl}?tourney=${dirCode}&team=${i}`;
+                  return(
+                    <div key={i} style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+                      <div style={{width:10,height:10,borderRadius:"50%",background:team.color,flexShrink:0}}/>
+                      <div style={{flex:1,fontSize:12,fontWeight:600,color:C.text}}>{team.name}</div>
+                      <button onClick={()=>navigator.clipboard?.writeText(captainLink)} style={{padding:"6px 10px",background:C.card,border:"1px solid "+C.border,borderRadius:6,color:C.muted,fontSize:11,cursor:"pointer"}}>Copy</button>
+                      <button onClick={()=>window.open(`sms:?&body=${encodeURIComponent(team.name+": "+captainLink)}`)} style={{padding:"6px 10px",background:C.card,border:"1px solid "+C.border,borderRadius:6,color:C.muted,fontSize:11,cursor:"pointer"}}>Text</button>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
+
+          <div style={{height:8}}/>
           <BigBtn onClick={async()=>{
             setCurrentHole(1);setActiveTeam(0);
-            // Mark as active in DB
-            if(tourneyId){
-              await sb.from("team_tournaments").update({status:"active",current_hole:1}).eq("id",tourneyId);
-            }
+            if(tourneyId){await sb.from("team_tournaments").update({status:"active",current_hole:1}).eq("id",tourneyId);}
             setScreen("scoring");
           }}>Tee It Up! ⛳</BigBtn>
         </div>
