@@ -38,14 +38,25 @@ export default function TourneyJoin({ code, teamIdx, onDirector, onCaptain, onSp
       : captainMatch ? captainMatch[1]
       : upper;
 
-    const { data } = await sb.from("team_tournaments")
-      .select("*")
-      .eq("director_code", dirCode)
-      .single();
+    // Spectator & captain: look up by spectator_code (public code e.g. WEDS48)
+    // Director: look up by director_code (secret e.g. WEDS48#7XQ)
+    const isDirector = upper.includes("#");
+
+    let data;
+    if (isDirector) {
+      const res = await sb.from("team_tournaments").select("*").eq("director_code", upper).single();
+      data = res.data;
+    } else {
+      // public code — used by spectators AND captains
+      const dirCode = isSpectator ? upper.slice(1) : captainMatch ? captainMatch[1] : upper;
+      const res = await sb.from("team_tournaments").select("*").eq("spectator_code", dirCode).single();
+      data = res.data;
+    }
 
     if (!data) { setStatus("invalid"); setError("Code not found. Check the code and try again."); return; }
     setTourney(data);
 
+    if (isDirector) { onDirector(data); return; }
     if (isSpectator) { onSpectator(data); return; }
 
     if (captainMatch) {
