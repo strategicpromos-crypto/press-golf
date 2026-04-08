@@ -10,10 +10,12 @@ const C = {
 // Shown when someone opens press-golf.vercel.app?tourney=SUN247 or ?tourney=SUN247&team=3
 // Resolves the code → routes to captain or spectator view
 export default function TourneyJoin({ code, teamIdx, onDirector, onCaptain, onSpectator }) {
-  const [status,   setStatus]   = useState("loading"); // loading | found | invalid | prompt
-  const [tourney,  setTourney]  = useState(null);
-  const [codeInput,setCodeInput]= useState("");
-  const [error,    setError]    = useState("");
+  const [status,         setStatus]         = useState("loading");
+  const [pinInput,       setPinInput]       = useState("");
+  const [pendingCaptain, setPendingCaptain] = useState(null); // {tourney, idx}
+  const [tourney,        setTourney]        = useState(null);
+  const [codeInput,      setCodeInput]      = useState("");
+  const [error,          setError]          = useState("");
 
   useEffect(() => {
     if (code) resolve(code);
@@ -23,10 +25,19 @@ export default function TourneyJoin({ code, teamIdx, onDirector, onCaptain, onSp
   async function resolve(raw) {
     setStatus("loading");
     setError("");
-    const isSpectator = raw.startsWith("S") && raw.length === 7;
-    const dirCode     = isSpectator ? raw.slice(1) : raw;
+    const upper = raw.trim().toUpperCase();
 
-    // Look up by director_code
+    // Spectator: starts with S, rest matches a director code (no dash)
+    const isSpectator = upper.startsWith("S") && !upper.includes("-") && upper.length >= 5;
+
+    // Captain code: WEDS48-T3 format
+    const captainMatch = upper.match(/^([A-Z]+\d+)-T(\d+)$/);
+
+    // Director code: plain 6 chars
+    const dirCode = isSpectator ? upper.slice(1)
+      : captainMatch ? captainMatch[1]
+      : upper;
+
     const { data } = await sb.from("team_tournaments")
       .select("*")
       .eq("director_code", dirCode)
@@ -35,12 +46,19 @@ export default function TourneyJoin({ code, teamIdx, onDirector, onCaptain, onSp
     if (!data) { setStatus("invalid"); setError("Code not found. Check the code and try again."); return; }
     setTourney(data);
 
-    if (isSpectator) {
-      onSpectator(data);
+    if (isSpectator) { onSpectator(data); return; }
+
+    if (captainMatch) {
+      const idx = parseInt(captainMatch[2], 10) - 1; // T1 = index 0
+      const team = (data.teams || [])[idx];
+      if (!team) { setStatus("invalid"); setError("Team not found. Check your code."); return; }
+      // Ask for PIN before granting captain access
+      setPendingCaptain({ tourney: data, idx });
+      setStatus("pin");
       return;
     }
 
-    // teamIdx provided in URL → captain mode
+    // teamIdx provided via URL param
     if (teamIdx !== null && teamIdx !== undefined) {
       const idx = parseInt(teamIdx, 10);
       const team = (data.teams || [])[idx];
@@ -49,7 +67,7 @@ export default function TourneyJoin({ code, teamIdx, onDirector, onCaptain, onSp
       return;
     }
 
-    // Just a bare director code → show the join screen
+    // Bare director code → show team picker
     setStatus("found");
   }
 
@@ -59,6 +77,45 @@ export default function TourneyJoin({ code, teamIdx, onDirector, onCaptain, onSp
         <div style={{ width:40, height:40, border:`3px solid ${C.dim}`, borderTop:`3px solid ${C.green}`, borderRadius:"50%", animation:"spin 0.8s linear infinite" }}/>
         <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
         <div style={{ color:C.muted, fontSize:14 }}>Finding tournament...</div>
+      </div>
+    );
+  }
+
+  // PIN entry screen for captains
+  if (status === "pin" && pendingCaptain) {
+    const team = (pendingCaptain.tourney.teams || [])[pendingCaptain.idx];
+    return (
+      <div style={{ fontFamily:"Georgia,serif", minHeight:"100vh", background:C.bg, color:C.text, display:"flex", alignItems:"center", justifyContent:"center", padding:24 }}>
+        <div style={{ width:"100%", maxWidth:340, textAlign:"center" }}>
+          <div style={{ fontSize:40, marginBottom:12 }}>🔐</div>
+          <div style={{ fontSize:22, fontWeight:800, marginBottom:4 }}>{team?.name}</div>
+          <div style={{ fontSize:14, color:C.muted, marginBottom:28 }}>Enter your 4-digit captain PIN</div>
+          <input
+            value={pinInput}
+            onChange={e => setPinInput(e.target.value.replace(/\D/g,"").slice(0,4))}
+            placeholder="----"
+            maxLength={4}
+            inputMode="numeric"
+            style={{ width:"100%", padding:"18px", background:C.surface, border:`2px solid ${C.border}`, borderRadius:14, color:C.text, fontSize:36, fontWeight:800, outline:"none", textAlign:"center", letterSpacing:12, boxSizing:"border-box", marginBottom:12 }}
+          />
+          {error && <div style={{ color:C.red, fontSize:13, marginBottom:12 }}>{error}</div>}
+          <button onClick={() => {
+            const correctPin = team?.pin;
+            if (pinInput === correctPin) {
+              onCaptain(pendingCaptain.tourney, pendingCaptain.idx);
+            } else {
+              setError("Wrong PIN. Check with your tournament director.");
+              setPinInput("");
+            }
+          }} disabled={pinInput.length !== 4} style={{
+            width:"100%", padding:"18px", background:pinInput.length===4?C.green:"#1a2a1a",
+            color:pinInput.length===4?"#0a1a0f":C.muted, border:"none", borderRadius:14,
+            fontSize:17, fontWeight:800, cursor:pinInput.length===4?"pointer":"not-allowed", marginBottom:12
+          }}>Enter →</button>
+          <button onClick={() => { setStatus("prompt"); setPinInput(""); setError(""); }} style={{ background:"transparent", border:"none", color:C.muted, fontSize:13, cursor:"pointer" }}>
+            ← Try a different code
+          </button>
+        </div>
       </div>
     );
   }
@@ -154,4 +211,3 @@ export default function TourneyJoin({ code, teamIdx, onDirector, onCaptain, onSp
     </div>
   );
 }
-
