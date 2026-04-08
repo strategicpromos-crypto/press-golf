@@ -31,7 +31,16 @@ function calcTeamScore(teamScores,teamSize,holeData,birdieBonus){
     const best2=scores.slice(0,2);
     let raw=best2.reduce((s,v)=>s+v,0);
     let bonusApplied=0;
-    if(birdieBonus){const bc=scores.filter(s=>s<=h.par-1).length;if(bc>=3){bonusApplied=bc-2;raw-=bonusApplied;}}
+    if(birdieBonus){
+      // Players beyond the top 2 who made birdie or better
+      // Each contributes their actual vs-par score as a bonus (e.g. eagle = -2, birdie = -1)
+      const extraBirdies=scores.slice(2).filter(s=>s<=h.par-1);
+      if(extraBirdies.length>0){
+        // bonus = sum of (par - score) for each extra birdie/eagle player
+        bonusApplied=extraBirdies.reduce((sum,s)=>sum+(h.par-s),0);
+        raw-=bonusApplied;
+      }
+    }
     const diff=raw-(h.par*2);
     byHole[h.hole]={raw,diff,bonusApplied,scored:true};
     if(h.side==="front")front+=raw;else back+=raw;
