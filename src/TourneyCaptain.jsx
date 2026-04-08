@@ -151,6 +151,8 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
       </div>
     );
   }
+
+  return (
     <div style={{ fontFamily:"Georgia,serif", minHeight:"100vh", background:C.bg, color:C.text, paddingBottom:120 }}>
 
       {/* Header */}
