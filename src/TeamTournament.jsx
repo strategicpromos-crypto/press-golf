@@ -126,15 +126,16 @@ export default function TeamTournament({onBack, user}){
   async function createTourney(builtTeams){
     if(!user?.id)return null;
 
-    // Generate codes
-    const now     = new Date();
-    const days    = ["SUN","MON","TUES","WEDS","THUR","FRI","SAT"];
-    const dayStr  = days[now.getDay()];
-    const dateStr = String(now.getMonth()+1) + String(now.getDate());
-    const publicCode = dayStr + dateStr;          // e.g. WEDS48  ← spectators use this
-    const chars   = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-    const secret  = Array.from({length:3},()=>chars[Math.floor(Math.random()*chars.length)]).join("");
-    const dirCode = publicCode + "#" + secret;    // e.g. WEDS48#7XQ ← director only
+    // Generate codes: day+date+unique suffix e.g. WEDS48-ABC
+    const now      = new Date();
+    const days     = ["SUN","MON","TUES","WEDS","THUR","FRI","SAT"];
+    const dayStr   = days[now.getDay()];
+    const dateStr  = String(now.getMonth()+1) + String(now.getDate());
+    const chars    = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+    const suffix   = Array.from({length:3},()=>chars[Math.floor(Math.random()*chars.length)]).join("");
+    const publicCode = dayStr + dateStr + "-" + suffix;  // e.g. WEDS48-ABC ← spectators use this
+    const secret   = Array.from({length:3},()=>chars[Math.floor(Math.random()*chars.length)]).join("");
+    const dirCode  = publicCode + "#" + secret;          // e.g. WEDS48-ABC#XQ7 ← director only
 
     // Generate a 4-digit PIN for each team captain (sent privately)
     const makePin = () => String(Math.floor(1000 + Math.random() * 9000));
@@ -397,8 +398,8 @@ export default function TeamTournament({onBack, user}){
 
               <div style={{fontSize:11,color:C.green,letterSpacing:1.5,textTransform:"uppercase",margin:"16px 0 8px",fontWeight:600}}>Codes</div>
               {[
-                {code:"WEDS48",label:"Public code",desc:"Announce to everyone. Spectators use this to watch."},
-                {code:"WEDS48-T1",label:"Captain code",desc:"Send privately to Team 1 captain along with their 4-digit PIN."},
+                {code:"WEDS48-ABC",label:"Public code",desc:"Announce to everyone. Spectators use this to watch. Unique to your tournament."},
+                {code:"WEDS48-ABC-T1",label:"Captain code",desc:"Send privately to Team 1 captain along with their 4-digit PIN."},
               ].map((r,i)=>(
                 <div key={i} style={{background:C.card,border:"1px solid "+C.border,borderRadius:12,padding:"14px",marginBottom:8}}>
                   <div style={{fontFamily:"monospace",fontSize:16,fontWeight:800,color:C.gold,marginBottom:4}}>{r.code}</div>
@@ -545,22 +546,31 @@ export default function TeamTournament({onBack, user}){
                   </div>
                 </div>
 
-                <div style={{fontSize:11,color:C.muted,marginBottom:8,fontWeight:600}}>Captain codes — text privately with PIN</div>
+                <div style={{fontSize:11,color:C.green,letterSpacing:1.5,textTransform:"uppercase",marginBottom:8,fontWeight:600}}>Team Captains</div>
+                <div style={{fontSize:11,color:C.muted,marginBottom:10}}>Each captain gets a link + their private PIN. Tap the link → enter PIN → score.</div>
                 {teams.map((team,i)=>{
-                  const captainCode=`${captainBase}-T${i+1}`;
                   const captainLink=`${appUrl}?tourney=${captainBase}&team=${i}`;
                   const pin=team.pin||"----";
+                  const smsBody=`⛳ You're captain of ${team.name}!\n\nJoin the tournament here:\n${captainLink}\n\nYour PIN: ${pin}\n\nTap the link, enter your PIN, and start scoring. — Press Golf`;
                   return(
-                    <div key={i} style={{background:C.card,border:`1px solid ${team.color}33`,borderRadius:10,padding:"10px 12px",marginBottom:8}}>
-                      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
-                        <div style={{width:10,height:10,borderRadius:"50%",background:team.color,flexShrink:0}}/>
-                        <div style={{fontWeight:700,fontSize:13,color:C.text,flex:1}}>{team.name}</div>
-                        <div style={{fontFamily:"monospace",fontSize:13,fontWeight:800,color:team.color}}>{captainCode}</div>
-                        <div style={{fontFamily:"monospace",fontSize:14,fontWeight:800,color:C.gold,background:"rgba(232,184,75,0.1)",padding:"2px 8px",borderRadius:6}}>PIN {pin}</div>
+                    <div key={i} style={{background:C.card,border:`1px solid ${team.color}33`,borderRadius:12,padding:"12px 14px",marginBottom:8}}>
+                      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+                        <div style={{width:12,height:12,borderRadius:"50%",background:team.color,flexShrink:0}}/>
+                        <div style={{fontWeight:800,fontSize:14,color:C.text,flex:1}}>{team.name}</div>
+                        <div style={{background:"rgba(232,184,75,0.12)",border:"1px solid rgba(232,184,75,0.3)",borderRadius:8,padding:"4px 10px"}}>
+                          <div style={{fontSize:10,color:C.muted,textAlign:"center"}}>PIN</div>
+                          <div style={{fontFamily:"monospace",fontSize:18,fontWeight:800,color:C.gold,letterSpacing:3}}>{pin}</div>
+                        </div>
                       </div>
-                      <div style={{display:"flex",gap:6}}>
-                        <button onClick={()=>navigator.clipboard?.writeText(`${captainCode}  PIN: ${pin}`)} style={{flex:1,padding:"7px",background:C.surface,border:"1px solid "+C.border,borderRadius:6,color:C.muted,fontSize:11,cursor:"pointer"}}>📋 Copy</button>
-                        <button onClick={()=>window.open(`sms:?&body=${encodeURIComponent(team.name+" captain:\nCode: "+captainCode+"\nPIN: "+pin+"\nScores: "+captainLink)}`)} style={{flex:1,padding:"7px",background:C.surface,border:"1px solid "+C.border,borderRadius:6,color:C.muted,fontSize:11,cursor:"pointer"}}>📱 Text Captain</button>
+                      <div style={{display:"flex",gap:8}}>
+                        <button
+                          onClick={()=>window.open(`sms:?&body=${encodeURIComponent(smsBody)}`)}
+                          style={{flex:2,padding:"11px",background:C.green,color:"#0a1a0f",border:"none",borderRadius:10,fontSize:13,fontWeight:800,cursor:"pointer"}}
+                        >📱 Text {team.name} Captain</button>
+                        <button
+                          onClick={()=>navigator.clipboard?.writeText(smsBody)}
+                          style={{flex:1,padding:"11px",background:"transparent",color:C.muted,border:"1px solid "+C.border,borderRadius:10,fontSize:12,fontWeight:600,cursor:"pointer"}}
+                        >📋 Copy</button>
                       </div>
                     </div>
                   );
