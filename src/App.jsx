@@ -939,8 +939,6 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
         <button onClick={()=>setView("tournament")} style={{background:`linear-gradient(135deg,${C.gold},#b8860b)`,border:"none",color:"#0a1a0f",padding:"10px 20px",borderRadius:20,fontSize:13,fontWeight:800,cursor:"pointer",marginBottom:12,boxShadow:`0 4px 16px ${C.gold}44`,letterSpacing:0.5}}>
           🏆 Team Tournament
         </button>
-          ⛳ Start Live Round
-        </button>
 
         <div style={{display:"flex",background:"rgba(0,0,0,0.35)",border:`1px solid ${C.border}`,borderRadius:14,overflow:"hidden",maxWidth:360,margin:"0 auto"}}>
           {[{l:"Rounds",v:sRound},{l:"Side Bets",v:sBet},{l:"Season Bank",v:sBank}].map((item,i,arr)=>(<div key={i} style={{flex:1,textAlign:"center",padding:"13px 4px",borderRight:i<arr.length-1?`1px solid ${C.border}`:"none"}}><Money value={item.v} size={15}/><div style={{fontSize:8,color:C.muted,letterSpacing:1.5,textTransform:"uppercase",marginTop:3}}>{item.l}</div></div>))}
