@@ -7,12 +7,12 @@ const C = {
   red:"#e05050", text:"#e8f0e9", muted:"#6b7f6d", dim:"#1e2f20",
 };
 
-// Shown when someone opens press-golf.vercel.app?tourney=SUN247 or ?tourney=SUN247&team=3
-// Resolves the code → routes to captain or spectator view
+const inp = {width:"100%",padding:"13px 14px",background:"#0a1500",border:"1px solid rgba(123,180,80,0.2)",borderRadius:10,color:"#e8f0e9",fontSize:15,outline:"none",boxSizing:"border-box"};
+
 export default function TourneyJoin({ code, teamIdx, onDirector, onCaptain, onSpectator }) {
   const [status,         setStatus]         = useState("loading");
   const [pinInput,       setPinInput]       = useState("");
-  const [pendingCaptain, setPendingCaptain] = useState(null); // {tourney, idx}
+  const [pendingCaptain, setPendingCaptain] = useState(null);
   const [tourney,        setTourney]        = useState(null);
   const [codeInput,      setCodeInput]      = useState("");
   const [error,          setError]          = useState("");
@@ -20,6 +20,16 @@ export default function TourneyJoin({ code, teamIdx, onDirector, onCaptain, onSp
   const [showInstall,    setShowInstall]    = useState(false);
   const [isIOS,          setIsIOS]          = useState(false);
   const [isInstalled,    setIsInstalled]    = useState(false);
+
+  // Account prompt state
+  const [authMode,  setAuthMode]  = useState("prompt"); // prompt | login | signup
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPass,  setAuthPass]  = useState("");
+  const [authName,  setAuthName]  = useState("");
+  const [authErr,   setAuthErr]   = useState("");
+  const [authMsg,   setAuthMsg]   = useState("");
+  const [authLoad,  setAuthLoad]  = useState(false);
+  const [readyTourney, setReadyTourney] = useState(null); // tourney+idx to pass after auth/skip
 
   useEffect(() => {
     if (code) resolve(code);
@@ -169,9 +179,18 @@ export default function TourneyJoin({ code, teamIdx, onDirector, onCaptain, onSp
               style={{ width:"100%", padding:"20px", background:C.surface, border:`2px solid ${pinInput.length===4?C.green:C.border}`, borderRadius:14, color:C.text, fontSize:40, fontWeight:800, outline:"none", textAlign:"center", letterSpacing:16, boxSizing:"border-box", marginBottom:12, transition:"border-color 0.2s" }}
             />
             {error && <div style={{ color:C.red, fontSize:13, marginBottom:12 }}>{error}</div>}
-            <button onClick={() => {
+            <button onClick={async () => {
               if (pinInput === team?.pin) {
-                onCaptain(pendingCaptain.tourney, pendingCaptain.idx);
+                // Check if already logged in
+                const { data: { session } } = await sb.auth.getSession();
+                if (session) {
+                  // Already logged in — go straight to scoring
+                  onCaptain(pendingCaptain.tourney, pendingCaptain.idx);
+                } else {
+                  // Not logged in — show account prompt
+                  setReadyTourney({ tourney: pendingCaptain.tourney, idx: pendingCaptain.idx });
+                  setStatus("account");
+                }
               } else {
                 setError("Wrong PIN — check the text from your director.");
                 setPinInput("");
@@ -198,6 +217,122 @@ export default function TourneyJoin({ code, teamIdx, onDirector, onCaptain, onSp
           <div style={{ fontSize:20, fontWeight:700, marginBottom:8, color:C.red }}>Invalid Code</div>
           <div style={{ fontSize:14, color:C.muted, marginBottom:24 }}>{error}</div>
           <button onClick={() => setStatus("prompt")} style={{ background:C.green, border:"none", color:"#0a1a0f", padding:"14px 32px", borderRadius:12, fontSize:15, fontWeight:700, cursor:"pointer" }}>Try Another Code</button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── ACCOUNT PROMPT after successful PIN ───────────────────────────────────
+  if (status === "account" && readyTourney) {
+    const team = (readyTourney.tourney.teams || [])[readyTourney.idx];
+
+    async function doSignup() {
+      setAuthErr(""); setAuthLoad(true);
+      if (!authName.trim()) { setAuthErr("Enter your name."); setAuthLoad(false); return; }
+      if (authPass.length < 6) { setAuthErr("Password must be 6+ characters."); setAuthLoad(false); return; }
+      const { error } = await sb.auth.signUp({ email: authEmail, password: authPass, options: { data: { display_name: authName.trim() } } });
+      setAuthLoad(false);
+      if (error) { setAuthErr(error.message); return; }
+      setAuthMsg("✓ Account created! Check your email to confirm, then you'll be signed in automatically.");
+      setTimeout(() => onCaptain(readyTourney.tourney, readyTourney.idx), 2000);
+    }
+
+    async function doLogin() {
+      setAuthErr(""); setAuthLoad(true);
+      const { data, error } = await sb.auth.signInWithPassword({ email: authEmail, password: authPass });
+      setAuthLoad(false);
+      if (error) { setAuthErr(error.message); return; }
+      onCaptain(readyTourney.tourney, readyTourney.idx);
+    }
+
+    async function doReset() {
+      if (!authEmail) { setAuthErr("Enter your email first."); return; }
+      await sb.auth.resetPasswordForEmail(authEmail);
+      setAuthMsg("Password reset email sent!");
+    }
+
+    return (
+      <div style={{ fontFamily:"Georgia,serif", minHeight:"100vh", background:C.bg, color:C.text, display:"flex", flexDirection:"column" }}>
+
+        {/* Install banner */}
+        {showInstall && !isInstalled && (
+          <div style={{ background:"linear-gradient(135deg,rgba(123,180,80,0.15),rgba(123,180,80,0.08))", borderBottom:`1px solid ${C.green}44`, padding:"12px 20px" }}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:12 }}>
+              <div style={{ flex:1 }}>
+                <div style={{ fontWeight:700, fontSize:13, color:C.green }}>⛳ Add Press to your home screen</div>
+                {isIOS
+                  ? <div style={{ fontSize:11, color:C.muted }}>Tap <b style={{color:C.text}}>Share ↑</b> → <b style={{color:C.text}}>Add to Home Screen</b></div>
+                  : <div style={{ fontSize:11, color:C.muted }}>Works like a native app — free to install</div>}
+              </div>
+              {!isIOS && installPrompt
+                ? <button onClick={handleInstall} style={{ background:C.green, border:"none", color:"#0a1a0f", padding:"8px 14px", borderRadius:8, fontSize:12, fontWeight:800, cursor:"pointer" }}>Install</button>
+                : <button onClick={()=>setShowInstall(false)} style={{ background:"transparent", border:"none", color:C.muted, fontSize:18, cursor:"pointer" }}>✕</button>}
+            </div>
+          </div>
+        )}
+
+        <div style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", padding:24 }}>
+          <div style={{ width:"100%", maxWidth:380 }}>
+
+            {/* Team welcome */}
+            <div style={{ textAlign:"center", marginBottom:24 }}>
+              <div style={{ fontSize:36, marginBottom:8 }}>⛳</div>
+              <div style={{ fontWeight:800, fontSize:18, marginBottom:4 }}>PIN accepted!</div>
+              <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:8, marginBottom:4 }}>
+                <div style={{ width:10, height:10, borderRadius:"50%", background:team?.color }}/>
+                <div style={{ fontSize:15, fontWeight:700, color:team?.color }}>{team?.name}</div>
+              </div>
+              <div style={{ fontSize:13, color:C.muted }}>{readyTourney.tourney.name}</div>
+            </div>
+
+            {/* Account options */}
+            {authMode === "prompt" && (
+              <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:16, padding:"20px" }}>
+                <div style={{ fontSize:15, fontWeight:700, marginBottom:6 }}>Save your progress</div>
+                <div style={{ fontSize:13, color:C.muted, marginBottom:20, lineHeight:1.5 }}>
+                  Create a free account to keep your match history, bets, and season stats. Takes 30 seconds.
+                </div>
+                <button onClick={()=>setAuthMode("signup")} style={{ width:"100%", padding:"14px", background:C.green, color:"#0a1a0f", border:"none", borderRadius:12, fontSize:15, fontWeight:800, cursor:"pointer", marginBottom:10 }}>
+                  Create Free Account
+                </button>
+                <button onClick={()=>setAuthMode("login")} style={{ width:"100%", padding:"12px", background:"transparent", color:C.green, border:`1.5px solid ${C.green}44`, borderRadius:12, fontSize:14, fontWeight:700, cursor:"pointer", marginBottom:10 }}>
+                  Sign In to Existing Account
+                </button>
+                <button onClick={()=>onCaptain(readyTourney.tourney, readyTourney.idx)} style={{ width:"100%", padding:"10px", background:"transparent", color:C.muted, border:"none", fontSize:13, cursor:"pointer" }}>
+                  Skip for now →
+                </button>
+              </div>
+            )}
+
+            {(authMode === "signup" || authMode === "login") && (
+              <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:16, padding:"20px" }}>
+                <div style={{ display:"flex", gap:0, marginBottom:20, border:`1px solid ${C.border}`, borderRadius:10, overflow:"hidden" }}>
+                  {["signup","login"].map(m=>(
+                    <button key={m} onClick={()=>{setAuthMode(m);setAuthErr("");setAuthMsg("");}}
+                      style={{ flex:1, padding:"11px", background:authMode===m?C.green:"transparent", color:authMode===m?"#0a1a0f":C.muted, border:"none", fontSize:13, fontWeight:700, cursor:"pointer" }}>
+                      {m==="signup"?"Create Account":"Sign In"}
+                    </button>
+                  ))}
+                </div>
+                <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+                  {authMode==="signup" && (
+                    <input value={authName} onChange={e=>setAuthName(e.target.value)} placeholder="Your name" style={inp}/>
+                  )}
+                  <input type="email" value={authEmail} onChange={e=>setAuthEmail(e.target.value)} placeholder="Email address" autoCapitalize="none" style={inp}/>
+                  <input type="password" value={authPass} onChange={e=>setAuthPass(e.target.value)} placeholder={authMode==="signup"?"Password (6+ chars)":"Password"} style={inp}/>
+                  {authErr && <div style={{ background:"rgba(224,80,80,0.1)", border:"1px solid rgba(224,80,80,0.3)", borderRadius:8, padding:"10px 12px", fontSize:13, color:C.red }}>{authErr}</div>}
+                  {authMsg && <div style={{ background:"rgba(123,180,80,0.1)", border:"1px solid rgba(123,180,80,0.3)", borderRadius:8, padding:"10px 12px", fontSize:13, color:C.green }}>{authMsg}</div>}
+                  <button onClick={authMode==="signup"?doSignup:doLogin} disabled={authLoad}
+                    style={{ width:"100%", padding:"14px", background:authLoad?"#1a2a1a":C.green, color:authLoad?C.muted:"#0a1a0f", border:"none", borderRadius:12, fontSize:15, fontWeight:800, cursor:authLoad?"wait":"pointer" }}>
+                    {authLoad?"...":(authMode==="signup"?"Create Account →":"Sign In →")}
+                  </button>
+                  {authMode==="login" && <button onClick={doReset} style={{ background:"none", border:"none", color:C.muted, fontSize:12, cursor:"pointer", textAlign:"center" }}>Forgot password?</button>}
+                  <button onClick={()=>setAuthMode("prompt")} style={{ background:"none", border:"none", color:C.muted, fontSize:12, cursor:"pointer", textAlign:"center" }}>← Back</button>
+                </div>
+              </div>
+            )}
+
+          </div>
         </div>
       </div>
     );
