@@ -16,11 +16,38 @@ export default function TourneyJoin({ code, teamIdx, onDirector, onCaptain, onSp
   const [tourney,        setTourney]        = useState(null);
   const [codeInput,      setCodeInput]      = useState("");
   const [error,          setError]          = useState("");
+  const [installPrompt,  setInstallPrompt]  = useState(null);
+  const [showInstall,    setShowInstall]    = useState(false);
+  const [isIOS,          setIsIOS]          = useState(false);
+  const [isInstalled,    setIsInstalled]    = useState(false);
 
   useEffect(() => {
     if (code) resolve(code);
     else setStatus("prompt");
+
+    // Detect if already installed as PWA
+    const standalone = window.matchMedia("(display-mode: standalone)").matches
+      || window.navigator.standalone === true;
+    setIsInstalled(standalone);
+
+    // Detect iOS
+    const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
+    setIsIOS(ios);
+
+    // Android: capture install prompt
+    const handler = (e) => { e.preventDefault(); setInstallPrompt(e); if(!standalone) setShowInstall(true); };
+    window.addEventListener("beforeinstallprompt", handler);
+    if (ios && !standalone) setShowInstall(true);
+    return () => window.removeEventListener("beforeinstallprompt", handler);
   }, [code]);
+
+  async function handleInstall() {
+    if (installPrompt) {
+      installPrompt.prompt();
+      const result = await installPrompt.userChoice;
+      if (result.outcome === "accepted") { setShowInstall(false); setInstallPrompt(null); }
+    }
+  }
 
   async function resolve(raw) {
     setStatus("loading");
@@ -148,6 +175,31 @@ export default function TourneyJoin({ code, teamIdx, onDirector, onCaptain, onSp
     const teams = tourney.teams || [];
     return (
       <div style={{ fontFamily:"Georgia,serif", minHeight:"100vh", background:C.bg, color:C.text, paddingBottom:40 }}>
+
+        {/* Install Banner */}
+        {showInstall && !isInstalled && (
+          <div style={{ background:"linear-gradient(135deg,rgba(123,180,80,0.18),rgba(123,180,80,0.08))", borderBottom:`1px solid ${C.green}44`, padding:"14px 20px" }}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:12 }}>
+              <div style={{ flex:1 }}>
+                <div style={{ fontWeight:700, fontSize:14, color:C.green, marginBottom:2 }}>⛳ Add Press to your home screen</div>
+                {isIOS ? (
+                  <div style={{ fontSize:12, color:C.muted, lineHeight:1.5 }}>
+                    Tap <span style={{ fontWeight:700, color:C.text }}>Share ↑</span> then <span style={{ fontWeight:700, color:C.text }}>Add to Home Screen</span>
+                  </div>
+                ) : (
+                  <div style={{ fontSize:12, color:C.muted }}>Track golf bets · Free to use</div>
+                )}
+              </div>
+              {!isIOS && installPrompt ? (
+                <button onClick={handleInstall} style={{ background:C.green, border:"none", color:"#0a1a0f", padding:"10px 16px", borderRadius:10, fontSize:13, fontWeight:800, cursor:"pointer", flexShrink:0 }}>
+                  Install
+                </button>
+              ) : (
+                <button onClick={() => setShowInstall(false)} style={{ background:"transparent", border:"none", color:C.muted, fontSize:18, cursor:"pointer", padding:"0 4px" }}>✕</button>
+              )}
+            </div>
+          </div>
+        )}
         <div style={{ background:`linear-gradient(180deg,${C.card} 0%,transparent 100%)`, padding:"50px 24px 24px", textAlign:"center" }}>
           <div style={{ fontSize:48, marginBottom:8 }}>🏆</div>
           <div style={{ fontSize:24, fontWeight:800 }}>{tourney.name}</div>
@@ -195,8 +247,34 @@ export default function TourneyJoin({ code, teamIdx, onDirector, onCaptain, onSp
 
   // Prompt for code entry
   return (
-    <div style={{ fontFamily:"Georgia,serif", minHeight:"100vh", background:C.bg, color:C.text, display:"flex", alignItems:"center", justifyContent:"center", padding:24 }}>
-      <div style={{ width:"100%", maxWidth:360, textAlign:"center" }}>
+    <div style={{ fontFamily:"Georgia,serif", minHeight:"100vh", background:C.bg, color:C.text, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:24 }}>
+
+      {/* Install banner at top */}
+      {showInstall && !isInstalled && (
+        <div style={{ position:"fixed", top:0, left:0, right:0, background:"linear-gradient(135deg,rgba(123,180,80,0.18),rgba(123,180,80,0.08))", borderBottom:`1px solid ${C.green}44`, padding:"14px 20px", zIndex:100 }}>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:12, maxWidth:480, margin:"0 auto" }}>
+            <div style={{ flex:1 }}>
+              <div style={{ fontWeight:700, fontSize:14, color:C.green, marginBottom:2 }}>⛳ Add Press to your home screen</div>
+              {isIOS ? (
+                <div style={{ fontSize:12, color:C.muted, lineHeight:1.5 }}>
+                  Tap <span style={{ fontWeight:700, color:C.text }}>Share ↑</span> in Safari, then <span style={{ fontWeight:700, color:C.text }}>Add to Home Screen</span>
+                </div>
+              ) : (
+                <div style={{ fontSize:12, color:C.muted }}>Free golf bet tracker — works like a native app</div>
+              )}
+            </div>
+            {!isIOS && installPrompt ? (
+              <button onClick={handleInstall} style={{ background:C.green, border:"none", color:"#0a1a0f", padding:"10px 16px", borderRadius:10, fontSize:13, fontWeight:800, cursor:"pointer", flexShrink:0 }}>
+                Install
+              </button>
+            ) : (
+              <button onClick={() => setShowInstall(false)} style={{ background:"transparent", border:"none", color:C.muted, fontSize:18, cursor:"pointer", padding:"0 4px" }}>✕</button>
+            )}
+          </div>
+        </div>
+      )}
+
+      <div style={{ width:"100%", maxWidth:360, textAlign:"center", marginTop: showInstall && !isInstalled ? 80 : 0 }}>
         <div style={{ fontSize:52, marginBottom:16 }}>⛳</div>
         <div style={{ fontSize:26, fontWeight:800, marginBottom:6 }}>Join Tournament</div>
         <div style={{ fontSize:14, color:C.muted, marginBottom:32 }}>Enter the code your Tournament Director sent you</div>
