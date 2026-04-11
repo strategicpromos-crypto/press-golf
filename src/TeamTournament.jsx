@@ -136,13 +136,13 @@ export default function TeamTournament({onBack, user}){
   const[screen,setScreen]=useState("home");
   const[courseId,setCourseId]=useState("south-toledo");
   const[birdieBonus,setBirdieBonus]=useState(true);
-  const[countBalls,setCountBalls]=useState(2); // how many best ball scores count per hole
+  const[countBalls,setCountBalls]=useState(2);
   const[numTeams,setNumTeams]=useState(8);
   const[activeTeam,setActiveTeam]=useState(0);
   const[currentHole,setCurrentHole]=useState(1);
   const[teams,setTeams]=useState([]);
   const[tourneyId,setTourneyId]=useState(null);
-  const[directorCode,setDirectorCode]=useState(null); // stored directly, not via savedTourneys lookup
+  const[directorCode,setDirectorCode]=useState(null);
   const[savedTourneys,setSavedTourneys]=useState([]);
   const[showHelp,setShowHelp]=useState(false);
   const[loading,setLoading]=useState(false);
@@ -150,6 +150,8 @@ export default function TeamTournament({onBack, user}){
   const[captainTourney,setCaptainTourney]=useState(null);
   const[captainTeamIdx,setCaptainTeamIdx]=useState(0);
   const[spectatorTourney,setSpectatorTourney]=useState(null);
+  const[lbTab,setLbTab]=useState("standings");      // leaderboard tab
+  const[showSettings,setShowSettings]=useState(false); // director settings overlay
   const saveTimer=useRef(null);
   const subRef=useRef(null);
   const course=COURSES[courseId];
@@ -696,8 +698,12 @@ export default function TeamTournament({onBack, user}){
               <div style={{fontSize:12,color:C.green,fontWeight:600}}>Par {holeData.par} · Hdcp {holeData.hdcp}</div>
               {saveStatus&&<div style={{fontSize:10,color:saveStatus==="saving"?C.gold:C.green,marginTop:2}}>{saveStatus==="saving"?"💾 Saving...":"✓ Saved"}</div>}
             </div>
-            <button onClick={()=>setScreen("leaderboard")}
-              style={{background:"rgba(232,184,75,0.15)",border:"1px solid "+C.gold,color:C.gold,fontSize:11,cursor:"pointer",padding:"6px 12px",borderRadius:12,fontWeight:700}}>📊 Board</button>
+            <div style={{display:"flex",flexDirection:"column",gap:6,alignItems:"flex-end"}}>
+              <button onClick={()=>{setLbTab("standings");setScreen("leaderboard");}}
+                style={{background:"rgba(232,184,75,0.15)",border:"1px solid "+C.gold,color:C.gold,fontSize:11,cursor:"pointer",padding:"6px 12px",borderRadius:12,fontWeight:700}}>📊 Board</button>
+              <button onClick={()=>setShowSettings(true)}
+                style={{background:"rgba(123,180,80,0.15)",border:"1px solid "+C.green,color:C.green,fontSize:11,cursor:"pointer",padding:"5px 10px",borderRadius:12,fontWeight:700}}>⚙️ Edit</button>
+            </div>
           </div>
           <div style={{display:"flex",gap:2}}>
             {course.holes.map(h=>(
@@ -796,7 +802,7 @@ export default function TeamTournament({onBack, user}){
           {/* Mini standings */}
           <div style={{marginTop:12,display:"flex",gap:8,flexWrap:"wrap",justifyContent:"center"}}>
             {getLeaderboard().slice(0,5).map((t,rank)=>(
-              <div key={t.id} style={{background:C.card,border:"1px solid "+t.color+"44",borderRadius:20,padding:"5px 12px",fontSize:12,display:"flex",alignItems:"center",gap:6}}>
+              <div key={t.id||rank} style={{background:C.card,border:"1px solid "+t.color+"44",borderRadius:20,padding:"5px 12px",fontSize:12,display:"flex",alignItems:"center",gap:6}}>
                 <span style={{color:C.muted}}>{rank+1}.</span>
                 <span style={{fontWeight:700,color:t.color}}>{t.name}</span>
                 <span style={{fontWeight:800,color:relColor(t.sc.totalDiff)}}>{t.sc.total?relLabel(t.sc.totalDiff):"—"}</span>
@@ -804,6 +810,94 @@ export default function TeamTournament({onBack, user}){
             ))}
           </div>
         </div>
+
+        {/* ── DIRECTOR SETTINGS OVERLAY ────────────────────────────────── */}
+        {showSettings&&(
+          <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.92)",zIndex:800,overflowY:"auto",fontFamily:"Georgia,serif"}}>
+            <div style={{padding:"50px 20px 60px",maxWidth:480,margin:"0 auto"}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+                <div style={{fontSize:20,fontWeight:800}}>⚙️ Tournament Settings</div>
+                <button onClick={()=>setShowSettings(false)} style={{background:C.dim,border:"none",color:C.muted,width:34,height:34,borderRadius:"50%",fontSize:16,cursor:"pointer"}}>✕</button>
+              </div>
+              <div style={{fontSize:12,color:C.muted,marginBottom:20}}>Changes save automatically and update all captains and spectators in real time.</div>
+
+              {/* Best ball count */}
+              <div style={{background:C.card,border:"1px solid "+C.border,borderRadius:12,padding:"14px 16px",marginBottom:12}}>
+                <div style={{fontWeight:700,fontSize:14,marginBottom:10}}>Scores That Count Per Hole</div>
+                <div style={{display:"flex",gap:8}}>
+                  {[1,2,3,4,5].map(n=>(
+                    <button key={n} onClick={()=>setCountBalls(n)} style={{flex:1,padding:"12px 4px",background:countBalls===n?C.green:C.surface,color:countBalls===n?"#0a1a0f":C.muted,border:"1px solid "+(countBalls===n?C.green:C.border),borderRadius:10,fontSize:15,fontWeight:countBalls===n?800:500,cursor:"pointer"}}>{n}</button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Birdie bonus */}
+              <div style={{background:C.card,border:"1px solid "+C.border,borderRadius:12,padding:"14px 16px",marginBottom:12}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                  <div>
+                    <div style={{fontWeight:700,fontSize:14}}>Birdie Bonus</div>
+                    <div style={{fontSize:11,color:C.muted,marginTop:2}}>{birdieBonus?"Extra birdies = bonus strokes off":"Off"}</div>
+                  </div>
+                  <button onClick={()=>setBirdieBonus(b=>!b)} style={{width:52,height:28,borderRadius:14,border:"none",cursor:"pointer",background:birdieBonus?C.green:"#333",position:"relative",flexShrink:0}}>
+                    <div style={{position:"absolute",top:4,left:birdieBonus?26:4,width:20,height:20,borderRadius:"50%",background:"#fff",transition:"left 0.2s"}}/>
+                  </button>
+                </div>
+              </div>
+
+              {/* Teams — edit names, players, strokes */}
+              <div style={{fontSize:11,color:C.green,letterSpacing:1.5,textTransform:"uppercase",margin:"16px 0 8px",fontWeight:600}}>Teams</div>
+              {teams.map((team,i)=>(
+                <div key={i} style={{background:C.card,border:"1px solid "+C.border,borderRadius:14,padding:"14px",marginBottom:10}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+                    <div style={{width:12,height:12,borderRadius:"50%",background:team.color,flexShrink:0}}/>
+                    <input value={team.name} onChange={e=>updateTeam(i,{name:e.target.value})}
+                      style={{flex:1,padding:"9px 12px",background:C.surface,border:"1px solid "+C.border,borderRadius:8,color:C.text,fontSize:14,fontWeight:700,outline:"none"}}/>
+                  </div>
+                  {/* Strokes */}
+                  <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
+                    <div style={{fontSize:12,color:C.muted,width:110,flexShrink:0}}>Strokes/side</div>
+                    <button onClick={()=>updateTeam(i,{strokesPerSide:Math.max(0,(team.strokesPerSide||0)-1)})} style={{width:32,height:32,borderRadius:"50%",background:C.dim,border:"1px solid "+C.border,color:C.text,fontSize:18,fontWeight:700,cursor:"pointer"}}>−</button>
+                    <div style={{flex:1,textAlign:"center",fontWeight:800,fontSize:16,color:(team.strokesPerSide||0)>0?C.gold:C.muted}}>{team.strokesPerSide||0}</div>
+                    <button onClick={()=>updateTeam(i,{strokesPerSide:(team.strokesPerSide||0)+1})} style={{width:32,height:32,borderRadius:"50%",background:C.dim,border:"1px solid "+C.border,color:C.text,fontSize:18,fontWeight:700,cursor:"pointer"}}>+</button>
+                  </div>
+                  {/* Player names */}
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
+                    {Array.from({length:team.size||2},(_,j)=>(
+                      <input key={j} value={team.players?.[j]||""} onChange={e=>{const p=[...(team.players||[])];p[j]=e.target.value;updateTeam(i,{players:p});}}
+                        placeholder={"Player "+(j+1)} style={{padding:"8px 10px",background:C.surface,border:"1px solid "+C.border,borderRadius:8,color:C.text,fontSize:13,outline:"none"}}/>
+                    ))}
+                  </div>
+                  {/* Resend captain link */}
+                  {tourneyId&&(
+                    <button onClick={()=>{
+                      const link=`https://press-golf.vercel.app?tourney=${tourneyId}&team=${i}`;
+                      window.open(`sms:?&body=${encodeURIComponent(`⛳ ${team.name} captain link:\n${link}\n\nTap to score your team. — Press Golf`)}`);
+                    }} style={{width:"100%",marginTop:10,padding:"9px",background:"transparent",color:C.green,border:"1px solid "+C.green+"44",borderRadius:8,fontSize:12,fontWeight:700,cursor:"pointer"}}>
+                      📱 Resend Captain Link
+                    </button>
+                  )}
+                </div>
+              ))}
+
+              {/* Spectator link */}
+              {tourneyId&&(
+                <div style={{background:C.card,border:"1px solid "+C.border,borderRadius:12,padding:"14px",marginBottom:12}}>
+                  <div style={{fontWeight:700,fontSize:14,marginBottom:8}}>👀 Spectator Leaderboard</div>
+                  <button onClick={()=>{
+                    const link=`https://press-golf.vercel.app?tourney=${tourneyId}&spectate=1`;
+                    window.open(`sms:?&body=${encodeURIComponent(`⛳ Watch the tournament live!\n${link}`)}`);
+                  }} style={{width:"100%",padding:"11px",background:C.green,color:"#0a1a0f",border:"none",borderRadius:10,fontSize:13,fontWeight:800,cursor:"pointer"}}>
+                    📱 Text Spectator Link
+                  </button>
+                </div>
+              )}
+
+              <button onClick={()=>setShowSettings(false)} style={{width:"100%",padding:"16px",background:C.green,color:"#0a1a0f",border:"none",borderRadius:12,fontSize:16,fontWeight:800,cursor:"pointer",marginTop:8}}>
+                ✓ Done
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -811,7 +905,6 @@ export default function TeamTournament({onBack, user}){
   // LEADERBOARD
   if(screen==="leaderboard"){
     const board=getLeaderboard();
-    const [lbTab,setLbTab]=useState("standings");
     return(
       <div style={{fontFamily:"Georgia,serif",minHeight:"100vh",background:C.bg,color:C.text,paddingBottom:40}}>
         <div style={{background:"linear-gradient(180deg,"+C.card+" 0%,transparent 100%)",padding:"50px 20px 16px"}}>
