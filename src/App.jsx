@@ -3,7 +3,7 @@ import { sb } from "./supabase.js";
 import { loadStripe } from "https://esm.sh/@stripe/stripe-js@2";
 import LiveRound from "./LiveRound.jsx";
 import TeamTournament from "./TeamTournament.jsx";
-import TourneyJoin from "./TourneyJoin.jsx";
+import TourneyJoin, { TourneyLoader } from "./TourneyJoin.jsx";
 import TourneyCaptain from "./TourneyCaptain.jsx";
 import TourneySpectator from "./TourneySpectator.jsx";
 import OpponentScoreEntry from "./OpponentScoreEntry.jsx";
@@ -481,19 +481,19 @@ export default function App(){
 
   const urlParams   = new URLSearchParams(window.location.search);
   const inviteCode  = urlParams.get("invite");
-  const tourneyCode = urlParams.get("tourney");
+  const tourneyId   = urlParams.get("tourney");   // now a UUID, not a code
   const tourneyTeam = urlParams.get("team");
+  const spectate    = urlParams.get("spectate");  // "1" = spectator link
   const roundParam  = urlParams.get("round");
   const playerParam = urlParams.get("player");
 
-  // Tourney join routing — handles captain, spectator, and bare code links
-  const [tourneyView,    setTourneyView]    = useState(null);
-  const [tourneyData,    setTourneyData]    = useState(null);
+  const [tourneyView,       setTourneyView]       = useState(null);
+  const [tourneyData,       setTourneyData]       = useState(null);
   const [tourneyCaptainIdx, setTourneyCaptainIdx] = useState(null);
 
-  useEffect(() => {
-    if (tourneyCode) setTourneyView("join");
-  }, [tourneyCode]);
+  useEffect(()=>{
+    if(tourneyId) setTourneyView("join");
+  },[tourneyId]);
   const stripeSuccess=urlParams.get("stripe")==="success";
 
   useEffect(()=>{
@@ -548,14 +548,23 @@ export default function App(){
 
   if(!user)return <AuthScreen onAuth={setUser} onPrivacy={()=>setShowPrivacy(true)}/>;
   // Tourney views — shown to captains/spectators who open a shared link
-  if (tourneyView === "join") {
-    return <TourneyJoin
-      code={tourneyCode}
-      teamIdx={tourneyTeam}
-      onDirector={(t) => { setTourneyData(t); setTourneyView(null); }}
-      onCaptain={(t,idx) => { setTourneyData(t); setTourneyCaptainIdx(idx); setTourneyView("captain"); }}
-      onSpectator={(t) => { setTourneyData(t); setTourneyView("spectator"); }}
+  if(tourneyView==="join"){
+    return <TourneyLoader
+      tourneyId={tourneyId}
+      teamIdx={tourneyTeam!==null&&tourneyTeam!==undefined?parseInt(tourneyTeam):null}
+      isSpectator={spectate==="1"}
+      onBack={()=>{setTourneyView(null);window.history.replaceState({},"","/");}}
+      onCaptain={(t,idx)=>{setTourneyData(t);setTourneyCaptainIdx(idx);setTourneyView("captain");}}
+      onSpectator={(t)=>{setTourneyData(t);setTourneyView("spectator");}}
     />;
+  }
+  if(tourneyView==="captain"){
+    return <TourneyCaptain tourney={tourneyData} teamIdx={tourneyCaptainIdx}
+      onBack={()=>{setTourneyView(null);window.history.replaceState({},"","/");}}/>;
+  }
+  if(tourneyView==="spectator"){
+    return <TourneySpectator tourney={tourneyData}
+      onBack={()=>{setTourneyView(null);window.history.replaceState({},"","/");}}/>;
   }
   if (tourneyView === "captain") {
     return <TourneyCaptain tourney={tourneyData} teamIdx={tourneyCaptainIdx} onBack={() => setTourneyView("join")} />;
@@ -1073,14 +1082,12 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
     );
   }
 
-  // ── LIVE ROUND VIEW ──────────────────────────────────────────────────────────
+  // ── JOIN TOURNEY (spectator code entry with back button) ─────────────────
   if(view==="joinTourney") return(
-    <TourneyJoin
-      code={null}
-      teamIdx={null}
-      onDirector={(t)=>{ setView("tournament"); }}
-      onCaptain={(t,idx)=>{ setTourneyView("captain"); setTourneyData(t); setTourneyCaptainIdx(idx); setTourneyView("captain"); }}
-      onSpectator={(t)=>{ setTourneyData(t); setTourneyView("spectator"); }}
+    <TourneyCodeEntry
+      onBack={()=>setView("roster")}
+      onCaptain={(t,idx)=>{setTourneyData(t);setTourneyCaptainIdx(idx);setTourneyView("captain");}}
+      onSpectator={(t)=>{setTourneyData(t);setTourneyView("spectator");}}
     />
   );
 
