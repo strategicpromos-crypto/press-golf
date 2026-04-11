@@ -146,16 +146,21 @@ export default function OpponentScoreEntry({ roundId, playerId }) {
 
   async function linkRoundToUser(user){
     try{
-      const{data}=await sb.from("live_rounds").select("opponent_user_ids").eq("id",roundId).single();
+      const{data}=await sb.from("live_rounds").select("opponent_user_ids,opponents").eq("id",roundId).single();
       const existing=data?.opponent_user_ids||[];
-      if(!existing.includes(user.id)){
-        await sb.from("live_rounds").update({
-          opponent_user_ids:[...existing,user.id],
-          updated_at:new Date().toISOString()
-        }).eq("id",roundId);
-      }
+
+      // Also tag the opponent record with their user ID so Resume can find the right playerId
+      const updatedOpponents=(data?.opponents||[]).map(o=>
+        o.playerId===playerId ? {...o, linkedUserId:user.id} : o
+      );
+
+      await sb.from("live_rounds").update({
+        opponent_user_ids: existing.includes(user.id)?existing:[...existing,user.id],
+        opponents: updatedOpponents,
+        updated_at: new Date().toISOString()
+      }).eq("id",roundId);
     }catch(e){
-      console.log("Could not link round to user — column may not exist yet:",e.message);
+      console.log("Could not link round to user:",e.message);
     }
   }
 
