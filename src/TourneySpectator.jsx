@@ -85,8 +85,8 @@ export default function TourneySpectator({ tourney: initialTourney, onBack }) {
 
       {/* Tabs */}
       <div style={{ display:"flex", borderBottom:`1px solid ${C.border}`, background:"rgba(0,0,0,0.2)" }}>
-        {[["board","🏆 Standings"],["scorecard","📋 Scorecard"]].map(([id,lbl])=>(
-          <button key={id} onClick={()=>setTab(id)} style={{ flex:1, padding:"13px", fontSize:13, fontWeight:tab===id?700:500, background:"transparent", color:tab===id?C.green:C.muted, border:"none", borderBottom:tab===id?`2px solid ${C.green}`:"2px solid transparent", cursor:"pointer" }}>{lbl}</button>
+        {[["board","🏆 Standings"],["scorecard","📋 Scorecard"],["top10","⭐ Top 10"]].map(([id,lbl])=>(
+          <button key={id} onClick={()=>setTab(id)} style={{ flex:1, padding:"11px 2px", fontSize:12, fontWeight:tab===id?700:500, background:"transparent", color:tab===id?C.green:C.muted, border:"none", borderBottom:tab===id?`2px solid ${C.green}`:"2px solid transparent", cursor:"pointer" }}>{lbl}</button>
         ))}
       </div>
 
@@ -156,6 +156,54 @@ export default function TourneySpectator({ tourney: initialTourney, onBack }) {
             </table>
           </div>
         )}
+
+        {tab==="top10"&&(()=>{
+          const medals=["🥇","🥈","🥉"];
+          const players=[];
+          (tourney.teams||[]).forEach((team,ti)=>{
+            for(let pi=0;pi<(team.size||2);pi++){
+              const name=team.players?.[pi]?.trim()?team.players[pi].trim():`Player ${pi+1}`;
+              const teamName=team.name||`Team ${ti+1}`;
+              const teamColor=team.color||TEAM_COLORS[ti%TEAM_COLORS.length];
+              let total=0,holesPlayed=0;
+              for(const h of course.holes){
+                const s=team.scores?.[pi]?.[h.hole];
+                if(s!==undefined&&s!==null){total+=safeInt(s)-h.par;holesPlayed++;}
+              }
+              if(holesPlayed>0)players.push({name,teamName,teamColor,total,holesPlayed,ti,pi});
+            }
+          });
+          players.sort((a,b)=>a.total!==b.total?a.total-b.total:b.holesPlayed-a.holesPlayed);
+          const top=players.slice(0,10);
+          if(top.length===0)return(
+            <div style={{textAlign:"center",padding:"40px 20px",color:C.muted}}>
+              <div style={{fontSize:32,marginBottom:12}}>⭐</div>
+              <div style={{fontSize:14}}>Individual scores appear here as players enter their scores.</div>
+            </div>
+          );
+          return(
+            <div>
+              <div style={{fontSize:11,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:12,textAlign:"center"}}>Individual scores · all players · updates live</div>
+              {top.map((p,i)=>(
+                <div key={`${p.ti}-${p.pi}`} style={{background:i===0?"rgba(232,184,75,0.08)":C.card,border:`1px solid ${i===0?C.gold+"44":C.border}`,borderRadius:12,padding:"12px 14px",marginBottom:8,display:"flex",alignItems:"center",gap:12}}>
+                  <div style={{width:32,textAlign:"center",fontSize:i<3?20:14,fontWeight:800,color:i<3?C.gold:C.muted,flexShrink:0}}>{i<3?medals[i]:i+1}</div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontWeight:800,fontSize:15,color:i===0?C.gold:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</div>
+                    <div style={{display:"flex",alignItems:"center",gap:6,marginTop:2}}>
+                      <div style={{width:8,height:8,borderRadius:"50%",background:p.teamColor,flexShrink:0}}/>
+                      <div style={{fontSize:11,color:C.muted}}>{p.teamName}</div>
+                    </div>
+                  </div>
+                  <div style={{textAlign:"right",flexShrink:0}}>
+                    <div style={{fontSize:22,fontWeight:800,color:relColor(p.total)}}>{relLabel(p.total)}</div>
+                    <div style={{fontSize:10,color:C.dim}}>thru {p.holesPlayed}</div>
+                  </div>
+                </div>
+              ))}
+              <div style={{fontSize:10,color:C.dim,textAlign:"center",marginTop:12}}>Not counting balls — true individual gross score</div>
+            </div>
+          );
+        })()}
       </div>
     </div>
   );
