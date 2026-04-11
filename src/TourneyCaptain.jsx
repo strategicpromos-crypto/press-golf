@@ -12,29 +12,30 @@ function safeInt(v,f=0){const n=parseInt(v,10);return isNaN(n)?f:n;}
 function relLabel(d){if(d===null||d===undefined)return"—";if(d===0)return"E";return d>0?"+"+d:String(d);}
 function relColor(d){if(d===null||d===undefined)return C.muted;if(d<0)return C.green;if(d>0)return C.red;return C.muted;}
 
-function calcTeamScore(teamScores,teamSize,holeData,birdieBonus){
+function calcTeamScore(teamScores,teamSize,holeData,birdieBonus,countBalls){
   const byHole={};
   let front=0,back=0,total=0;
-  const frontPar2=holeData.filter(h=>h.side==="front").reduce((s,h)=>s+h.par*2,0);
-  const backPar2=holeData.filter(h=>h.side==="back").reduce((s,h)=>s+h.par*2,0);
+  const balls=countBalls||Math.min(teamSize,2);
+  const frontPar=holeData.filter(h=>h.side==="front").reduce((s,h)=>s+h.par*balls,0);
+  const backPar=holeData.filter(h=>h.side==="back").reduce((s,h)=>s+h.par*balls,0);
   for(const h of holeData){
     const scores=[];
     for(let p=0;p<teamSize;p++){const s=teamScores?.[p]?.[h.hole];if(s!==undefined&&s!==null)scores.push(safeInt(s));}
     if(scores.length===0){byHole[h.hole]=null;continue;}
     scores.sort((a,b)=>a-b);
-    const countBalls=teamSize<=2?1:2;const bestN=scores.slice(0,countBalls);
+    const bestN=scores.slice(0,balls);
     let raw=bestN.reduce((s,v)=>s+v,0);
     let bonusApplied=0;
     if(birdieBonus){
-      const extraBirdies=scores.slice(countBalls).filter(s=>s<=h.par-1);
+      const extraBirdies=scores.slice(balls).filter(s=>s<=h.par-1);
       if(extraBirdies.length>0){bonusApplied=extraBirdies.reduce((sum,s)=>sum+(h.par-s),0);raw-=bonusApplied;}
     }
-    const diff=raw-(h.par*countBalls);
+    const diff=raw-(h.par*balls);
     byHole[h.hole]={raw,diff,bonusApplied,scored:true};
     if(h.side==="front")front+=raw;else back+=raw;
     total+=raw;
   }
-  return{byHole,front,frontDiff:front-frontPar2,back,backDiff:back-backPar2,total,totalDiff:total-(frontPar2+backPar2)};
+  return{byHole,front,frontDiff:front-frontPar,back,backDiff:back-backPar,total,totalDiff:total-(frontPar+backPar)};
 }
 
 export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBack }) {
@@ -124,7 +125,7 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
 
   if (!team || !holeData) return <div style={{ background:C.bg, minHeight:"100vh", display:"flex", alignItems:"center", justifyContent:"center", color:C.muted }}>Loading...</div>;
 
-  const sc = calcTeamScore(team.scores || {}, team.size || 4, course.holes, birdieBonus);
+  const sc = calcTeamScore(team.scores || {}, team.size || 4, course.holes, birdieBonus, tourney.count_balls||2);
   const thisHoleScores = Array.from({length:team.size||4},(_,j)=>({j,s:getPlayerScore(j,currentHole)})).filter(x=>x.s!==null).sort((a,b)=>a.s-b.s);
   const best2Set = new Set(thisHoleScores.slice(0,2).map(x=>x.j));
   const extraBirdies = thisHoleScores.slice(2).filter(x=>x.s<=holeData.par-1);
@@ -210,9 +211,9 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
           </div>
           <div style={{ display:"flex", flexDirection:"column", gap:6, alignItems:"flex-end" }}>
             <button onClick={()=>setShowSummary(true)}
-              style={{ background:"rgba(232,184,75,0.15)", border:`1px solid ${C.gold}`, color:C.gold, fontSize:11, cursor:"pointer", padding:"6px 12px", borderRadius:12, fontWeight:700 }}>📊 Board</button>
+              style={{ background:"rgba(232,184,75,0.15)", border:`1px solid ${C.gold}`, color:C.gold, fontSize:13, cursor:"pointer", padding:"8px 16px", borderRadius:12, fontWeight:700 }}>📊 Leaderboard</button>
             <button onClick={()=>setShowCaptainSettings(true)}
-              style={{ background:"rgba(123,180,80,0.15)", border:`1px solid ${C.green}`, color:C.green, fontSize:11, cursor:"pointer", padding:"5px 10px", borderRadius:12, fontWeight:700 }}>⚙️ Edit</button>
+              style={{ background:"rgba(123,180,80,0.15)", border:`1px solid ${C.green}`, color:C.green, fontSize:15, cursor:"pointer", padding:"12px 20px", borderRadius:12, fontWeight:700 }}>⚙️ Settings</button>
           </div>
         </div>
         {/* Progress */}
