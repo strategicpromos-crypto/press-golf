@@ -1179,23 +1179,28 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
           </div>
         )}
 
-        {/* Opponent round banner — shows when Ken has linked his account */}
-        {opponentRound&&(
-          <div style={{background:`linear-gradient(135deg,rgba(123,180,80,0.12),rgba(123,180,80,0.04))`,border:`1px solid ${C.green}33`,borderRadius:14,padding:"14px 16px",marginBottom:14,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-            <div>
-              <div style={{fontWeight:700,fontSize:14,color:C.green,marginBottom:2}}>⛳ Match In Progress</div>
-              <div style={{fontSize:12,color:C.muted}}>{opponentRound.course_name} · Hole {opponentRound.current_hole}</div>
-              <div style={{fontSize:11,color:C.dim,marginTop:1}}>
-                vs {(opponentRound.opponents||[]).find(o=>o.playerId===user.id||true)?.name||"Partner"}
+        {/* Opponent round banner — shows when user has linked their account */}
+        {opponentRound&&(()=>{
+          // Find the correct playerId — the player record ID that matches this user
+          // It's stored in opponents as linkedUserId
+          const myOpp = (opponentRound.opponents||[]).find(o=>o.linkedUserId===user.id);
+          const playerId = myOpp?.playerId;
+          if(!playerId) return null; // can't resume without knowing which player
+          return(
+            <div style={{background:`linear-gradient(135deg,rgba(123,180,80,0.12),rgba(123,180,80,0.04))`,border:`1px solid ${C.green}33`,borderRadius:14,padding:"14px 16px",marginBottom:14,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <div>
+                <div style={{fontWeight:700,fontSize:14,color:C.green,marginBottom:2}}>⛳ Match In Progress</div>
+                <div style={{fontSize:12,color:C.muted}}>{opponentRound.course_name} · Hole {opponentRound.current_hole}</div>
+                <div style={{fontSize:11,color:C.dim,marginTop:1}}>vs {myOpp?.name||"Partner"}</div>
               </div>
+              <button
+                onClick={()=>window.location.href=`https://press-golf.vercel.app?round=${opponentRound.id}&player=${playerId}`}
+                style={{background:C.green,border:"none",color:"#0a1a0f",padding:"10px 16px",borderRadius:12,fontSize:13,fontWeight:800,cursor:"pointer",flexShrink:0}}>
+                Resume →
+              </button>
             </div>
-            <button
-              onClick={()=>window.location.href=`https://press-golf.vercel.app?round=${opponentRound.id}&player=${user.id}`}
-              style={{background:C.green,border:"none",color:"#0a1a0f",padding:"10px 16px",borderRadius:12,fontSize:13,fontWeight:800,cursor:"pointer",flexShrink:0}}>
-              Resume →
-            </button>
-          </div>
-        )}
+          );
+        })()}
 
         {/* Resume Tournament banner */}
         {activeTourney&&(
