@@ -486,13 +486,8 @@ export default function App(){
   const roundParam  = urlParams.get("round");
   const playerParam = urlParams.get("player");
 
-  // Opponent score entry — opens when someone taps a shared round link
-  if (roundParam && playerParam) {
-    return <OpponentScoreEntry roundId={roundParam} playerId={playerParam} onBack={()=>window.location.href="/"}/>;
-  }
-
   // Tourney join routing — handles captain, spectator, and bare code links
-  const [tourneyView,    setTourneyView]    = useState(null); // null | "join" | "captain" | "spectator"
+  const [tourneyView,    setTourneyView]    = useState(null);
   const [tourneyData,    setTourneyData]    = useState(null);
   const [tourneyCaptainIdx, setTourneyCaptainIdx] = useState(null);
 
@@ -547,6 +542,10 @@ export default function App(){
   if(showPrivacy)return <PrivacyPolicy onBack={()=>setShowPrivacy(false)}/>;
   if(showPaywall)return <ProPaywall onBack={()=>setShowPaywall(false)} onUpgrade={handleUpgrade} saving={stripeSaving}/>;
   if(showProInfo)return <ProInfo onBack={()=>setShowProInfo(false)} isPro={isPro} onUpgrade={()=>{setShowProInfo(false);setShowPaywall(true);}}/>;
+
+  // Opponent score entry — no login required, anyone with the link can score
+  if(roundParam && playerParam) return <OpponentScoreEntry roundId={roundParam} playerId={playerParam} onBack={()=>window.location.href="/"}/>;
+
   if(!user)return <AuthScreen onAuth={setUser} onPrivacy={()=>setShowPrivacy(true)}/>;
   // Tourney views — shown to captains/spectators who open a shared link
   if (tourneyView === "join") {
