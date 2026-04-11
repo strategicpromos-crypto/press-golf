@@ -6,6 +6,7 @@ import TeamTournament from "./TeamTournament.jsx";
 import TourneyJoin from "./TourneyJoin.jsx";
 import TourneyCaptain from "./TourneyCaptain.jsx";
 import TourneySpectator from "./TourneySpectator.jsx";
+import OpponentScoreEntry from "./OpponentScoreEntry.jsx";
 
 const STRIPE_PK = "pk_test_51TIp2h2LCsgE9lxhGjdLujrI8YsZTGOtj1mC8fqHFupIOonwdYHqZRf2uImMvdoXCOclEH0ll3zxzOpfs0Jdo1Fh00nFj1I8GW";
 const PRICE_ID  = "price_1Tip7m2LCsgE9Ikh0yUEVgE8";
@@ -482,6 +483,13 @@ export default function App(){
   const inviteCode  = urlParams.get("invite");
   const tourneyCode = urlParams.get("tourney");
   const tourneyTeam = urlParams.get("team");
+  const roundParam  = urlParams.get("round");
+  const playerParam = urlParams.get("player");
+
+  // Opponent score entry — opens when someone taps a shared round link
+  if (roundParam && playerParam) {
+    return <OpponentScoreEntry roundId={roundParam} playerId={playerParam} onBack={()=>window.location.href="/"}/>;
+  }
 
   // Tourney join routing — handles captain, spectator, and bare code links
   const [tourneyView,    setTourneyView]    = useState(null); // null | "join" | "captain" | "spectator"
