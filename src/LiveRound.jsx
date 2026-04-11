@@ -366,17 +366,24 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
     checkExisting();
   }, [user.id]);
 
-  // -- Auto-save scores to Supabase whenever scores change ------------------
+  // -- Auto-save MY scores to Supabase (merge, never overwrite others) --------
   useEffect(() => {
     if (!liveRoundId || step !== "playing") return;
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(async () => {
+      // Read current DB state first, then merge only MY scores
+      // This prevents overwriting opponent scores that came in via real-time
+      const { data: current } = await sb.from("live_rounds")
+        .select("scores")
+        .eq("id", liveRoundId)
+        .single();
+      const merged = { ...(current?.scores || {}), me: scores["me"] || {} };
       await sb.from("live_rounds").update({
-        scores,
+        scores: merged,
         current_hole: currentHole,
         updated_at: new Date().toISOString(),
       }).eq("id", liveRoundId);
-    }, 800); // save 0.8s after last change
+    }, 800);
     return () => clearTimeout(saveTimer.current);
   }, [scores, currentHole, liveRoundId, step]);
 
@@ -392,15 +399,12 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
         table: "live_rounds",
         filter: "id=eq." + liveRoundId,
       }, payload => {
-        // Only update opponent scores — never overwrite MY scores
+        // Merge incoming scores with local — never lose either side's scores
         if (payload.new?.scores) {
-          setScores(prev => {
-            const incoming = payload.new.scores;
-            const merged = { ...incoming };
-            // Always keep local "me" scores — opponent's phone can't change my score
-            merged["me"] = prev["me"] || {};
-            return merged;
-          });
+          setScores(prev => ({
+            ...payload.new.scores,  // start with DB state (has everyone)
+            me: prev["me"] || {},   // always keep MY local scores (most up to date)
+          }));
         }
       })
       .subscribe();
