@@ -43,6 +43,7 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
   const [tab,          setTab]          = useState("scores");
   const [saveStatus,   setSaveStatus]   = useState("");
   const [showSummary,  setShowSummary]  = useState(false);
+  const [bTab,         setBTab]         = useState("standings");
   const saveTimer = useRef(null);
   const subRef    = useRef(null);
 
@@ -228,7 +229,6 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
 
             {/* Board tabs */}
             {(()=>{
-              const [bTab,setBTab]=useState("standings");
               const medals=["🥇","🥈","🥉"];
               return(<>
                 <div style={{display:"flex",gap:0,marginBottom:16,border:"1px solid "+C.border,borderRadius:10,overflow:"hidden"}}>
