@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { sb } from "./supabase.js";
 import { COURSES } from "./golf.js";
 
@@ -14,64 +14,64 @@ function safeInt(v,f=0){const n=parseInt(v,10);return isNaN(n)?f:n;}
 function relLabel(d){if(d===null||d===undefined)return"—";if(d===0)return"E";return d>0?"+"+d:String(d);}
 function relColor(d){if(d===null||d===undefined)return C.muted;if(d<0)return C.green;if(d>0)return C.red;return C.muted;}
 
-function calcTeamScore(teamScores,teamSize,holeData,birdieBonus){
+function calcTeamScore(teamScores,teamSize,holeData,birdieBonus,countBalls){
   const byHole={};
   let front=0,back=0,total=0;
-  const frontPar2=holeData.filter(h=>h.side==="front").reduce((s,h)=>s+h.par*2,0);
-  const backPar2=holeData.filter(h=>h.side==="back").reduce((s,h)=>s+h.par*2,0);
+  const balls=countBalls||Math.min(teamSize,2);
+  const frontPar=holeData.filter(h=>h.side==="front").reduce((s,h)=>s+h.par*balls,0);
+  const backPar=holeData.filter(h=>h.side==="back").reduce((s,h)=>s+h.par*balls,0);
   for(const h of holeData){
     const scores=[];
     for(let p=0;p<teamSize;p++){const s=teamScores?.[p]?.[h.hole];if(s!==undefined&&s!==null)scores.push(safeInt(s));}
     if(scores.length===0){byHole[h.hole]=null;continue;}
     scores.sort((a,b)=>a-b);
-    const best2=scores.slice(0,2);
-    let raw=best2.reduce((s,v)=>s+v,0);
-    if(birdieBonus){const eb=scores.slice(2).filter(s=>s<=h.par-1);if(eb.length>0)raw-=eb.reduce((sum,s)=>sum+(h.par-s),0);}
-    byHole[h.hole]={raw,diff:raw-(h.par*2),scored:true};
+    const bestN=scores.slice(0,balls);
+    let raw=bestN.reduce((s,v)=>s+v,0);
+    if(birdieBonus){const eb=scores.slice(balls).filter(s=>s<=h.par-1);if(eb.length>0)raw-=eb.reduce((sum,s)=>sum+(h.par-s),0);}
+    byHole[h.hole]={raw,diff:raw-(h.par*balls),scored:true};
     if(h.side==="front")front+=raw;else back+=raw;total+=raw;
   }
-  return{byHole,front,frontDiff:front-frontPar2,back,backDiff:back-backPar2,total,totalDiff:total-(frontPar2+backPar2)};
+  return{byHole,front,frontDiff:front-frontPar,back,backDiff:back-backPar,total,totalDiff:total-(frontPar+backPar)};
 }
 
 export default function TourneySpectator({ tourney: initialTourney, onBack }) {
-  const [tourney,    setTourney]    = useState(initialTourney);
-  const [refreshing, setRefreshing] = useState(false);
-  const [lastRefresh,setLastRefresh]= useState(new Date());
-  const [tab,        setTab]        = useState("board"); // board | scorecard
+  const [tourney,   setTourney]   = useState(initialTourney);
+  const [liveLabel, setLiveLabel] = useState("● Live");
+  const [tab,       setTab]       = useState("board");
+  const subRef = useRef(null);
 
   const course      = COURSES[tourney?.course_id || "south-toledo"];
   const birdieBonus = tourney?.birdie_bonus !== false;
+  const countBalls  = tourney?.count_balls || 2;
 
-  async function refresh() {
-    setRefreshing(true);
-    const { data } = await sb.from("team_tournaments").select("*").eq("id", tourney.id).single();
-    if (data) { setTourney(data); setLastRefresh(new Date()); }
-    setRefreshing(false);
-  }
+  useEffect(()=>{
+    // Real-time subscription — updates instantly when director or captains enter scores
+    subRef.current = sb
+      .channel("spectator_"+tourney.id)
+      .on("postgres_changes",{event:"UPDATE",schema:"public",table:"team_tournaments",filter:"id=eq."+tourney.id},
+        payload => {
+          if(payload.new) {
+            setTourney(payload.new);
+            setLiveLabel("● Updated just now");
+            setTimeout(()=>setLiveLabel("● Live"),3000);
+          }
+        })
+      .subscribe();
+    return()=>{ if(subRef.current) sb.removeChannel(subRef.current); };
+  },[tourney.id]);
 
   const board = (tourney?.teams || []).map((t,i) => ({
     ...t,
     color: t.color || TEAM_COLORS[i%TEAM_COLORS.length],
-    sc: calcTeamScore(t.scores||{}, t.size||4, course.holes, birdieBonus)
+    sc: calcTeamScore(t.scores||{}, t.size||4, course.holes, birdieBonus, countBalls)
   })).sort((a,b) => a.sc.totalDiff - b.sc.totalDiff);
-
-  // Pull-to-refresh via touch
-  const touchStartY = React.useRef(null);
-  function onTouchStart(e){ touchStartY.current = e.touches[0].clientY; }
-  function onTouchEnd(e){
-    if(touchStartY.current===null)return;
-    const diff = e.changedTouches[0].clientY - touchStartY.current;
-    if(diff > 80 && !refreshing) refresh();
-    touchStartY.current = null;
-  }
 
   const holesPlayed = course.holes.filter(h =>
     board.some(t => t.sc.byHole[h.hole]?.scored)
   ).length;
 
   return (
-    <div style={{ fontFamily:"Georgia,serif", minHeight:"100vh", background:C.bg, color:C.text }}
-      onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
+    <div style={{ fontFamily:"Georgia,serif", minHeight:"100vh", background:C.bg, color:C.text }}>
 
       {/* Header */}
       <div style={{ background:`linear-gradient(180deg,${C.card} 0%,transparent 100%)`, padding:"50px 20px 16px" }}>
@@ -79,9 +79,7 @@ export default function TourneySpectator({ tourney: initialTourney, onBack }) {
         <div style={{ textAlign:"center" }}>
           <div style={{ fontSize:24, fontWeight:800 }}>🏆 {tourney.name}</div>
           <div style={{ fontSize:13, color:C.muted, marginTop:4 }}>{course.name} · {holesPlayed} holes played</div>
-          <div style={{ fontSize:11, color:C.dim, marginTop:4 }}>
-            {refreshing ? "🔄 Refreshing..." : `Updated ${lastRefresh.toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"})} · Pull down to refresh`}
-          </div>
+          <div style={{ fontSize:11, color:C.green, marginTop:4 }}>{liveLabel}</div>
         </div>
       </div>
 
@@ -122,9 +120,6 @@ export default function TourneySpectator({ tourney: initialTourney, onBack }) {
               </div>
             ))}
 
-            <button onClick={refresh} disabled={refreshing} style={{ width:"100%",marginTop:8,padding:"14px",background:"transparent",color:refreshing?C.muted:C.green,border:`1.5px solid ${refreshing?C.border:C.green}`,borderRadius:12,fontSize:14,fontWeight:700,cursor:refreshing?"wait":"pointer" }}>
-              {refreshing?"Refreshing...":"↻ Refresh Scores"}
-            </button>
           </>
         )}
 
@@ -165,4 +160,3 @@ export default function TourneySpectator({ tourney: initialTourney, onBack }) {
     </div>
   );
 }
-
