@@ -78,8 +78,14 @@ export default function OpponentScoreEntry({ roundId, playerId }) {
 
   async function load(){
     setLoading(true);
+    console.log("Loading round:", roundId, "player:", playerId);
     const{data,error}=await sb.from("live_rounds").select("*").eq("id",roundId).single();
-    if(error||!data){setError("Round not found. Check your link.");setLoading(false);return;}
+    console.log("Result:", data, error);
+    if(error||!data){
+      setError("Round not found. ("+( error?.message||"no data")+")\nID: "+roundId);
+      setLoading(false);
+      return;
+    }
     setRound(data);
     setAllScores(data.scores||{});
     setMyScores(data.scores?.[playerId]||{});
@@ -127,10 +133,13 @@ export default function OpponentScoreEntry({ roundId, playerId }) {
 
   if(error)return(
     <div style={{fontFamily:"Georgia,serif",minHeight:"100vh",background:C.bg,color:C.text,display:"flex",alignItems:"center",justifyContent:"center",padding:24}}>
-      <div style={{textAlign:"center"}}>
+      <div style={{textAlign:"center",maxWidth:340}}>
         <div style={{fontSize:48,marginBottom:16}}>⛳</div>
-        <div style={{fontSize:18,fontWeight:700,color:C.red,marginBottom:8}}>Oops</div>
-        <div style={{fontSize:14,color:C.muted}}>{error}</div>
+        <div style={{fontSize:18,fontWeight:700,color:C.red,marginBottom:8}}>Round Not Found</div>
+        <div style={{fontSize:13,color:C.muted,marginBottom:16,lineHeight:1.6,whiteSpace:"pre-wrap"}}>{error}</div>
+        <button onClick={()=>window.location.href="/"} style={{background:C.green,border:"none",color:"#0a1a0f",padding:"14px 24px",borderRadius:12,fontSize:14,fontWeight:800,cursor:"pointer"}}>
+          Open Press →
+        </button>
       </div>
     </div>
   );
