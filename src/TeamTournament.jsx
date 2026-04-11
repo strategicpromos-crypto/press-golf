@@ -88,9 +88,26 @@ export default function TeamTournament({onBack, user}){
   const[captainTeamIdx,setCaptainTeamIdx]=useState(0);
   const[spectatorTourney,setSpectatorTourney]=useState(null);
   const saveTimer=useRef(null);
+  const subRef=useRef(null);
   const course=COURSES[courseId];
 
   useEffect(()=>{ loadSaved(); },[]);
+
+  // ── Real-time: director sees captain scores instantly ──────────────────────
+  useEffect(()=>{
+    if(!tourneyId||screen!=="scoring")return;
+    subRef.current=sb
+      .channel("director_"+tourneyId)
+      .on("postgres_changes",{event:"UPDATE",schema:"public",table:"team_tournaments",filter:"id=eq."+tourneyId},
+        payload=>{
+          if(payload.new?.teams){
+            // Only update teams from DB — don't overwrite local director edits in progress
+            setTeams(payload.new.teams);
+          }
+        })
+      .subscribe();
+    return()=>{ if(subRef.current){sb.removeChannel(subRef.current);subRef.current=null;} };
+  },[tourneyId,screen]);
 
   async function loadSaved(){
     if(!user?.id)return;
@@ -537,71 +554,44 @@ export default function TeamTournament({onBack, user}){
             </div>
           ))}
 
-          {/* Share Codes Panel */}
-          {tourneyId&&directorCode&&(()=>{
+          {/* Share Panel — link based, no codes, no PINs */}
+          {tourneyId&&(()=>{
             const appUrl="https://press-golf.vercel.app";
-            // Public code = everything before the # e.g. WEDS48
-            const publicCode=directorCode.split("#")[0];
-            const captainBase=publicCode; // captain codes use public code, not secret
-            const spectatorLink=`${appUrl}?tourney=${publicCode}`;
+            const spectatorLink=`${appUrl}?tourney=${tourneyId}&spectate=1`;
             return(
               <div style={{background:"rgba(123,180,80,0.06)",border:"1px solid rgba(123,180,80,0.2)",borderRadius:14,padding:"16px",marginBottom:16}}>
                 <div style={{fontSize:11,color:C.green,letterSpacing:1.5,textTransform:"uppercase",marginBottom:12,fontWeight:600}}>🔗 Share Tournament</div>
 
-                {/* Director code — secret */}
-                <div style={{marginBottom:12}}>
-                  <div style={{fontSize:11,color:C.red,marginBottom:4,fontWeight:600}}>🔒 Your director code — KEEP PRIVATE</div>
-                  <div style={{background:C.card,border:"1px solid rgba(224,80,80,0.3)",borderRadius:8,padding:"10px 14px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                    <div style={{fontSize:20,fontWeight:800,letterSpacing:2,color:C.red}}>{directorCode}</div>
-                    <button onClick={()=>navigator.clipboard?.writeText(directorCode)} style={{background:"transparent",border:"none",color:C.muted,fontSize:12,cursor:"pointer"}}>Copy</button>
-                  </div>
-                  <div style={{fontSize:10,color:C.muted,marginTop:4}}>Never share this — it gives full control over all scores</div>
-                </div>
-
-                {/* Public code — announce to everyone */}
-                <div style={{marginBottom:12}}>
-                  <div style={{fontSize:11,color:C.green,marginBottom:4,fontWeight:600}}>📢 Public code — announce to everyone</div>
-                  <div style={{background:C.card,border:"1px solid "+C.green+"44",borderRadius:8,padding:"10px 14px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                    <div style={{fontSize:22,fontWeight:800,letterSpacing:4,color:C.green}}>{publicCode}</div>
-                    <button onClick={()=>navigator.clipboard?.writeText(publicCode)} style={{background:"transparent",border:"none",color:C.muted,fontSize:12,cursor:"pointer"}}>Copy</button>
-                  </div>
-                  <div style={{fontSize:10,color:C.muted,marginTop:4}}>Spectators type this to watch the leaderboard. Captains use it + team number + PIN.</div>
-                </div>
-
                 {/* Spectator link */}
-                <div style={{marginBottom:12}}>
-                  <div style={{fontSize:11,color:C.muted,marginBottom:6}}>Spectator link (tap to open leaderboard)</div>
+                <div style={{marginBottom:16}}>
+                  <div style={{fontSize:13,fontWeight:700,color:C.text,marginBottom:4}}>👀 Spectator Leaderboard</div>
+                  <div style={{fontSize:11,color:C.muted,marginBottom:8}}>Anyone with this link can watch the live leaderboard — no account needed</div>
                   <div style={{display:"flex",gap:8}}>
-                    <button onClick={()=>navigator.clipboard?.writeText(spectatorLink)} style={{flex:1,padding:"10px",background:C.card,border:"1px solid "+C.border,borderRadius:8,color:C.text,fontSize:11,cursor:"pointer",fontWeight:600}}>📋 Copy Link</button>
-                    <button onClick={()=>window.open(`sms:?&body=${encodeURIComponent("Watch the leaderboard live: "+spectatorLink)}`)} style={{flex:1,padding:"10px",background:C.card,border:"1px solid "+C.border,borderRadius:8,color:C.text,fontSize:11,cursor:"pointer",fontWeight:600}}>📱 Text It</button>
+                    <button onClick={()=>window.open(`sms:?&body=${encodeURIComponent("⛳ Watch the tournament live!\n"+spectatorLink)}`)}
+                      style={{flex:2,padding:"11px",background:C.green,color:"#0a1a0f",border:"none",borderRadius:10,fontSize:13,fontWeight:800,cursor:"pointer"}}>📱 Text Spectators</button>
+                    <button onClick={()=>navigator.clipboard?.writeText(spectatorLink)}
+                      style={{flex:1,padding:"11px",background:"transparent",color:C.muted,border:"1px solid "+C.border,borderRadius:10,fontSize:12,cursor:"pointer"}}>📋 Copy</button>
                   </div>
                 </div>
 
-                <div style={{fontSize:11,color:C.green,letterSpacing:1.5,textTransform:"uppercase",marginBottom:8,fontWeight:600}}>Team Captains</div>
-                <div style={{fontSize:11,color:C.muted,marginBottom:10}}>Each captain gets a link + their private PIN. Tap the link → enter PIN → score.</div>
+                {/* Captain links — no PIN, just tap and score */}
+                <div style={{fontSize:13,fontWeight:700,color:C.text,marginBottom:4}}>⛳ Team Captains</div>
+                <div style={{fontSize:11,color:C.muted,marginBottom:10}}>Each captain gets their own link — tap it and they're straight into scoring. No PIN needed.</div>
                 {teams.map((team,i)=>{
-                  const captainLink=`${appUrl}?tourney=${captainBase}&team=${i}`;
-                  const pin=team.pin||"----";
-                  const smsBody=`⛳ You're captain of ${team.name}!\n\nJoin the tournament here:\n${captainLink}\n\nYour PIN: ${pin}\n\nTap the link, enter your PIN, and start scoring. — Press Golf`;
+                  const captainLink=`${appUrl}?tourney=${tourneyId}&team=${i}`;
+                  const smsBody=`⛳ You're captain of ${team.name}!\n\nTap to enter scores:\n${captainLink}\n\nScores update live on the leaderboard. — Press Golf`;
                   return(
                     <div key={i} style={{background:C.card,border:`1px solid ${team.color}33`,borderRadius:12,padding:"12px 14px",marginBottom:8}}>
                       <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
                         <div style={{width:12,height:12,borderRadius:"50%",background:team.color,flexShrink:0}}/>
-                        <div style={{fontWeight:800,fontSize:14,color:C.text,flex:1}}>{team.name}</div>
-                        <div style={{background:"rgba(232,184,75,0.12)",border:"1px solid rgba(232,184,75,0.3)",borderRadius:8,padding:"4px 10px"}}>
-                          <div style={{fontSize:10,color:C.muted,textAlign:"center"}}>PIN</div>
-                          <div style={{fontFamily:"monospace",fontSize:18,fontWeight:800,color:C.gold,letterSpacing:3}}>{pin}</div>
-                        </div>
+                        <div style={{fontWeight:800,fontSize:14,color:C.text}}>{team.name}</div>
+                        <div style={{fontSize:11,color:C.muted,marginLeft:"auto"}}>{team.players?.filter(Boolean).join(", ")}</div>
                       </div>
                       <div style={{display:"flex",gap:8}}>
-                        <button
-                          onClick={()=>window.open(`sms:?&body=${encodeURIComponent(smsBody)}`)}
-                          style={{flex:2,padding:"11px",background:C.green,color:"#0a1a0f",border:"none",borderRadius:10,fontSize:13,fontWeight:800,cursor:"pointer"}}
-                        >📱 Text {team.name} Captain</button>
-                        <button
-                          onClick={()=>navigator.clipboard?.writeText(smsBody)}
-                          style={{flex:1,padding:"11px",background:"transparent",color:C.muted,border:"1px solid "+C.border,borderRadius:10,fontSize:12,fontWeight:600,cursor:"pointer"}}
-                        >📋 Copy</button>
+                        <button onClick={()=>window.open(`sms:?&body=${encodeURIComponent(smsBody)}`)}
+                          style={{flex:2,padding:"11px",background:C.green,color:"#0a1a0f",border:"none",borderRadius:10,fontSize:13,fontWeight:800,cursor:"pointer"}}>📱 Text Captain</button>
+                        <button onClick={()=>navigator.clipboard?.writeText(captainLink)}
+                          style={{flex:1,padding:"11px",background:"transparent",color:C.muted,border:"1px solid "+C.border,borderRadius:10,fontSize:12,cursor:"pointer"}}>📋 Copy</button>
                       </div>
                     </div>
                   );
