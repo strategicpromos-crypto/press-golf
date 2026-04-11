@@ -21,6 +21,69 @@ function safeInt(v,f=0){const n=parseInt(v,10);return isNaN(n)?f:n;}
 function relLabel(d){if(d===null||d===undefined)return"—";if(d===0)return"E";return d>0?"+"+d:String(d);}
 function relColor(d){if(d===null||d===undefined)return C.muted;if(d<0)return C.green;if(d>0)return C.red;return C.muted;}
 
+// Build top 10 individual leaderboard from all teams
+function calcIndividualLeaderboard(teams, holeData){
+  const players = [];
+  teams.forEach((team, teamIdx) => {
+    for(let pi = 0; pi < (team.size||2); pi++){
+      const name = team.players?.[pi]?.trim()
+        ? team.players[pi].trim()
+        : `Player ${pi+1}`;
+      const teamName = team.name || `Team ${teamIdx+1}`;
+      let total = 0, holesPlayed = 0;
+      for(const h of holeData){
+        const s = team.scores?.[pi]?.[h.hole];
+        if(s !== undefined && s !== null){
+          total += safeInt(s) - h.par;
+          holesPlayed++;
+        }
+      }
+      players.push({ name, teamName, teamColor: team.color||TEAM_COLORS[teamIdx%TEAM_COLORS.length], total, holesPlayed, teamIdx, pi });
+    }
+  });
+  // Sort by score (lowest = best), then holes played descending
+  return players
+    .filter(p => p.holesPlayed > 0)
+    .sort((a,b) => a.total !== b.total ? a.total - b.total : b.holesPlayed - a.holesPlayed)
+    .slice(0, 10);
+}
+
+// Top 10 leaderboard UI — reused across director, captain, spectator
+function Top10Tab({ teams, course }){
+  const players = calcIndividualLeaderboard(teams, course.holes);
+  const medals = ["🥇","🥈","🥉"];
+  if(players.length === 0) return(
+    <div style={{textAlign:"center",padding:"40px 20px",color:C.muted}}>
+      <div style={{fontSize:32,marginBottom:12}}>⛳</div>
+      <div style={{fontSize:14}}>Individual scores will appear here as players enter their scores.</div>
+    </div>
+  );
+  return(
+    <div>
+      <div style={{fontSize:11,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:12,textAlign:"center"}}>Individual scores · all players</div>
+      {players.map((p,i)=>(
+        <div key={`${p.teamIdx}-${p.pi}`} style={{background:i===0?"rgba(232,184,75,0.08)":C.card,border:`1px solid ${i===0?C.gold+"44":C.border}`,borderRadius:12,padding:"12px 14px",marginBottom:8,display:"flex",alignItems:"center",gap:12}}>
+          <div style={{width:32,textAlign:"center",fontSize:i<3?20:14,fontWeight:800,color:i<3?C.gold:C.muted,flexShrink:0}}>
+            {i<3?medals[i]:i+1}
+          </div>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontWeight:800,fontSize:15,color:i===0?C.gold:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</div>
+            <div style={{display:"flex",alignItems:"center",gap:6,marginTop:2}}>
+              <div style={{width:8,height:8,borderRadius:"50%",background:p.teamColor,flexShrink:0}}/>
+              <div style={{fontSize:11,color:C.muted}}>{p.teamName}</div>
+            </div>
+          </div>
+          <div style={{textAlign:"right",flexShrink:0}}>
+            <div style={{fontSize:22,fontWeight:800,color:relColor(p.total)}}>{relLabel(p.total)}</div>
+            <div style={{fontSize:10,color:C.dim}}>thru {p.holesPlayed}</div>
+          </div>
+        </div>
+      ))}
+      <div style={{fontSize:10,color:C.dim,textAlign:"center",marginTop:12}}>Individual scores · not counting balls · updates live</div>
+    </div>
+  );
+}
+
 function calcTeamScore(teamScores,teamSize,holeData,birdieBonus,countBalls){
   const byHole={};
   let front=0,back=0,total=0;
@@ -748,74 +811,89 @@ export default function TeamTournament({onBack, user}){
   // LEADERBOARD
   if(screen==="leaderboard"){
     const board=getLeaderboard();
+    const [lbTab,setLbTab]=useState("standings");
     return(
       <div style={{fontFamily:"Georgia,serif",minHeight:"100vh",background:C.bg,color:C.text,paddingBottom:40}}>
-        <div style={{background:"linear-gradient(180deg,"+C.card+" 0%,transparent 100%)",padding:"50px 20px 20px",textAlign:"center"}}>
-          <button onClick={()=>setScreen("scoring")} style={{background:"rgba(123,180,80,0.15)",border:"1px solid "+C.green,color:C.green,fontSize:13,cursor:"pointer",padding:"8px 16px",borderRadius:20,fontWeight:700,marginBottom:16,display:"block"}}>‹ Back to Scoring</button>
-          <div style={{fontSize:28,fontWeight:800}}>🏆 Leaderboard</div>
-          <div style={{fontSize:13,color:C.muted,marginTop:4}}>{course.name} · 2 Best Ball{birdieBonus?" · Birdie Bonus ✓":""}</div>
+        <div style={{background:"linear-gradient(180deg,"+C.card+" 0%,transparent 100%)",padding:"50px 20px 16px"}}>
+          <button onClick={()=>setScreen("scoring")} style={{background:"rgba(123,180,80,0.15)",border:"1px solid "+C.green,color:C.green,fontSize:13,cursor:"pointer",padding:"8px 16px",borderRadius:20,fontWeight:700,marginBottom:12,display:"block"}}>‹ Back to Scoring</button>
+          <div style={{textAlign:"center"}}>
+            <div style={{fontSize:26,fontWeight:800}}>🏆 {course.name}</div>
+            <div style={{fontSize:12,color:C.muted,marginTop:4}}>{countBalls} Best Ball{birdieBonus?" · Birdie Bonus ✓":""} · Hole {currentHole}</div>
+          </div>
         </div>
-        <div style={{padding:"0 16px"}}>
-          <div style={{display:"flex",padding:"4px 14px",marginBottom:4}}>
-            <div style={{flex:1,fontSize:10,color:C.muted,letterSpacing:1.5,textTransform:"uppercase"}}>Team</div>
-            {["F9","B9","TOT"].map(l=><div key={l} style={{width:44,textAlign:"center",fontSize:10,color:C.muted,letterSpacing:1,textTransform:"uppercase"}}>{l}</div>)}
-          </div>
-          {board.map((team,rank)=>(
-            <div key={team.id} style={{background:rank===0?"rgba(232,184,75,0.08)":C.card,border:"1px solid "+(rank===0?C.gold+"44":C.border),borderRadius:14,padding:"14px",marginBottom:8}}>
-              <div style={{display:"flex",alignItems:"center",gap:10}}>
-                <div style={{width:30,height:30,borderRadius:"50%",flexShrink:0,background:rank===0?C.gold:rank===1?"#aaa":rank===2?"#cd7f32":C.dim,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:800,fontSize:13,color:rank<3?"#0a1a0f":C.muted}}>{rank+1}</div>
-                <div style={{flex:1,minWidth:0}}>
-                  <div style={{display:"flex",alignItems:"center",gap:6}}>
-                    <div style={{width:10,height:10,borderRadius:"50%",background:team.color,flexShrink:0}}/>
-                    <div style={{fontWeight:800,fontSize:15,color:rank===0?C.gold:C.text}}>{team.name}</div>
-                    {team.strokesPerSide>0&&<div style={{fontSize:9,color:C.gold}}>+{team.strokesPerSide}/side</div>}
-                  </div>
-                  <div style={{fontSize:11,color:C.muted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:2}}>{team.players.filter(Boolean).join(" · ")||"No players"}</div>
-                </div>
-                {[team.sc.frontDiff,team.sc.backDiff,team.sc.totalDiff].map((d,idx)=>(
-                  <div key={idx} style={{width:44,textAlign:"center",fontWeight:800,fontSize:16,color:team.sc.total===0?C.muted:relColor(d)}}>{team.sc.total===0?"—":relLabel(d)}</div>
-                ))}
-              </div>
-            </div>
+
+        {/* Tabs */}
+        <div style={{display:"flex",borderBottom:"1px solid "+C.border,background:"rgba(0,0,0,0.2)"}}>
+          {[["standings","🏆 Standings"],["scorecard","📋 Scorecard"],["top10","⭐ Top 10"]].map(([id,lbl])=>(
+            <button key={id} onClick={()=>setLbTab(id)} style={{flex:1,padding:"12px 4px",fontSize:12,fontWeight:lbTab===id?700:500,background:"transparent",color:lbTab===id?C.green:C.muted,border:"none",borderBottom:lbTab===id?"2px solid "+C.green:"2px solid transparent",cursor:"pointer"}}>{lbl}</button>
           ))}
+        </div>
 
-          {/* Scorecard */}
-          <div style={{background:C.card,border:"1px solid "+C.border,borderRadius:14,padding:"14px",marginTop:8,overflowX:"auto"}}>
-            <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>Hole by Hole · vs Par</div>
-            <table style={{width:"100%",borderCollapse:"collapse",fontSize:11,minWidth:500}}>
-              <thead>
-                <tr style={{borderBottom:"1px solid "+C.border}}>
-                  <th style={{textAlign:"left",padding:"4px 6px",color:C.muted}}>Team</th>
-                  {course.holes.filter(h=>h.side==="front").map(h=><th key={h.hole} style={{padding:"3px",textAlign:"center",color:C.muted,fontWeight:500}}>{h.hole}</th>)}
-                  <th style={{padding:"3px 5px",textAlign:"center",color:C.green,fontWeight:700}}>F</th>
-                  {course.holes.filter(h=>h.side==="back").map(h=><th key={h.hole} style={{padding:"3px",textAlign:"center",color:C.muted,fontWeight:500}}>{h.hole}</th>)}
-                  <th style={{padding:"3px 5px",textAlign:"center",color:C.green,fontWeight:700}}>B</th>
-                  <th style={{padding:"3px 5px",textAlign:"center",color:C.gold,fontWeight:700}}>T</th>
-                </tr>
-              </thead>
-              <tbody>
-                {board.map(team=>{
-                  const fH=course.holes.filter(h=>h.side==="front");
-                  const bH=course.holes.filter(h=>h.side==="back");
-                  return(
-                    <tr key={team.id} style={{borderTop:"1px solid "+C.dim}}>
-                      <td style={{padding:"4px 6px",fontWeight:700,color:team.color,whiteSpace:"nowrap"}}>{team.name}</td>
-                      {fH.map(h=>{const hd=team.sc.byHole[h.hole];return<td key={h.hole} style={{padding:"4px 3px",textAlign:"center",fontWeight:600,color:hd?relColor(hd.diff):C.dim}}>{hd?relLabel(hd.diff):"—"}</td>;})}
-                      <td style={{padding:"4px",textAlign:"center",fontWeight:800,color:team.sc.front?relColor(team.sc.frontDiff):C.muted}}>{team.sc.front?relLabel(team.sc.frontDiff):"—"}</td>
-                      {bH.map(h=>{const hd=team.sc.byHole[h.hole];return<td key={h.hole} style={{padding:"4px 3px",textAlign:"center",fontWeight:600,color:hd?relColor(hd.diff):C.dim}}>{hd?relLabel(hd.diff):"—"}</td>;})}
-                      <td style={{padding:"4px",textAlign:"center",fontWeight:800,color:team.sc.back?relColor(team.sc.backDiff):C.muted}}>{team.sc.back?relLabel(team.sc.backDiff):"—"}</td>
-                      <td style={{padding:"4px",textAlign:"center",fontWeight:800,color:team.sc.total?relColor(team.sc.totalDiff):C.muted}}>{team.sc.total?relLabel(team.sc.totalDiff):"—"}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+        <div style={{padding:"16px"}}>
+          {lbTab==="standings"&&(
+            <>
+              <div style={{display:"flex",padding:"4px 14px",marginBottom:4}}>
+                <div style={{flex:1,fontSize:10,color:C.muted,letterSpacing:1.5,textTransform:"uppercase"}}>Team</div>
+                {["F9","B9","TOT"].map(l=><div key={l} style={{width:44,textAlign:"center",fontSize:10,color:C.muted,letterSpacing:1,textTransform:"uppercase"}}>{l}</div>)}
+              </div>
+              {board.map((team,rank)=>(
+                <div key={team.id||rank} style={{background:rank===0?"rgba(232,184,75,0.08)":C.card,border:"1px solid "+(rank===0?C.gold+"44":C.border),borderRadius:14,padding:"14px",marginBottom:8}}>
+                  <div style={{display:"flex",alignItems:"center",gap:10}}>
+                    <div style={{width:30,height:30,borderRadius:"50%",flexShrink:0,background:rank===0?C.gold:rank===1?"#aaa":rank===2?"#cd7f32":C.dim,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:800,fontSize:13,color:rank<3?"#0a1a0f":C.muted}}>{rank+1}</div>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{display:"flex",alignItems:"center",gap:6}}>
+                        <div style={{width:10,height:10,borderRadius:"50%",background:team.color,flexShrink:0}}/>
+                        <div style={{fontWeight:800,fontSize:15,color:rank===0?C.gold:C.text}}>{team.name}</div>
+                        {team.strokesPerSide>0&&<div style={{fontSize:9,color:C.gold}}>+{team.strokesPerSide}/side</div>}
+                      </div>
+                      <div style={{fontSize:11,color:C.muted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:2}}>{(team.players||[]).filter(Boolean).join(" · ")||"No players"}</div>
+                    </div>
+                    {[team.sc.frontDiff,team.sc.backDiff,team.sc.totalDiff].map((d,idx)=>(
+                      <div key={idx} style={{width:44,textAlign:"center",fontWeight:800,fontSize:16,color:team.sc.total===0?C.muted:relColor(d)}}>{team.sc.total===0?"—":relLabel(d)}</div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+              <div style={{height:12}}/>
+              <GhostBtn onClick={()=>setScreen("home")}>← Back to Home</GhostBtn>
+            </>
+          )}
 
-          <div style={{height:20}}/>
-          <BigBtn onClick={()=>setScreen("scoring")} color={C.green}>← Back to Scoring</BigBtn>
-          <div style={{height:10}}/>
-          <GhostBtn onClick={()=>setScreen("home")}>← Back to Home</GhostBtn>
+          {lbTab==="scorecard"&&(
+            <div style={{overflowX:"auto"}}>
+              <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>Hole by Hole · vs Par</div>
+              <table style={{width:"100%",borderCollapse:"collapse",fontSize:11,minWidth:500}}>
+                <thead>
+                  <tr style={{borderBottom:"1px solid "+C.border}}>
+                    <th style={{textAlign:"left",padding:"4px 6px",color:C.muted}}>Team</th>
+                    {course.holes.filter(h=>h.side==="front").map(h=><th key={h.hole} style={{padding:"3px",textAlign:"center",color:C.muted,fontWeight:500}}>{h.hole}</th>)}
+                    <th style={{padding:"3px 5px",textAlign:"center",color:C.green,fontWeight:700}}>F</th>
+                    {course.holes.filter(h=>h.side==="back").map(h=><th key={h.hole} style={{padding:"3px",textAlign:"center",color:C.muted,fontWeight:500}}>{h.hole}</th>)}
+                    <th style={{padding:"3px 5px",textAlign:"center",color:C.green,fontWeight:700}}>B</th>
+                    <th style={{padding:"3px 5px",textAlign:"center",color:C.gold,fontWeight:700}}>T</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {board.map((team,ri)=>{
+                    const fH=course.holes.filter(h=>h.side==="front");
+                    const bH=course.holes.filter(h=>h.side==="back");
+                    return(
+                      <tr key={team.id||ri} style={{borderTop:"1px solid "+C.dim}}>
+                        <td style={{padding:"4px 6px",fontWeight:700,color:team.color,whiteSpace:"nowrap"}}>{team.name}</td>
+                        {fH.map(h=>{const hd=team.sc.byHole[h.hole];return<td key={h.hole} style={{padding:"4px 3px",textAlign:"center",fontWeight:600,color:hd?relColor(hd.diff):C.dim}}>{hd?relLabel(hd.diff):"—"}</td>;})}
+                        <td style={{padding:"4px",textAlign:"center",fontWeight:800,color:team.sc.front?relColor(team.sc.frontDiff):C.muted}}>{team.sc.front?relLabel(team.sc.frontDiff):"—"}</td>
+                        {bH.map(h=>{const hd=team.sc.byHole[h.hole];return<td key={h.hole} style={{padding:"4px 3px",textAlign:"center",fontWeight:600,color:hd?relColor(hd.diff):C.dim}}>{hd?relLabel(hd.diff):"—"}</td>;})}
+                        <td style={{padding:"4px",textAlign:"center",fontWeight:800,color:team.sc.back?relColor(team.sc.backDiff):C.muted}}>{team.sc.back?relLabel(team.sc.backDiff):"—"}</td>
+                        <td style={{padding:"4px",textAlign:"center",fontWeight:800,color:team.sc.total?relColor(team.sc.totalDiff):C.muted}}>{team.sc.total?relLabel(team.sc.totalDiff):"—"}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {lbTab==="top10"&&<Top10Tab teams={teams} course={course}/>}
         </div>
       </div>
     );
