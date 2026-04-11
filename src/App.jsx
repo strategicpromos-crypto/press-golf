@@ -122,6 +122,7 @@ function SettingsCard({title,sub,subExtra,children,danger}){
 function ProInfo({onBack, isPro, onUpgrade}) {
   const features = [
     { icon:"👥", title:"Unlimited Players", desc:"Free tier is limited to 2 players. Pro gives you unlimited opponents to track." },
+    { icon:"🏆", title:"Team Tournaments — Unlimited Teams", desc:"Free tier allows up to 2 teams of 4. Pro unlocks unlimited teams (up to 20), all team sizes, and full captain/spectator sharing with PIN codes." },
     { icon:"⛳", title:"Live Round Tracker", desc:"Track scores hole by hole with automatic bet calculations for Nassau, Match Play, Skins, and Auto Press." },
     { icon:"🤜", title:"Nassau Auto Press", desc:"Set 1, 2, or 3 down as your press trigger. New bets start automatically. Manual 'Pissed Press' anytime." },
     { icon:"🔗", title:"Player Linking & Invites", desc:"Link accounts with your golf buddies. They see their side of every bet, round, and settlement in real time." },
@@ -267,66 +268,163 @@ function PrivacyPolicy({onBack}){
 
 // ── AUTH ──────────────────────────────────────────────────────────────────────
 function AuthScreen({onAuth,onPrivacy}){
-  const [mode,setMode]=useState("login");
-  const [email,setEmail]=useState("");
-  const [pass,setPass]=useState("");
-  const [name,setName]=useState("");
-  const [loading,setLoading]=useState(false);
-  const [err,setErr]=useState("");
-  const [msg,setMsg]=useState("");
+  const [screen,  setScreen]  = useState("create"); // create | signin | forgot
+  const [name,    setName]    = useState("");
+  const [email,   setEmail]   = useState("");
+  const [pass,    setPass]    = useState("");
+  const [loading, setLoading] = useState(false);
+  const [err,     setErr]     = useState("");
+  const [msg,     setMsg]     = useState("");
 
-  async function handleLogin(){
-    setErr("");setLoading(true);
-    const{data,error}=await sb.auth.signInWithPassword({email,password:pass});
+  function friendlyError(e){
+    if(!e) return "Something went wrong. Try again.";
+    const m = e.toLowerCase();
+    if(m.includes("invalid login") || m.includes("invalid credentials")) return "Wrong email or password. Try again.";
+    if(m.includes("already registered") || m.includes("already exists")) return "That email already has an account. Tap Sign In below.";
+    if(m.includes("password")) return "Password must be at least 6 characters.";
+    if(m.includes("email")) return "Please enter a valid email address.";
+    if(m.includes("rate limit") || m.includes("too many")) return "Too many attempts. Wait a minute and try again.";
+    return "Something went wrong. Please try again.";
+  }
+
+  async function handleCreate(){
+    setErr(""); setMsg("");
+    if(!name.trim()){ setErr("Please enter your name."); return; }
+    if(!email.trim()){ setErr("Please enter your email."); return; }
+    if(pass.length < 6){ setErr("Password must be at least 6 characters."); return; }
+    setLoading(true);
+    const { data, error } = await sb.auth.signUp({
+      email: email.trim(),
+      password: pass,
+      options: { data: { display_name: name.trim() } }
+    });
     setLoading(false);
-    if(error){setErr(error.message);return;}
+    if(error){ setErr(friendlyError(error.message)); return; }
+    // Email confirmation is OFF so user is signed in immediately
+    if(data?.user){ onAuth(data.user); return; }
+    setMsg("Account created! Check your email then sign in.");
+    setScreen("signin");
+  }
+
+  async function handleSignIn(){
+    setErr(""); setMsg("");
+    if(!email.trim()){ setErr("Please enter your email."); return; }
+    if(!pass){ setErr("Please enter your password."); return; }
+    setLoading(true);
+    const { data, error } = await sb.auth.signInWithPassword({ email: email.trim(), password: pass });
+    setLoading(false);
+    if(error){ setErr(friendlyError(error.message)); return; }
     onAuth(data.user);
   }
 
-  async function handleSignup(){
-    setErr("");
-    if(!name.trim()){setErr("Enter your name.");return;}
-    if(pass.length<6){setErr("Password must be 6+ characters.");return;}
+  async function handleForgot(){
+    setErr(""); setMsg("");
+    if(!email.trim()){ setErr("Enter your email address above first."); return; }
     setLoading(true);
-    const{error}=await sb.auth.signUp({email,password:pass,options:{data:{display_name:name.trim()}}});
+    await sb.auth.resetPasswordForEmail(email.trim());
     setLoading(false);
-    if(error){setErr(error.message);return;}
-    setMsg("Check your email to confirm, then sign in!");
-    setMode("login");
+    setMsg("Password reset link sent to " + email + ". Check your inbox.");
   }
 
-  async function handleReset(){
-    if(!email){setErr("Enter your email first.");return;}
-    setLoading(true);
-    await sb.auth.resetPasswordForEmail(email);
-    setLoading(false);
-    setMsg("Password reset email sent!");
-  }
+  // ── Shared field styles ────────────────────────────────────────────────────
+  const field = { width:"100%", padding:"16px", background:"#0a1500", border:"1px solid rgba(123,180,80,0.25)", borderRadius:12, color:"#e8f0e9", fontSize:16, outline:"none", boxSizing:"border-box", fontFamily:"Georgia,serif" };
 
   return(
-    <div style={{fontFamily:"'Georgia',serif",minHeight:"100vh",background:C.bg,color:C.text,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"24px 24px 60px"}}>
-      <div style={{textAlign:"center",marginBottom:36}}>
-        <div style={{display:"inline-flex",alignItems:"center",justifyContent:"center",width:72,height:72,background:`linear-gradient(135deg,${C.green},#4a8030)`,borderRadius:20,marginBottom:14,boxShadow:`0 4px 24px ${C.green}44`}}><span style={{fontSize:36}}>⛳</span></div>
-        <div style={{fontSize:46,fontWeight:800,letterSpacing:-2,color:"#f0f7ec",lineHeight:1}}>Press</div>
-        <div style={{fontSize:10,color:C.green,letterSpacing:4,textTransform:"uppercase",marginTop:6}}>Put Me In Your Phone</div>
-      </div>
-      <div style={{width:"100%",maxWidth:380,background:C.card,border:`1px solid ${C.border}`,borderRadius:20,padding:"28px 24px"}}>
-        <div style={{display:"flex",gap:0,marginBottom:24,border:`1px solid ${C.border}`,borderRadius:10,overflow:"hidden"}}>
-          {["login","signup"].map(m=>(<button key={m} onClick={()=>{setMode(m);setErr("");setMsg("");}} style={{flex:1,padding:"12px",background:mode===m?C.green:"transparent",color:mode===m?"#0a1a0f":C.muted,border:"none",fontSize:13,fontWeight:700,cursor:"pointer",textTransform:"uppercase",letterSpacing:1}}>{m==="login"?"Sign In":"Sign Up"}</button>))}
+    <div style={{fontFamily:"Georgia,serif", minHeight:"100vh", background:C.bg, color:C.text, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:"24px 24px 60px"}}>
+
+      {/* Logo */}
+      <div style={{textAlign:"center", marginBottom:32}}>
+        <div style={{display:"inline-flex", alignItems:"center", justifyContent:"center", width:72, height:72, background:`linear-gradient(135deg,${C.green},#4a8030)`, borderRadius:20, marginBottom:14, boxShadow:`0 4px 24px ${C.green}44`}}>
+          <span style={{fontSize:36}}>⛳</span>
         </div>
-        <div style={{display:"flex",flexDirection:"column",gap:12}}>
-          {mode==="signup"&&<div><Lbl>Your Name</Lbl><input value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. Michael" style={inp}/></div>}
-          <div><Lbl>Email</Lbl><input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="you@email.com" style={inp} autoCapitalize="none"/></div>
-          <div><Lbl>Password</Lbl><input type="password" value={pass} onChange={e=>setPass(e.target.value)} placeholder={mode==="signup"?"6+ characters":"••••••••"} style={inp}/></div>
-          {err&&<div style={{background:"rgba(224,80,80,0.1)",border:"1px solid rgba(224,80,80,0.3)",borderRadius:8,padding:"10px 12px",fontSize:13,color:C.red}}>{err}</div>}
-          {msg&&<div style={{background:"rgba(123,180,80,0.1)",border:"1px solid rgba(123,180,80,0.3)",borderRadius:8,padding:"10px 12px",fontSize:13,color:C.green}}>{msg}</div>}
-          <BigBtn onClick={mode==="login"?handleLogin:handleSignup} disabled={loading} style={{marginTop:4}}>{loading?"Loading...":(mode==="login"?"Sign In →":"Create Account →")}</BigBtn>
-          {mode==="login"&&<button onClick={handleReset} style={{background:"none",border:"none",color:C.muted,fontSize:12,cursor:"pointer",textAlign:"center",padding:"4px"}}>Forgot password?</button>}
-        </div>
+        <div style={{fontSize:46, fontWeight:800, letterSpacing:-2, color:"#f0f7ec", lineHeight:1}}>Press</div>
+        <div style={{fontSize:10, color:C.green, letterSpacing:4, textTransform:"uppercase", marginTop:6}}>Put Me In Your Phone</div>
       </div>
-      <div style={{marginTop:20,fontSize:11,color:C.dim,textAlign:"center"}}>
-        Your data is private and encrypted.<br/>
-        <button onClick={onPrivacy} style={{background:"none",border:"none",color:C.muted,fontSize:11,cursor:"pointer",textDecoration:"underline",marginTop:4}}>Privacy Policy & Terms</button>
+
+      <div style={{width:"100%", maxWidth:380}}>
+
+        {/* CREATE ACCOUNT screen (default) */}
+        {screen==="create"&&(
+          <div style={{background:C.card, border:`1px solid ${C.border}`, borderRadius:20, padding:"28px 24px"}}>
+            <div style={{fontSize:20, fontWeight:800, marginBottom:6}}>Create your free account</div>
+            <div style={{fontSize:13, color:C.muted, marginBottom:24}}>Track golf bets, rounds, and season stats with your group.</div>
+
+            <div style={{display:"flex", flexDirection:"column", gap:12}}>
+              <input value={name} onChange={e=>setName(e.target.value)} placeholder="Your name" autoComplete="name" style={field}/>
+              <input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="Email address" autoCapitalize="none" autoComplete="email" style={field}/>
+              <input type="password" value={pass} onChange={e=>setPass(e.target.value)} placeholder="Choose a password (6+ characters)" autoComplete="new-password" style={field}/>
+
+              {err&&<div style={{background:"rgba(224,80,80,0.1)", border:"1px solid rgba(224,80,80,0.3)", borderRadius:10, padding:"12px 14px", fontSize:14, color:C.red, lineHeight:1.5}}>{err}</div>}
+              {msg&&<div style={{background:"rgba(123,180,80,0.1)", border:"1px solid rgba(123,180,80,0.3)", borderRadius:10, padding:"12px 14px", fontSize:14, color:C.green, lineHeight:1.5}}>{msg}</div>}
+
+              <button onClick={handleCreate} disabled={loading} style={{width:"100%", padding:"18px", background:loading?"#1a2a1a":C.green, color:loading?C.muted:"#0a1a0f", border:"none", borderRadius:12, fontSize:17, fontWeight:800, cursor:loading?"wait":"pointer", marginTop:4}}>
+                {loading?"Creating account...":"Create Account →"}
+              </button>
+            </div>
+
+            <div style={{textAlign:"center", marginTop:20, paddingTop:16, borderTop:`1px solid ${C.border}`}}>
+              <span style={{fontSize:14, color:C.muted}}>Already have an account? </span>
+              <button onClick={()=>{setScreen("signin");setErr("");setMsg("");}} style={{background:"none", border:"none", color:C.green, fontSize:14, fontWeight:700, cursor:"pointer", textDecoration:"underline"}}>Sign In</button>
+            </div>
+          </div>
+        )}
+
+        {/* SIGN IN screen */}
+        {screen==="signin"&&(
+          <div style={{background:C.card, border:`1px solid ${C.border}`, borderRadius:20, padding:"28px 24px"}}>
+            <div style={{fontSize:20, fontWeight:800, marginBottom:6}}>Welcome back</div>
+            <div style={{fontSize:13, color:C.muted, marginBottom:24}}>Sign in to your Press account.</div>
+
+            <div style={{display:"flex", flexDirection:"column", gap:12}}>
+              <input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="Email address" autoCapitalize="none" autoComplete="email" style={field}/>
+              <input type="password" value={pass} onChange={e=>setPass(e.target.value)} placeholder="Password" autoComplete="current-password" style={field}/>
+
+              {err&&<div style={{background:"rgba(224,80,80,0.1)", border:"1px solid rgba(224,80,80,0.3)", borderRadius:10, padding:"12px 14px", fontSize:14, color:C.red, lineHeight:1.5}}>{err}</div>}
+              {msg&&<div style={{background:"rgba(123,180,80,0.1)", border:"1px solid rgba(123,180,80,0.3)", borderRadius:10, padding:"12px 14px", fontSize:14, color:C.green, lineHeight:1.5}}>{msg}</div>}
+
+              <button onClick={handleSignIn} disabled={loading} style={{width:"100%", padding:"18px", background:loading?"#1a2a1a":C.green, color:loading?C.muted:"#0a1a0f", border:"none", borderRadius:12, fontSize:17, fontWeight:800, cursor:loading?"wait":"pointer", marginTop:4}}>
+                {loading?"Signing in...":"Sign In →"}
+              </button>
+
+              <button onClick={()=>{setScreen("forgot");setErr("");setMsg("");}} style={{background:"none", border:"none", color:C.muted, fontSize:13, cursor:"pointer", textAlign:"center"}}>
+                Forgot your password?
+              </button>
+            </div>
+
+            <div style={{textAlign:"center", marginTop:20, paddingTop:16, borderTop:`1px solid ${C.border}`}}>
+              <span style={{fontSize:14, color:C.muted}}>New to Press? </span>
+              <button onClick={()=>{setScreen("create");setErr("");setMsg("");}} style={{background:"none", border:"none", color:C.green, fontSize:14, fontWeight:700, cursor:"pointer", textDecoration:"underline"}}>Create Account</button>
+            </div>
+          </div>
+        )}
+
+        {/* FORGOT PASSWORD screen */}
+        {screen==="forgot"&&(
+          <div style={{background:C.card, border:`1px solid ${C.border}`, borderRadius:20, padding:"28px 24px"}}>
+            <div style={{fontSize:20, fontWeight:800, marginBottom:6}}>Reset your password</div>
+            <div style={{fontSize:13, color:C.muted, marginBottom:24}}>Enter your email and we'll send you a reset link.</div>
+
+            <div style={{display:"flex", flexDirection:"column", gap:12}}>
+              <input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="Email address" autoCapitalize="none" style={field}/>
+
+              {err&&<div style={{background:"rgba(224,80,80,0.1)", border:"1px solid rgba(224,80,80,0.3)", borderRadius:10, padding:"12px 14px", fontSize:14, color:C.red, lineHeight:1.5}}>{err}</div>}
+              {msg&&<div style={{background:"rgba(123,180,80,0.1)", border:"1px solid rgba(123,180,80,0.3)", borderRadius:10, padding:"12px 14px", fontSize:14, color:C.green, lineHeight:1.5}}>{msg}</div>}
+
+              <button onClick={handleForgot} disabled={loading} style={{width:"100%", padding:"18px", background:loading?"#1a2a1a":C.green, color:loading?C.muted:"#0a1a0f", border:"none", borderRadius:12, fontSize:17, fontWeight:800, cursor:loading?"wait":"pointer", marginTop:4}}>
+                {loading?"Sending...":"Send Reset Link →"}
+              </button>
+            </div>
+
+            <div style={{textAlign:"center", marginTop:20, paddingTop:16, borderTop:`1px solid ${C.border}`}}>
+              <button onClick={()=>{setScreen("signin");setErr("");setMsg("");}} style={{background:"none", border:"none", color:C.green, fontSize:14, fontWeight:700, cursor:"pointer", textDecoration:"underline"}}>← Back to Sign In</button>
+            </div>
+          </div>
+        )}
+
+        <div style={{marginTop:16, fontSize:11, color:C.dim, textAlign:"center"}}>
+          Your data is private and secure.<br/>
+          <button onClick={onPrivacy} style={{background:"none", border:"none", color:C.muted, fontSize:11, cursor:"pointer", textDecoration:"underline", marginTop:4}}>Privacy Policy & Terms</button>
+        </div>
       </div>
     </div>
   );
@@ -952,6 +1050,16 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
   }
 
   // ── LIVE ROUND VIEW ──────────────────────────────────────────────────────────
+  if(view==="joinTourney") return(
+    <TourneyJoin
+      code={null}
+      teamIdx={null}
+      onDirector={(t)=>{ setView("tournament"); }}
+      onCaptain={(t,idx)=>{ setTourneyView("captain"); setTourneyData(t); setTourneyCaptainIdx(idx); setTourneyView("captain"); }}
+      onSpectator={(t)=>{ setTourneyData(t); setTourneyView("spectator"); }}
+    />
+  );
+
   if(view==="tournament") return(
     <TeamTournament user={user} onBack={()=>setView("roster")}/>
   );
@@ -997,8 +1105,11 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
         <button onClick={()=>setView("liveround")} style={{background:`linear-gradient(135deg,${C.green},#4a8030)`,border:"none",color:"#0a1a0f",padding:"12px 24px",borderRadius:20,fontSize:14,fontWeight:800,cursor:"pointer",marginBottom:8,boxShadow:`0 4px 16px ${C.green}44`,letterSpacing:0.5}}>
           ⛳ Live Round
         </button>
-        <button onClick={()=>setView("tournament")} style={{background:`linear-gradient(135deg,${C.gold},#b8860b)`,border:"none",color:"#0a1a0f",padding:"10px 20px",borderRadius:20,fontSize:13,fontWeight:800,cursor:"pointer",marginBottom:12,boxShadow:`0 4px 16px ${C.gold}44`,letterSpacing:0.5}}>
+        <button onClick={()=>setView("tournament")} style={{background:`linear-gradient(135deg,${C.gold},#b8860b)`,border:"none",color:"#0a1a0f",padding:"10px 20px",borderRadius:20,fontSize:13,fontWeight:800,cursor:"pointer",marginBottom:8,boxShadow:`0 4px 16px ${C.gold}44`,letterSpacing:0.5}}>
           🏆 Team Tournament
+        </button>
+        <button onClick={()=>setView("joinTourney")} style={{background:"transparent",border:`1.5px solid ${C.green}66`,color:C.green,padding:"9px 20px",borderRadius:20,fontSize:13,fontWeight:700,cursor:"pointer",marginBottom:12}}>
+          🔑 Join a Tournament
         </button>
 
         <div style={{display:"flex",background:"rgba(0,0,0,0.35)",border:`1px solid ${C.border}`,borderRadius:14,overflow:"hidden",maxWidth:360,margin:"0 auto"}}>
