@@ -584,7 +584,8 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
   const [saving,setSaving]=useState(false);
   const [toast,setToast]=useState({msg:"",error:false});
   const [view,setView]=useState("roster"); // roster | profile | liveround | tournament
-  const [activeRound, setActiveRound]=useState(null);
+  const [activeRound,   setActiveRound]   = useState(null);
+  const [opponentRound, setOpponentRound] = useState(null); // rounds where user is a linked opponent
   const [activeTourney, setActiveTourney]=useState(null); // active team tournament
   const [pid,setPid]=useState(null);
   const [ptab,setPtab]=useState("overview");
@@ -661,18 +662,29 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
   // Check for active live round
   useEffect(()=>{
     async function checkActiveRound(){
+      // Rounds I created
       const{data}=await sb.from("live_rounds")
         .select("id,course_name,opponents,current_hole,updated_at")
         .eq("owner_id",user.id)
         .eq("status","active")
         .order("updated_at",{ascending:false})
         .limit(1)
-        .single();
+        .maybeSingle();
       if(data)setActiveRound(data);
       else setActiveRound(null);
+
+      // Rounds I'm a linked opponent in (Ken's view after creating account)
+      const{data:oppData}=await sb.from("live_rounds")
+        .select("id,course_name,opponents,current_hole,updated_at")
+        .eq("status","active")
+        .contains("opponent_user_ids",[user.id])
+        .order("updated_at",{ascending:false})
+        .limit(1)
+        .maybeSingle();
+      setOpponentRound(oppData||null);
     }
     checkActiveRound();
-  },[user.id,view]); // re-check when returning from live round
+  },[user.id,view]);
 
   const player=players.find(p=>p.id===pid);
   const pRounds=rounds.filter(r=>r.player_id===pid);
@@ -1157,6 +1169,24 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
               <div style={{fontSize:11,color:C.dim,marginTop:1}}>{(activeRound.opponents||[]).map(o=>o.name).join(", ")}</div>
             </div>
             <button onClick={()=>setView("liveround")} style={{background:C.green,border:"none",color:"#0a1a0f",padding:"10px 16px",borderRadius:12,fontSize:13,fontWeight:800,cursor:"pointer",flexShrink:0}}>
+              Resume →
+            </button>
+          </div>
+        )}
+
+        {/* Opponent round banner — shows when Ken has linked his account */}
+        {opponentRound&&(
+          <div style={{background:`linear-gradient(135deg,rgba(123,180,80,0.12),rgba(123,180,80,0.04))`,border:`1px solid ${C.green}33`,borderRadius:14,padding:"14px 16px",marginBottom:14,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <div>
+              <div style={{fontWeight:700,fontSize:14,color:C.green,marginBottom:2}}>⛳ Match In Progress</div>
+              <div style={{fontSize:12,color:C.muted}}>{opponentRound.course_name} · Hole {opponentRound.current_hole}</div>
+              <div style={{fontSize:11,color:C.dim,marginTop:1}}>
+                vs {(opponentRound.opponents||[]).find(o=>o.playerId===user.id||true)?.name||"Partner"}
+              </div>
+            </div>
+            <button
+              onClick={()=>window.location.href=`https://press-golf.vercel.app?round=${opponentRound.id}&player=${user.id}`}
+              style={{background:C.green,border:"none",color:"#0a1a0f",padding:"10px 16px",borderRadius:12,fontSize:13,fontWeight:800,cursor:"pointer",flexShrink:0}}>
               Resume →
             </button>
           </div>
