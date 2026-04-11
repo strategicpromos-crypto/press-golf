@@ -376,11 +376,25 @@ export default function OpponentScoreEntry({ roundId, playerId }) {
               </div>
             </div>
 
-            <button onClick={()=>!isLastHole&&myScore!==null&&setCurrentHole(h=>h+1)}
-              disabled={isLastHole||myScore===null}
-              style={{width:"100%",padding:"18px",background:isLastHole||myScore===null?"#1a2a1a":C.green,color:isLastHole||myScore===null?C.muted:"#0a1a0f",border:"none",borderRadius:14,fontSize:17,fontWeight:800,cursor:isLastHole||myScore===null?"not-allowed":"pointer"}}>
-              {isLastHole?"Round Complete! ⛳":myScore===null?"Enter your score first":"Next — Hole "+(currentHole+1)}
+            <button onClick={()=>{
+              if(isLastHole && myScore!==null){
+                // Mark round done on partner's side — switch to match tab to see final result
+                setTab("match");
+              } else if(!isLastHole && myScore!==null){
+                setCurrentHole(h=>h+1);
+              }
+            }}
+              disabled={myScore===null}
+              style={{width:"100%",padding:"18px",background:myScore===null?"#1a2a1a":isLastHole?C.gold:C.green,color:myScore===null?C.muted:"#0a1a0f",border:"none",borderRadius:14,fontSize:17,fontWeight:800,cursor:myScore===null?"not-allowed":"pointer"}}>
+              {isLastHole&&myScore!==null?"See Final Results 🏆":myScore===null?"Enter your score first":"Next — Hole "+(currentHole+1)}
             </button>
+
+            {isLastHole&&myScore!==null&&(
+              <div style={{marginTop:12,background:"rgba(232,184,75,0.08)",border:`1px solid ${C.gold}33`,borderRadius:12,padding:"12px 16px",textAlign:"center"}}>
+                <div style={{fontSize:13,color:C.gold,fontWeight:600,marginBottom:4}}>Round finished!</div>
+                <div style={{fontSize:12,color:C.muted}}>Your scores have been sent to {partner?.name||"your partner"}. Check the Match tab for final standings.</div>
+              </div>
+            )}
           </>
         )}
 
