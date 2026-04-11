@@ -1044,24 +1044,33 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
                     style={{width:"100%",padding:"12px",background:C.surface,border:"1px solid "+C.border,borderRadius:8,color:C.text,fontSize:16,fontWeight:700,outline:"none",boxSizing:"border-box",marginBottom:14}}
                   />
 
-                  {/* Total strokes */}
-                  <div style={{fontSize:11,color:C.muted,marginBottom:8}}>Total strokes (whole round)</div>
+                  {/* Strokes per side */}
+                  <div style={{fontSize:11,color:C.muted,marginBottom:8}}>Strokes per side</div>
                   <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
                     <button onClick={()=>setOpponents(prev=>prev.map((o,j)=>{
                       if(j!==i)return o;
                       const cur=o.strokes||0;
-                      return{...o,strokes:cur>0?cur-1:cur<0?cur+1:0};
+                      // decrement by 1 per side (2 total), don't cross zero
+                      if(cur>=2)return{...o,strokes:cur-2};
+                      if(cur<=-2)return{...o,strokes:cur+2};
+                      return{...o,strokes:0};
                     }))} style={{width:40,height:40,borderRadius:"50%",background:C.dim,border:"1px solid "+C.border,color:C.text,fontSize:22,fontWeight:700,cursor:"pointer"}}>−</button>
                     <div style={{flex:1,textAlign:"center"}}>
-                      <div style={{fontSize:22,fontWeight:800,color:C.text}}>
-                        {(opp.strokes||0)===0?"Even":`You ${dir} ${totalStrokes} stroke${totalStrokes!==1?"s":""}`}
+                      <div style={{fontSize:26,fontWeight:800,color:C.text}}>
+                        {(opp.strokes||0)===0
+                          ? "Even"
+                          : `${Math.abs(opp.strokes)/2} per side`}
                       </div>
-                      <div style={{fontSize:11,color:C.muted}}>{Math.abs(opp.strokes||0)/2} per side</div>
+                      <div style={{fontSize:12,color:opp.strokes>0?C.red:opp.strokes<0?C.green:C.muted,fontWeight:600}}>
+                        {opp.strokes===0?"no strokes":opp.strokes>0?`You give ${opp.strokes} total`:`You get ${Math.abs(opp.strokes)} total`}
+                      </div>
                     </div>
                     <button onClick={()=>setOpponents(prev=>prev.map((o,j)=>{
                       if(j!==i)return o;
                       const cur=o.strokes||0;
-                      return{...o,strokes:cur>=0?cur+1:cur-1};
+                      // increment by 1 per side (2 total)
+                      if(cur>=0)return{...o,strokes:cur+2};
+                      return{...o,strokes:cur-2};
                     }))} style={{width:40,height:40,borderRadius:"50%",background:C.dim,border:"1px solid "+C.border,color:C.text,fontSize:22,fontWeight:700,cursor:"pointer"}}>+</button>
                     {/* Direction toggle */}
                     <button onClick={()=>setOpponents(prev=>prev.map((o,j)=>j===i&&o.strokes!==0?{...o,strokes:-o.strokes}:o))}
@@ -1072,17 +1081,20 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
 
                   {/* Back 9 adjustment — only show if on back 9 or finished front */}
                   <div style={{borderTop:"1px solid "+C.border,paddingTop:12}}>
-                    <div style={{fontSize:11,color:C.gold,marginBottom:8,fontWeight:600}}>Back 9 Adjustment {onBack9?"(active — you're on back 9 now)":"(applies from hole 10)"}</div>
+                    <div style={{fontSize:11,color:C.gold,marginBottom:8,fontWeight:600}}>Back 9 Adjustment {onBack9?"(active now)":"(kicks in at hole 10)"}</div>
+                    <div style={{fontSize:11,color:C.muted,marginBottom:10}}>Add or remove strokes per side for the back 9 only — use after a front 9 blowout</div>
                     <div style={{display:"flex",alignItems:"center",gap:10}}>
-                      <button onClick={()=>setBack9Adjustments(prev=>({...prev,[opp.playerId]:(prev[opp.playerId]||0)-1}))}
+                      <button onClick={()=>setBack9Adjustments(prev=>({...prev,[opp.playerId]:(prev[opp.playerId]||0)-2}))}
                         style={{width:40,height:40,borderRadius:"50%",background:C.dim,border:"1px solid "+C.border,color:C.text,fontSize:22,fontWeight:700,cursor:"pointer"}}>−</button>
                       <div style={{flex:1,textAlign:"center"}}>
-                        <div style={{fontSize:20,fontWeight:800,color:b9adj===0?C.muted:b9adj>0?C.red:C.green}}>
-                          {b9adj===0?"No adjustment":b9adj>0?"Give "+b9adj+" more":"Get "+Math.abs(b9adj)+" more"}
+                        <div style={{fontSize:22,fontWeight:800,color:b9adj===0?C.muted:b9adj>0?C.red:C.green}}>
+                          {b9adj===0?"No adjustment":`${Math.abs(b9adj)/2} per side`}
                         </div>
-                        <div style={{fontSize:11,color:C.muted}}>strokes on back 9 only</div>
+                        <div style={{fontSize:12,color:C.muted}}>
+                          {b9adj===0?"back 9 same as front":b9adj>0?`Give ${Math.abs(b9adj)/2} more/side`:` Get ${Math.abs(b9adj)/2} more/side`}
+                        </div>
                       </div>
-                      <button onClick={()=>setBack9Adjustments(prev=>({...prev,[opp.playerId]:(prev[opp.playerId]||0)+1}))}
+                      <button onClick={()=>setBack9Adjustments(prev=>({...prev,[opp.playerId]:(prev[opp.playerId]||0)+2}))}
                         style={{width:40,height:40,borderRadius:"50%",background:C.dim,border:"1px solid "+C.border,color:C.text,fontSize:22,fontWeight:700,cursor:"pointer"}}>+</button>
                     </div>
                   </div>
