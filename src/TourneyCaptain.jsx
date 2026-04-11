@@ -39,17 +39,39 @@ function calcTeamScore(teamScores,teamSize,holeData,birdieBonus){
 
 export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBack }) {
   const [tourney,      setTourney]      = useState(initialTourney);
-  const [currentHole,  setCurrentHole]  = useState(1);
+  const [currentHole,  setCurrentHole]  = useState(initialTourney.current_hole||1);
   const [tab,          setTab]          = useState("scores");
   const [saveStatus,   setSaveStatus]   = useState("");
   const [showSummary,  setShowSummary]  = useState(false);
   const saveTimer = useRef(null);
+  const subRef    = useRef(null);
 
   const team      = (tourney.teams || [])[teamIdx];
   const course    = COURSES[tourney.course_id || "south-toledo"];
   const holeData  = course?.holes[currentHole - 1];
   const isLastHole= currentHole === (course?.holes?.length || 18);
   const birdieBonus = tourney.birdie_bonus !== false;
+
+  // Real-time — captain sees tournament updates (hole advances, roster changes)
+  useEffect(()=>{
+    subRef.current = sb
+      .channel("captain_"+tourney.id+"_"+teamIdx)
+      .on("postgres_changes",{event:"UPDATE",schema:"public",table:"team_tournaments",filter:"id=eq."+tourney.id},
+        payload=>{
+          if(payload.new){
+            // Merge incoming — keep our team's scores local, update everything else
+            setTourney(prev=>{
+              const incoming = payload.new;
+              const mergedTeams = (incoming.teams||[]).map((t,i)=>
+                i===teamIdx ? {...t, scores:(prev.teams||[])[i]?.scores||t.scores} : t
+              );
+              return {...incoming, teams:mergedTeams};
+            });
+          }
+        })
+      .subscribe();
+    return()=>{ if(subRef.current) sb.removeChannel(subRef.current); };
+  },[tourney.id, teamIdx]);
 
   function scheduleSync(updatedTeams) {
     if (saveTimer.current) clearTimeout(saveTimer.current);
