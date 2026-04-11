@@ -674,14 +674,19 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
       else setActiveRound(null);
 
       // Rounds I'm a linked opponent in (Ken's view after creating account)
-      const{data:oppData}=await sb.from("live_rounds")
-        .select("id,course_name,opponents,current_hole,updated_at")
-        .eq("status","active")
-        .contains("opponent_user_ids",[user.id])
-        .order("updated_at",{ascending:false})
-        .limit(1)
-        .maybeSingle();
-      setOpponentRound(oppData||null);
+      try {
+        const{data:oppData}=await sb.from("live_rounds")
+          .select("id,course_name,opponents,current_hole,updated_at")
+          .eq("status","active")
+          .contains("opponent_user_ids",[user.id])
+          .order("updated_at",{ascending:false})
+          .limit(1)
+          .maybeSingle();
+        setOpponentRound(oppData||null);
+      } catch(e) {
+        // Column may not exist yet — silent fail
+        setOpponentRound(null);
+      }
     }
     checkActiveRound();
   },[user.id,view]);
