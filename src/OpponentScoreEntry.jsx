@@ -142,14 +142,17 @@ export default function OpponentScoreEntry({ roundId, playerId }) {
   }
 
   async function linkRoundToUser(user){
-    // Tag the live_round with the opponent's user ID so it shows on their home screen
-    const{data}=await sb.from("live_rounds").select("opponent_user_ids").eq("id",roundId).single();
-    const existing = data?.opponent_user_ids || [];
-    if(!existing.includes(user.id)){
-      await sb.from("live_rounds").update({
-        opponent_user_ids: [...existing, user.id],
-        updated_at: new Date().toISOString()
-      }).eq("id",roundId);
+    try{
+      const{data}=await sb.from("live_rounds").select("opponent_user_ids").eq("id",roundId).single();
+      const existing=data?.opponent_user_ids||[];
+      if(!existing.includes(user.id)){
+        await sb.from("live_rounds").update({
+          opponent_user_ids:[...existing,user.id],
+          updated_at:new Date().toISOString()
+        }).eq("id",roundId);
+      }
+    }catch(e){
+      console.log("Could not link round to user — column may not exist yet:",e.message);
     }
   }
 
