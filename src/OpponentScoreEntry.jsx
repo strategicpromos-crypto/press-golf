@@ -60,21 +60,98 @@ export default function OpponentScoreEntry({ roundId, playerId }) {
   const [saveStatus,   setSaveStatus]   = useState("");
   const [loading,      setLoading]      = useState(true);
   const [error,        setError]        = useState("");
-  const [tab,          setTab]          = useState("score"); // score | match
+  const [tab,          setTab]          = useState("score");
   const [isIOS]        = useState(()=>/iphone|ipad|ipod/i.test(navigator.userAgent));
   const [isInstalled]  = useState(()=>window.matchMedia("(display-mode: standalone)").matches||window.navigator.standalone===true);
   const [installPrompt,setInstallPrompt]= useState(null);
   const [showInstall,  setShowInstall]  = useState(false);
+
+  // Account prompt state
+  const [showAccountPrompt, setShowAccountPrompt] = useState(false);
+  const [accountScreen,     setAccountScreen]     = useState("prompt"); // prompt | create | signin
+  const [authName,    setAuthName]    = useState("");
+  const [authEmail,   setAuthEmail]   = useState("");
+  const [authPass,    setAuthPass]    = useState("");
+  const [authErr,     setAuthErr]     = useState("");
+  const [authMsg,     setAuthMsg]     = useState("");
+  const [authLoad,    setAuthLoad]    = useState(false);
+  const [linkedUser,  setLinkedUser]  = useState(null); // set after successful auth
+  const holesEnteredRef = useRef(0);
+
   const saveTimer = useRef(null);
   const realtimeSub = useRef(null);
 
   useEffect(()=>{
     load();
+    // Check if already logged in
+    sb.auth.getSession().then(({data})=>{
+      if(data?.session?.user) setLinkedUser(data.session.user);
+    });
     const handler=e=>{e.preventDefault();setInstallPrompt(e);if(!isInstalled)setShowInstall(true);};
     window.addEventListener("beforeinstallprompt",handler);
     if(isIOS&&!isInstalled)setShowInstall(true);
     return()=>window.removeEventListener("beforeinstallprompt",handler);
   },[]);
+
+  // Show account prompt after first hole is scored
+  useEffect(()=>{
+    const count = Object.keys(myScores).filter(h=>myScores[h]!==null).length;
+    if(count >= 1 && !linkedUser && !showAccountPrompt && holesEnteredRef.current === 0){
+      holesEnteredRef.current = count;
+      setTimeout(()=>setShowAccountPrompt(true), 1000);
+    }
+  },[myScores, linkedUser]);
+
+  function friendlyError(e){
+    if(!e)return"Something went wrong. Try again.";
+    const m=e.toLowerCase();
+    if(m.includes("invalid login")||m.includes("invalid credentials"))return"Wrong email or password.";
+    if(m.includes("already registered")||m.includes("already exists"))return"That email already has an account. Tap Sign In.";
+    if(m.includes("password"))return"Password must be at least 6 characters.";
+    if(m.includes("rate limit")||m.includes("too many"))return"Too many attempts. Wait a minute.";
+    return"Something went wrong. Try again.";
+  }
+
+  async function handleCreate(){
+    setAuthErr(""); setAuthLoad(true);
+    if(!authName.trim()){setAuthErr("Enter your name.");setAuthLoad(false);return;}
+    if(authPass.length<6){setAuthErr("Password must be 6+ characters.");setAuthLoad(false);return;}
+    const{data,error}=await sb.auth.signUp({
+      email:authEmail.trim(),
+      password:authPass,
+      options:{data:{display_name:authName.trim()}}
+    });
+    setAuthLoad(false);
+    if(error){setAuthErr(friendlyError(error.message));return;}
+    if(data?.user){
+      setLinkedUser(data.user);
+      await linkRoundToUser(data.user);
+      setShowAccountPrompt(false);
+      setAuthMsg("Account created! Round saved to your Press profile.");
+    }
+  }
+
+  async function handleSignIn(){
+    setAuthErr(""); setAuthLoad(true);
+    const{data,error}=await sb.auth.signInWithPassword({email:authEmail.trim(),password:authPass});
+    setAuthLoad(false);
+    if(error){setAuthErr(friendlyError(error.message));return;}
+    setLinkedUser(data.user);
+    await linkRoundToUser(data.user);
+    setShowAccountPrompt(false);
+  }
+
+  async function linkRoundToUser(user){
+    // Tag the live_round with the opponent's user ID so it shows on their home screen
+    const{data}=await sb.from("live_rounds").select("opponent_user_ids").eq("id",roundId).single();
+    const existing = data?.opponent_user_ids || [];
+    if(!existing.includes(user.id)){
+      await sb.from("live_rounds").update({
+        opponent_user_ids: [...existing, user.id],
+        updated_at: new Date().toISOString()
+      }).eq("id",roundId);
+    }
+  }
 
   async function load(){
     setLoading(true);
@@ -356,6 +433,83 @@ export default function OpponentScoreEntry({ roundId, playerId }) {
           </>
         )}
       </div>
+
+      {/* ── LINKED USER BANNER ─────────────────────────────────────────── */}
+      {linkedUser&&(
+        <div style={{position:"fixed",bottom:0,left:0,right:0,background:`linear-gradient(135deg,rgba(123,180,80,0.15),rgba(123,180,80,0.08))`,borderTop:`1px solid ${C.green}44`,padding:"12px 20px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <div>
+            <div style={{fontSize:13,fontWeight:700,color:C.green}}>✓ Round saved to your Press account</div>
+            <div style={{fontSize:11,color:C.muted}}>Find it on your Press home screen anytime</div>
+          </div>
+          <button onClick={()=>window.location.href="/"} style={{background:C.green,border:"none",color:"#0a1a0f",padding:"8px 14px",borderRadius:10,fontSize:12,fontWeight:800,cursor:"pointer",flexShrink:0}}>Open Press</button>
+        </div>
+      )}
+
+      {/* ── ACCOUNT PROMPT ─────────────────────────────────────────────── */}
+      {showAccountPrompt&&!linkedUser&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.88)",zIndex:500,display:"flex",alignItems:"flex-end",justifyContent:"center",fontFamily:"Georgia,serif"}}>
+          <div style={{background:C.surface,borderRadius:"20px 20px 0 0",padding:"28px 24px 40px",width:"100%",maxWidth:480,border:`1px solid ${C.border}`}}>
+
+            {accountScreen==="prompt"&&(
+              <>
+                <div style={{textAlign:"center",marginBottom:20}}>
+                  <div style={{fontSize:32,marginBottom:8}}>⛳</div>
+                  <div style={{fontSize:18,fontWeight:800,marginBottom:6}}>Save this round to Press</div>
+                  <div style={{fontSize:13,color:C.muted,lineHeight:1.6}}>
+                    Create a free account to resume this round from the app anytime, track your match history, and settle bets with one tap.
+                  </div>
+                </div>
+                <button onClick={()=>setAccountScreen("create")} style={{width:"100%",padding:"16px",background:C.green,color:"#0a1a0f",border:"none",borderRadius:12,fontSize:16,fontWeight:800,cursor:"pointer",marginBottom:10}}>
+                  Create Free Account
+                </button>
+                <button onClick={()=>setAccountScreen("signin")} style={{width:"100%",padding:"14px",background:"transparent",color:C.green,border:`1.5px solid ${C.green}44`,borderRadius:12,fontSize:14,fontWeight:700,cursor:"pointer",marginBottom:10}}>
+                  Sign In to Existing Account
+                </button>
+                <button onClick={()=>setShowAccountPrompt(false)} style={{width:"100%",padding:"10px",background:"transparent",color:C.muted,border:"none",fontSize:13,cursor:"pointer"}}>
+                  Skip for now — keep playing
+                </button>
+              </>
+            )}
+
+            {accountScreen==="create"&&(
+              <>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
+                  <div style={{fontSize:17,fontWeight:800}}>Create Account</div>
+                  <button onClick={()=>setAccountScreen("prompt")} style={{background:"none",border:"none",color:C.muted,fontSize:22,cursor:"pointer"}}>‹</button>
+                </div>
+                <div style={{display:"flex",flexDirection:"column",gap:12}}>
+                  <input value={authName} onChange={e=>setAuthName(e.target.value)} placeholder="Your name" style={{width:"100%",padding:"14px",background:C.bg,border:`1px solid ${C.border}`,borderRadius:10,color:C.text,fontSize:15,outline:"none",boxSizing:"border-box"}}/>
+                  <input type="email" value={authEmail} onChange={e=>setAuthEmail(e.target.value)} placeholder="Email address" autoCapitalize="none" style={{width:"100%",padding:"14px",background:C.bg,border:`1px solid ${C.border}`,borderRadius:10,color:C.text,fontSize:15,outline:"none",boxSizing:"border-box"}}/>
+                  <input type="password" value={authPass} onChange={e=>setAuthPass(e.target.value)} placeholder="Password (6+ characters)" style={{width:"100%",padding:"14px",background:C.bg,border:`1px solid ${C.border}`,borderRadius:10,color:C.text,fontSize:15,outline:"none",boxSizing:"border-box"}}/>
+                  {authErr&&<div style={{background:"rgba(224,80,80,0.1)",border:"1px solid rgba(224,80,80,0.3)",borderRadius:8,padding:"10px 12px",fontSize:13,color:C.red}}>{authErr}</div>}
+                  <button onClick={handleCreate} disabled={authLoad} style={{width:"100%",padding:"16px",background:authLoad?"#1a2a1a":C.green,color:authLoad?C.muted:"#0a1a0f",border:"none",borderRadius:12,fontSize:16,fontWeight:800,cursor:authLoad?"wait":"pointer"}}>
+                    {authLoad?"Creating account...":"Create Account →"}
+                  </button>
+                </div>
+              </>
+            )}
+
+            {accountScreen==="signin"&&(
+              <>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
+                  <div style={{fontSize:17,fontWeight:800}}>Sign In</div>
+                  <button onClick={()=>setAccountScreen("prompt")} style={{background:"none",border:"none",color:C.muted,fontSize:22,cursor:"pointer"}}>‹</button>
+                </div>
+                <div style={{display:"flex",flexDirection:"column",gap:12}}>
+                  <input type="email" value={authEmail} onChange={e=>setAuthEmail(e.target.value)} placeholder="Email address" autoCapitalize="none" style={{width:"100%",padding:"14px",background:C.bg,border:`1px solid ${C.border}`,borderRadius:10,color:C.text,fontSize:15,outline:"none",boxSizing:"border-box"}}/>
+                  <input type="password" value={authPass} onChange={e=>setAuthPass(e.target.value)} placeholder="Password" style={{width:"100%",padding:"14px",background:C.bg,border:`1px solid ${C.border}`,borderRadius:10,color:C.text,fontSize:15,outline:"none",boxSizing:"border-box"}}/>
+                  {authErr&&<div style={{background:"rgba(224,80,80,0.1)",border:"1px solid rgba(224,80,80,0.3)",borderRadius:8,padding:"10px 12px",fontSize:13,color:C.red}}>{authErr}</div>}
+                  <button onClick={handleSignIn} disabled={authLoad} style={{width:"100%",padding:"16px",background:authLoad?"#1a2a1a":C.green,color:authLoad?C.muted:"#0a1a0f",border:"none",borderRadius:12,fontSize:16,fontWeight:800,cursor:authLoad?"wait":"pointer"}}>
+                    {authLoad?"Signing in...":"Sign In →"}
+                  </button>
+                </div>
+              </>
+            )}
+
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
