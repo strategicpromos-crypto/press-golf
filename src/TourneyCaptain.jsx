@@ -221,46 +221,88 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
       {showSummary&&(
         <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.92)", zIndex:500, overflowY:"auto", fontFamily:"Georgia,serif" }}>
           <div style={{ padding:"50px 16px 40px" }}>
-            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
-              <div style={{ fontSize:20, fontWeight:800, color:C.text }}>🏆 Standings</div>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
+              <div style={{ fontSize:20, fontWeight:800, color:C.text }}>🏆 {tourney.name}</div>
               <button onClick={()=>setShowSummary(false)} style={{ background:C.dim, border:"none", color:C.muted, width:34, height:34, borderRadius:"50%", fontSize:16, cursor:"pointer" }}>✕</button>
             </div>
-            <div style={{ fontSize:12, color:C.muted, marginBottom:16 }}>{tourney.name} · Hole {currentHole}</div>
 
-            {/* Column headers */}
-            <div style={{ display:"flex", padding:"4px 12px", marginBottom:6 }}>
-              <div style={{ flex:1, fontSize:10, color:C.muted, letterSpacing:1.5, textTransform:"uppercase" }}>Team</div>
-              {["F9","B9","TOT"].map(l=><div key={l} style={{ width:44, textAlign:"center", fontSize:10, color:C.muted, letterSpacing:1, textTransform:"uppercase" }}>{l}</div>)}
-            </div>
+            {/* Board tabs */}
+            {(()=>{
+              const [bTab,setBTab]=useState("standings");
+              const medals=["🥇","🥈","🥉"];
+              return(<>
+                <div style={{display:"flex",gap:0,marginBottom:16,border:"1px solid "+C.border,borderRadius:10,overflow:"hidden"}}>
+                  {[["standings","🏆 Standings"],["top10","⭐ Top 10"]].map(([id,lbl])=>(
+                    <button key={id} onClick={()=>setBTab(id)} style={{flex:1,padding:"11px",fontSize:12,fontWeight:bTab===id?700:500,background:bTab===id?C.green:"transparent",color:bTab===id?"#0a1a0f":C.muted,border:"none",cursor:"pointer"}}>{lbl}</button>
+                  ))}
+                </div>
 
-            {(tourney.teams||[])
-              .map((t,i)=>{
-                const sc=calcTeamScore(t.scores||{},t.size||4,course.holes,tourney.birdie_bonus!==false);
-                return{...t,i,sc};
-              })
-              .sort((a,b)=>a.sc.totalDiff-b.sc.totalDiff)
-              .map((t,rank)=>{
-                const isMyTeam=t.i===teamIdx;
-                const d=t.sc.totalDiff;
-                return(
-                  <div key={t.i} style={{ background:isMyTeam?"rgba(123,180,80,0.1)":rank===0?"rgba(232,184,75,0.08)":C.card, border:`1px solid ${isMyTeam?C.green+"66":rank===0?C.gold+"44":C.border}`, borderRadius:12, padding:"12px 14px", marginBottom:8, display:"flex", alignItems:"center", gap:10 }}>
-                    <div style={{ width:26,height:26,borderRadius:"50%",flexShrink:0,background:rank===0?C.gold:rank===1?"#aaa":rank===2?"#cd7f32":C.dim,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:800,fontSize:12,color:rank<3?"#0a1a0f":C.muted }}>{rank+1}</div>
-                    <div style={{ flex:1,minWidth:0 }}>
-                      <div style={{ display:"flex",alignItems:"center",gap:6 }}>
-                        <div style={{ width:10,height:10,borderRadius:"50%",background:t.color,flexShrink:0 }}/>
-                        <div style={{ fontWeight:800,fontSize:14,color:isMyTeam?C.green:rank===0?C.gold:C.text }}>{t.name}{isMyTeam?" ★":""}</div>
+                {bTab==="standings"&&(<>
+                  <div style={{ display:"flex", padding:"4px 12px", marginBottom:6 }}>
+                    <div style={{ flex:1, fontSize:10, color:C.muted, letterSpacing:1.5, textTransform:"uppercase" }}>Team</div>
+                    {["F9","B9","TOT"].map(l=><div key={l} style={{ width:44, textAlign:"center", fontSize:10, color:C.muted, letterSpacing:1, textTransform:"uppercase" }}>{l}</div>)}
+                  </div>
+                  {(tourney.teams||[])
+                    .map((t,i)=>{
+                      const sc=calcTeamScore(t.scores||{},t.size||4,course.holes,tourney.birdie_bonus!==false,tourney.count_balls||2);
+                      return{...t,i,sc};
+                    })
+                    .sort((a,b)=>a.sc.totalDiff-b.sc.totalDiff)
+                    .map((t,rank)=>{
+                      const isMyTeam=t.i===teamIdx;
+                      return(
+                        <div key={t.i} style={{ background:isMyTeam?"rgba(123,180,80,0.1)":rank===0?"rgba(232,184,75,0.08)":C.card, border:`1px solid ${isMyTeam?C.green+"66":rank===0?C.gold+"44":C.border}`, borderRadius:12, padding:"12px 14px", marginBottom:8, display:"flex", alignItems:"center", gap:10 }}>
+                          <div style={{ width:26,height:26,borderRadius:"50%",flexShrink:0,background:rank===0?C.gold:rank===1?"#aaa":rank===2?"#cd7f32":C.dim,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:800,fontSize:12,color:rank<3?"#0a1a0f":C.muted }}>{rank+1}</div>
+                          <div style={{ flex:1,minWidth:0 }}>
+                            <div style={{ display:"flex",alignItems:"center",gap:6 }}>
+                              <div style={{ width:10,height:10,borderRadius:"50%",background:t.color,flexShrink:0 }}/>
+                              <div style={{ fontWeight:800,fontSize:14,color:isMyTeam?C.green:rank===0?C.gold:C.text }}>{t.name}{isMyTeam?" ★":""}</div>
+                            </div>
+                          </div>
+                          {[t.sc.frontDiff,t.sc.backDiff,t.sc.totalDiff].map((diff,idx)=>{
+                            const raw=idx===0?t.sc.front:idx===1?t.sc.back:t.sc.total;
+                            return<div key={idx} style={{ width:44,textAlign:"center",fontWeight:800,fontSize:15,color:raw===0?C.muted:relColor(diff) }}>{raw===0?"—":relLabel(diff)}</div>;
+                          })}
+                        </div>
+                      );
+                    })
+                  }
+                </>)}
+
+                {bTab==="top10"&&(()=>{
+                  const players=[];
+                  (tourney.teams||[]).forEach((t,ti)=>{
+                    for(let pi=0;pi<(t.size||2);pi++){
+                      const name=t.players?.[pi]?.trim()?t.players[pi].trim():`Player ${pi+1}`;
+                      let total=0,holesPlayed=0;
+                      for(const h of course.holes){
+                        const s=t.scores?.[pi]?.[h.hole];
+                        if(s!==undefined&&s!==null){total+=parseInt(s)-h.par;holesPlayed++;}
+                      }
+                      if(holesPlayed>0)players.push({name,teamName:t.name||`Team ${ti+1}`,teamColor:t.color,total,holesPlayed,ti,pi,isMe:ti===teamIdx});
+                    }
+                  });
+                  players.sort((a,b)=>a.total!==b.total?a.total-b.total:b.holesPlayed-a.holesPlayed);
+                  return players.slice(0,10).map((p,i)=>(
+                    <div key={`${p.ti}-${p.pi}`} style={{background:p.isMe?"rgba(123,180,80,0.08)":i===0?"rgba(232,184,75,0.08)":C.card,border:`1px solid ${p.isMe?C.green+"44":i===0?C.gold+"44":C.border}`,borderRadius:12,padding:"12px 14px",marginBottom:8,display:"flex",alignItems:"center",gap:12}}>
+                      <div style={{width:32,textAlign:"center",fontSize:i<3?20:14,fontWeight:800,color:i<3?C.gold:C.muted,flexShrink:0}}>{i<3?medals[i]:i+1}</div>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontWeight:800,fontSize:15,color:p.isMe?C.green:i===0?C.gold:C.text}}>{p.name}{p.isMe?" ★":""}</div>
+                        <div style={{display:"flex",alignItems:"center",gap:6,marginTop:2}}>
+                          <div style={{width:8,height:8,borderRadius:"50%",background:p.teamColor}}/>
+                          <div style={{fontSize:11,color:C.muted}}>{p.teamName}</div>
+                        </div>
+                      </div>
+                      <div style={{textAlign:"right"}}>
+                        <div style={{fontSize:22,fontWeight:800,color:relColor(p.total)}}>{relLabel(p.total)}</div>
+                        <div style={{fontSize:10,color:C.dim}}>thru {p.holesPlayed}</div>
                       </div>
                     </div>
-                    {[t.sc.frontDiff,t.sc.backDiff,t.sc.totalDiff].map((diff,idx)=>{
-                      const raw=idx===0?t.sc.front:idx===1?t.sc.back:t.sc.total;
-                      const label=raw===0?"—":(diff===0?"E":diff>0?"+"+diff:String(diff));
-                      const color=raw===0?C.muted:diff<0?C.green:diff>0?C.red:C.muted;
-                      return<div key={idx} style={{ width:44,textAlign:"center",fontWeight:800,fontSize:15,color }}>{label}</div>;
-                    })}
-                  </div>
-                );
-              })
-            }
+                  ));
+                })()}
+              </>);
+            })()}
+
             <div style={{ height:20 }}/>
             <button onClick={()=>setShowSummary(false)} style={{ width:"100%",padding:"16px",background:C.green,color:"#0a1a0f",border:"none",borderRadius:12,fontSize:15,fontWeight:800,cursor:"pointer" }}>
               ← Back to Scoring
