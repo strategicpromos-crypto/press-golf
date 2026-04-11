@@ -322,6 +322,8 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
   const [posting,     setPosting]     = useState(false);
   const [liveRoundId, setLiveRoundId] = useState(null);
   const [resuming,    setResuming]    = useState(false);
+  const [showRoundSettings, setShowRoundSettings] = useState(false);
+  const [back9Adjustments,  setBack9Adjustments]  = useState({}); // {playerId: strokeDelta}
   // Press interstitial: list of opponents needing a press decision before next hole
   const [pressCheck,  setPressCheck]  = useState(null); // null | { opps: [...], nextHole: N }
 
@@ -418,18 +420,28 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
   }
 
   // -- Opponent helpers ------------------------------------------------------
-  function getStrokeHolesForOpp(opp) {
-    return getStrokeHoles(courseId, Math.abs(opp.strokes || 0));
+  function getEffectiveStrokes(opp, hole) {
+    // Base strokes + back 9 adjustment if on holes 10-18
+    const base = opp.strokes || 0;
+    const adj  = hole >= 10 ? (back9Adjustments[opp.playerId] || 0) : 0;
+    return base + adj;
+  }
+
+  function getStrokeHolesForOpp(opp, hole) {
+    const effective = getEffectiveStrokes(opp, hole ?? 1);
+    return getStrokeHoles(courseId, Math.abs(effective));
   }
 
   function oppGetsStrokeOnHole(opp, hole) {
-    if (!opp.strokes || opp.strokes <= 0) return false;
-    return getStrokeHolesForOpp(opp).includes(hole);
+    const effective = getEffectiveStrokes(opp, hole);
+    if (!effective || effective <= 0) return false;
+    return getStrokeHoles(courseId, Math.abs(effective)).includes(hole);
   }
 
   function iGetStrokeOnHole(opp, hole) {
-    if (!opp.strokes || opp.strokes >= 0) return false;
-    return getStrokeHolesForOpp(opp).includes(hole);
+    const effective = getEffectiveStrokes(opp, hole);
+    if (!effective || effective >= 0) return false;
+    return getStrokeHoles(courseId, Math.abs(effective)).includes(hole);
   }
 
   // -- Add opponent ----------------------------------------------------------
@@ -757,6 +769,7 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
     const myScore   = getScore("me", currentHole);
     const canAdvance = myScore !== null;
     const isLastHole = currentHole === course.holes.length;
+    const onBack9 = currentHole > 9;
 
     return (
       <>
@@ -772,7 +785,7 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
             </div>
             <div style={{display:"flex",flexDirection:"column",gap:6,alignItems:"flex-end"}}>
               <button onClick={onBack} style={{background:"rgba(123,180,80,0.15)",border:"1px solid "+C.green,color:C.green,fontSize:11,cursor:"pointer",padding:"5px 10px",borderRadius:12,fontWeight:700}}>🏠 Home</button>
-              <button onClick={()=>setStep("summary")} style={{background:"transparent",border:"1px solid "+C.border,color:C.muted,fontSize:11,cursor:"pointer",padding:"5px 10px",borderRadius:12}}>Summary</button>
+              <button onClick={()=>setShowRoundSettings(true)} style={{background:"rgba(232,184,75,0.15)",border:"1px solid "+C.gold,color:C.gold,fontSize:11,cursor:"pointer",padding:"5px 10px",borderRadius:12,fontWeight:700}}>⚙️ Edit</button>
             </div>
           </div>
           {/* Progress bar */}
@@ -1005,11 +1018,87 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
           </div>
         </div>
       )}
+      {/* ── ROUND SETTINGS OVERLAY ─────────────────────────────────────── */}
+      {showRoundSettings&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.92)",zIndex:800,overflowY:"auto",fontFamily:"Georgia,serif"}}>
+          <div style={{padding:"50px 20px 40px",maxWidth:480,margin:"0 auto"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+              <div style={{fontSize:20,fontWeight:800,color:C.text}}>⚙️ Edit Round</div>
+              <button onClick={()=>setShowRoundSettings(false)} style={{background:C.dim,border:"none",color:C.muted,width:34,height:34,borderRadius:"50%",fontSize:16,cursor:"pointer"}}>✕</button>
+            </div>
+            <div style={{fontSize:13,color:C.muted,marginBottom:20}}>
+              Edit player names and strokes. Back 9 adjustment adds or removes strokes for the remaining back 9 only.
+            </div>
+
+            {opponents.map((opp,i)=>{
+              const totalStrokes = Math.abs(opp.strokes||0);
+              const dir = (opp.strokes||0) >= 0 ? "give" : "get";
+              const b9adj = back9Adjustments[opp.playerId] || 0;
+              return(
+                <div key={opp.playerId} style={{background:C.card,border:"1px solid "+C.border,borderRadius:14,padding:"16px",marginBottom:12}}>
+                  {/* Player name */}
+                  <div style={{fontSize:11,color:C.green,letterSpacing:1.5,textTransform:"uppercase",marginBottom:6,fontWeight:600}}>Player {i+1}</div>
+                  <input
+                    value={opp.name}
+                    onChange={e=>setOpponents(prev=>prev.map((o,j)=>j===i?{...o,name:e.target.value}:o))}
+                    style={{width:"100%",padding:"12px",background:C.surface,border:"1px solid "+C.border,borderRadius:8,color:C.text,fontSize:16,fontWeight:700,outline:"none",boxSizing:"border-box",marginBottom:14}}
+                  />
+
+                  {/* Total strokes */}
+                  <div style={{fontSize:11,color:C.muted,marginBottom:8}}>Total strokes (whole round)</div>
+                  <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
+                    <button onClick={()=>setOpponents(prev=>prev.map((o,j)=>{
+                      if(j!==i)return o;
+                      const cur=o.strokes||0;
+                      return{...o,strokes:cur>0?cur-1:cur<0?cur+1:0};
+                    }))} style={{width:40,height:40,borderRadius:"50%",background:C.dim,border:"1px solid "+C.border,color:C.text,fontSize:22,fontWeight:700,cursor:"pointer"}}>−</button>
+                    <div style={{flex:1,textAlign:"center"}}>
+                      <div style={{fontSize:22,fontWeight:800,color:C.text}}>
+                        {(opp.strokes||0)===0?"Even":`You ${dir} ${totalStrokes} stroke${totalStrokes!==1?"s":""}`}
+                      </div>
+                      <div style={{fontSize:11,color:C.muted}}>{Math.abs(opp.strokes||0)/2} per side</div>
+                    </div>
+                    <button onClick={()=>setOpponents(prev=>prev.map((o,j)=>{
+                      if(j!==i)return o;
+                      const cur=o.strokes||0;
+                      return{...o,strokes:cur>=0?cur+1:cur-1};
+                    }))} style={{width:40,height:40,borderRadius:"50%",background:C.dim,border:"1px solid "+C.border,color:C.text,fontSize:22,fontWeight:700,cursor:"pointer"}}>+</button>
+                    {/* Direction toggle */}
+                    <button onClick={()=>setOpponents(prev=>prev.map((o,j)=>j===i&&o.strokes!==0?{...o,strokes:-o.strokes}:o))}
+                      style={{padding:"8px 12px",background:"rgba(232,184,75,0.15)",border:"1px solid "+C.gold+"44",borderRadius:8,color:C.gold,fontSize:12,fontWeight:700,cursor:"pointer",flexShrink:0}}>
+                      Flip ⇄
+                    </button>
+                  </div>
+
+                  {/* Back 9 adjustment — only show if on back 9 or finished front */}
+                  <div style={{borderTop:"1px solid "+C.border,paddingTop:12}}>
+                    <div style={{fontSize:11,color:C.gold,marginBottom:8,fontWeight:600}}>Back 9 Adjustment {onBack9?"(active — you're on back 9 now)":"(applies from hole 10)"}</div>
+                    <div style={{display:"flex",alignItems:"center",gap:10}}>
+                      <button onClick={()=>setBack9Adjustments(prev=>({...prev,[opp.playerId]:(prev[opp.playerId]||0)-1}))}
+                        style={{width:40,height:40,borderRadius:"50%",background:C.dim,border:"1px solid "+C.border,color:C.text,fontSize:22,fontWeight:700,cursor:"pointer"}}>−</button>
+                      <div style={{flex:1,textAlign:"center"}}>
+                        <div style={{fontSize:20,fontWeight:800,color:b9adj===0?C.muted:b9adj>0?C.red:C.green}}>
+                          {b9adj===0?"No adjustment":b9adj>0?"Give "+b9adj+" more":"Get "+Math.abs(b9adj)+" more"}
+                        </div>
+                        <div style={{fontSize:11,color:C.muted}}>strokes on back 9 only</div>
+                      </div>
+                      <button onClick={()=>setBack9Adjustments(prev=>({...prev,[opp.playerId]:(prev[opp.playerId]||0)+1}))}
+                        style={{width:40,height:40,borderRadius:"50%",background:C.dim,border:"1px solid "+C.border,color:C.text,fontSize:22,fontWeight:700,cursor:"pointer"}}>+</button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+
+            <button onClick={()=>setShowRoundSettings(false)} style={{width:"100%",padding:"18px",background:C.green,color:"#0a1a0f",border:"none",borderRadius:12,fontSize:16,fontWeight:800,cursor:"pointer",marginTop:8}}>
+              ✓ Done — Back to Round
+            </button>
+          </div>
+        </div>
+      )}
       </>
     );
   }
-
-  // ==========================================================================
   // -- SUMMARY SCREEN --------------------------------------------------------
   // ==========================================================================
   if (step === "summary") {
