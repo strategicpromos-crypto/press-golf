@@ -42,7 +42,8 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
   const [currentHole,  setCurrentHole]  = useState(initialTourney.current_hole||1);
   const [tab,          setTab]          = useState("scores");
   const [saveStatus,   setSaveStatus]   = useState("");
-  const [showSummary,  setShowSummary]  = useState(false);
+  const [showSummary,       setShowSummary]       = useState(false);
+  const [showCaptainSettings, setShowCaptainSettings] = useState(false);
   const [bTab,         setBTab]         = useState("standings");
   const saveTimer = useRef(null);
   const subRef    = useRef(null);
@@ -207,8 +208,12 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
             <div style={{ fontSize:12, color:C.green, fontWeight:600 }}>Par {holeData.par} · Hdcp {holeData.hdcp}</div>
             {saveStatus && <div style={{ fontSize:10, color:saveStatus==="saving"?C.gold:C.green, marginTop:2 }}>{saveStatus==="saving"?"💾 Saving...":"✓ Saved"}</div>}
           </div>
-          <button onClick={()=>setShowSummary(true)}
-            style={{ background:"rgba(232,184,75,0.15)", border:`1px solid ${C.gold}`, color:C.gold, fontSize:11, cursor:"pointer", padding:"6px 12px", borderRadius:12, fontWeight:700 }}>📊 Board</button>
+          <div style={{ display:"flex", flexDirection:"column", gap:6, alignItems:"flex-end" }}>
+            <button onClick={()=>setShowSummary(true)}
+              style={{ background:"rgba(232,184,75,0.15)", border:`1px solid ${C.gold}`, color:C.gold, fontSize:11, cursor:"pointer", padding:"6px 12px", borderRadius:12, fontWeight:700 }}>📊 Board</button>
+            <button onClick={()=>setShowCaptainSettings(true)}
+              style={{ background:"rgba(123,180,80,0.15)", border:`1px solid ${C.green}`, color:C.green, fontSize:11, cursor:"pointer", padding:"5px 10px", borderRadius:12, fontWeight:700 }}>⚙️ Edit</button>
+          </div>
         </div>
         {/* Progress */}
         <div style={{ display:"flex", gap:2 }}>
@@ -418,6 +423,79 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
           ← Back to Tournament
         </button>
       </div>
+
+      {/* ── CAPTAIN SETTINGS OVERLAY ─────────────────────────────────── */}
+      {showCaptainSettings&&(
+        <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.92)",zIndex:600,overflowY:"auto",fontFamily:"Georgia,serif" }}>
+          <div style={{ padding:"50px 20px 60px",maxWidth:480,margin:"0 auto" }}>
+            <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6 }}>
+              <div style={{ fontSize:20,fontWeight:800 }}>⚙️ Team Settings</div>
+              <button onClick={()=>setShowCaptainSettings(false)} style={{ background:C.dim,border:"none",color:C.muted,width:34,height:34,borderRadius:"50%",fontSize:16,cursor:"pointer" }}>✕</button>
+            </div>
+            <div style={{ fontSize:12,color:C.muted,marginBottom:20 }}>Changes save automatically and update the leaderboard in real time.</div>
+
+            {/* Ball count — captain can edit global setting */}
+            <div style={{ background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:"14px 16px",marginBottom:16 }}>
+              <div style={{ fontWeight:700,fontSize:14,marginBottom:4 }}>Balls Counted Per Hole</div>
+              <div style={{ fontSize:11,color:C.muted,marginBottom:10 }}>Tournament-wide setting — affects all teams equally.</div>
+              {(()=>{
+                const cb = tourney.count_balls||2;
+                return(
+                  <div style={{ display:"flex",gap:8 }}>
+                    {[1,2,3,4,5].map(n=>(
+                      <button key={n} onClick={async()=>{
+                        const updatedTeams=(tourney.teams||[]).map(t=>({...t}));
+                        setTourney(prev=>({...prev,count_balls:n}));
+                        await sb.from("team_tournaments").update({count_balls:n,updated_at:new Date().toISOString()}).eq("id",tourney.id);
+                      }} style={{
+                        flex:1,padding:"12px 4px",
+                        background:cb===n?C.green:C.surface,
+                        color:cb===n?"#0a1a0f":C.muted,
+                        border:"1px solid "+(cb===n?C.green:C.border),
+                        borderRadius:10,fontSize:15,fontWeight:cb===n?800:500,cursor:"pointer"
+                      }}>{n}</button>
+                    ))}
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* Player names — captain's team only */}
+            <div style={{ background:C.card,border:`1px solid ${C.border}`,borderRadius:14,padding:"14px" }}>
+              <div style={{ display:"flex",alignItems:"center",gap:8,marginBottom:12 }}>
+                <div style={{ width:12,height:12,borderRadius:"50%",background:team.color }}/>
+                <div style={{ fontWeight:800,fontSize:16,color:C.text }}>{team.name}</div>
+              </div>
+              <div style={{ fontSize:11,color:C.muted,marginBottom:8,fontWeight:600 }}>Player Names</div>
+              <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:8 }}>
+                {Array.from({length:team.size||2},(_,j)=>(
+                  <input key={j}
+                    value={team.players?.[j]||""}
+                    onChange={e=>{
+                      const updatedTeams=(tourney.teams||[]).map((t,ti)=>{
+                        if(ti!==teamIdx)return t;
+                        const p=[...(t.players||Array(t.size||2).fill(""))];
+                        p[j]=e.target.value;
+                        return{...t,players:p};
+                      });
+                      setTourney(prev=>({...prev,teams:updatedTeams}));
+                      scheduleSync(updatedTeams);
+                    }}
+                    placeholder={"Player "+(j+1)}
+                    style={{ padding:"11px 12px",background:C.bg,border:`1px solid ${C.border}`,borderRadius:8,color:C.text,fontSize:14,outline:"none" }}/>
+                ))}
+              </div>
+              <div style={{ fontSize:11,color:C.dim,marginTop:10,textAlign:"center" }}>
+                Only your team's names. Contact the director to change team size or strokes.
+              </div>
+            </div>
+
+            <button onClick={()=>setShowCaptainSettings(false)} style={{ width:"100%",padding:"16px",background:C.green,color:"#0a1a0f",border:"none",borderRadius:12,fontSize:16,fontWeight:800,cursor:"pointer",marginTop:16 }}>
+              ✓ Done — Changes Saved
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
