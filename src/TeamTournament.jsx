@@ -390,7 +390,7 @@ export default function TeamTournament({onBack, user}){
                           {loading?"Loading...":"▶ Resume Round"}
                         </button>
                         <button onClick={async()=>{await resumeTourney(t);setScreen("leaderboard");}} style={{flex:1,padding:"11px",background:"transparent",color:C.gold,border:"1px solid "+C.gold+"44",borderRadius:10,fontSize:13,fontWeight:700,cursor:"pointer"}}>
-                          📊 Board
+                          📊 Leaderboard
                         </button>
                       </div>
                     </>
@@ -700,9 +700,9 @@ export default function TeamTournament({onBack, user}){
             </div>
             <div style={{display:"flex",flexDirection:"column",gap:6,alignItems:"flex-end"}}>
               <button onClick={()=>{setLbTab("standings");setScreen("leaderboard");}}
-                style={{background:"rgba(232,184,75,0.15)",border:"1px solid "+C.gold,color:C.gold,fontSize:11,cursor:"pointer",padding:"6px 12px",borderRadius:12,fontWeight:700}}>📊 Board</button>
+                style={{background:"rgba(232,184,75,0.15)",border:"1px solid "+C.gold,color:C.gold,fontSize:13,cursor:"pointer",padding:"8px 16px",borderRadius:12,fontWeight:700}}>📊 Leaderboard</button>
               <button onClick={()=>setShowSettings(true)}
-                style={{background:"rgba(123,180,80,0.15)",border:"1px solid "+C.green,color:C.green,fontSize:11,cursor:"pointer",padding:"5px 10px",borderRadius:12,fontWeight:700}}>⚙️ Edit</button>
+                style={{background:"rgba(123,180,80,0.15)",border:"1px solid "+C.green,color:C.green,fontSize:15,cursor:"pointer",padding:"12px 20px",borderRadius:12,fontWeight:700}}>⚙️ Settings</button>
             </div>
           </div>
           <div style={{display:"flex",gap:2}}>
