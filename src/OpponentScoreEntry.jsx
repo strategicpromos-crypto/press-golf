@@ -83,9 +83,12 @@ export default function OpponentScoreEntry({ roundId, playerId }) {
 
   useEffect(()=>{
     load();
-    // Check if already logged in
+    // Check if already logged in — auto-link immediately
     sb.auth.getSession().then(({data})=>{
-      if(data?.session?.user) setLinkedUser(data.session.user);
+      if(data?.session?.user){
+        setLinkedUser(data.session.user);
+        linkRoundToUser(data.session.user); // auto-link without prompting
+      }
     });
     const handler=e=>{e.preventDefault();setInstallPrompt(e);if(!isInstalled)setShowInstall(true);};
     window.addEventListener("beforeinstallprompt",handler);
