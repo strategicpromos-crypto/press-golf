@@ -323,7 +323,9 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
   const [liveRoundId, setLiveRoundId] = useState(null);
   const [resuming,    setResuming]    = useState(false);
   const [showRoundSettings, setShowRoundSettings] = useState(false);
-  const [back9Adjustments,  setBack9Adjustments]  = useState({}); // {playerId: strokeDelta}
+  const [back9Adjustments,  setBack9Adjustments]  = useState({});
+  const [showShareRound,    setShowShareRound]     = useState(false);
+  const realtimeSub = useRef(null);
   // Press interstitial: list of opponents needing a press decision before next hole
   const [pressCheck,  setPressCheck]  = useState(null); // null | { opps: [...], nextHole: N }
 
@@ -378,7 +380,38 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
     return () => clearTimeout(saveTimer.current);
   }, [scores, currentHole, liveRoundId, step]);
 
-  // -- Start round - saves to DB immediately ---------------------------------
+  // -- Real-time score sync from opponents -----------------------------------
+  useEffect(() => {
+    if (!liveRoundId || step !== "playing") return;
+    // Subscribe to changes on this live round
+    realtimeSub.current = sb
+      .channel("live_round_" + liveRoundId)
+      .on("postgres_changes", {
+        event: "UPDATE",
+        schema: "public",
+        table: "live_rounds",
+        filter: "id=eq." + liveRoundId,
+      }, payload => {
+        // Only update opponent scores — never overwrite MY scores
+        if (payload.new?.scores) {
+          setScores(prev => {
+            const incoming = payload.new.scores;
+            const merged = { ...incoming };
+            // Always keep local "me" scores — opponent's phone can't change my score
+            merged["me"] = prev["me"] || {};
+            return merged;
+          });
+        }
+      })
+      .subscribe();
+
+    return () => {
+      if (realtimeSub.current) {
+        sb.removeChannel(realtimeSub.current);
+        realtimeSub.current = null;
+      }
+    };
+  }, [liveRoundId, step]);
   async function startRound() {
     if (opponents.length === 0) return;
     setPosting(true);
@@ -786,6 +819,9 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
             <div style={{display:"flex",flexDirection:"column",gap:6,alignItems:"flex-end"}}>
               <button onClick={onBack} style={{background:"rgba(123,180,80,0.15)",border:"1px solid "+C.green,color:C.green,fontSize:11,cursor:"pointer",padding:"5px 10px",borderRadius:12,fontWeight:700}}>🏠 Home</button>
               <button onClick={()=>setShowRoundSettings(true)} style={{background:"rgba(232,184,75,0.15)",border:"1px solid "+C.gold,color:C.gold,fontSize:11,cursor:"pointer",padding:"5px 10px",borderRadius:12,fontWeight:700}}>⚙️ Edit</button>
+              {opponents.some(o=>!o.sameGroup)&&(
+                <button onClick={()=>setShowShareRound(true)} style={{background:"rgba(123,180,80,0.15)",border:"1px solid "+C.green,color:C.green,fontSize:11,cursor:"pointer",padding:"5px 10px",borderRadius:12,fontWeight:700}}>🔗 Share</button>
+              )}
             </div>
           </div>
           {/* Progress bar */}
@@ -1018,6 +1054,48 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
           </div>
         </div>
       )}
+      {/* ── SHARE ROUND OVERLAY ────────────────────────────────────────── */}
+      {showShareRound&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.92)",zIndex:800,overflowY:"auto",fontFamily:"Georgia,serif"}}>
+          <div style={{padding:"50px 20px 40px",maxWidth:480,margin:"0 auto"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+              <div style={{fontSize:20,fontWeight:800,color:C.text}}>🔗 Share Round</div>
+              <button onClick={()=>setShowShareRound(false)} style={{background:C.dim,border:"none",color:C.muted,width:34,height:34,borderRadius:"50%",fontSize:16,cursor:"pointer"}}>✕</button>
+            </div>
+            <div style={{fontSize:13,color:C.muted,marginBottom:20,lineHeight:1.6}}>
+              Send each player in a different group their own link. They enter their scores on their phone — your screen updates instantly.
+            </div>
+            {opponents.filter(o=>!o.sameGroup).map(opp=>{
+              const link=`https://press-golf.vercel.app?round=${liveRoundId}&player=${opp.playerId}`;
+              const sms=`⛳ ${opp.name} — enter your scores here as we play:\n${link}\n\nYour scores sync to my round in real time. — Press Golf`;
+              return(
+                <div key={opp.playerId} style={{background:C.card,border:"1px solid "+C.border,borderRadius:14,padding:"16px",marginBottom:12}}>
+                  <div style={{fontWeight:800,fontSize:16,marginBottom:4}}>{opp.name}</div>
+                  <div style={{fontSize:12,color:C.muted,marginBottom:12}}>
+                    {opp.betType==="nassau"?"Nassau $"+opp.betAmount:opp.betType==="nassau-press"?"Nassau+Press $"+opp.betAmount:"Match $"+opp.betAmount+"/hole"}
+                    {" · "}
+                    {opp.strokes===0?"Even":opp.strokes>0?"You give "+(opp.strokes/2)+"/side":"You get "+(Math.abs(opp.strokes)/2)+"/side"}
+                  </div>
+                  <div style={{display:"flex",gap:8}}>
+                    <button onClick={()=>window.open(`sms:?&body=${encodeURIComponent(sms)}`)}
+                      style={{flex:2,padding:"12px",background:C.green,color:"#0a1a0f",border:"none",borderRadius:10,fontSize:14,fontWeight:800,cursor:"pointer"}}>
+                      📱 Text {opp.name}
+                    </button>
+                    <button onClick={()=>navigator.clipboard?.writeText(link)}
+                      style={{flex:1,padding:"12px",background:"transparent",color:C.muted,border:"1px solid "+C.border,borderRadius:10,fontSize:12,fontWeight:600,cursor:"pointer"}}>
+                      📋 Copy
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+            <button onClick={()=>setShowShareRound(false)} style={{width:"100%",padding:"16px",background:C.green,color:"#0a1a0f",border:"none",borderRadius:12,fontSize:15,fontWeight:800,cursor:"pointer",marginTop:8}}>
+              ✓ Done
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* ── ROUND SETTINGS OVERLAY ─────────────────────────────────────── */}
       {showRoundSettings&&(
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.92)",zIndex:800,overflowY:"auto",fontFamily:"Georgia,serif"}}>
