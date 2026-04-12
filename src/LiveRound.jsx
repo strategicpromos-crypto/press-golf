@@ -324,6 +324,7 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
   const [liveRoundId, setLiveRoundId] = useState(null);
   const [resuming,    setResuming]    = useState(false);
   const [showRoundSettings, setShowRoundSettings] = useState(false);
+  const [liveTab,           setLiveTab]           = useState("score"); // "score" | "match"
   const [back9Adjustments,  setBack9Adjustments]  = useState({});
   const [showShareRound,    setShowShareRound]     = useState(false);
   const realtimeSub = useRef(null);
@@ -807,18 +808,34 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
   // -- PLAYING SCREEN --------------------------------------------------------
   // ==========================================================================
   if (step === "playing" && holeData) {
-    const myScore   = getScore("me", currentHole);
+    const myScore    = getScore("me", currentHole);
     const canAdvance = myScore !== null;
     const isLastHole = currentHole === course.holes.length;
-    const onBack9 = currentHole > 9;
+    const onBack9    = currentHole > 9;
+    const hasSameGroup = opponents.some(o => o.sameGroup);
+
+    // F9 / B9 / TOT standing labels for the bar — use first opponent for now
+    const firstOpp = opponents[0];
+    const firstTally = firstOpp ? getTally(scores, course, firstOpp, courseId) : null;
+    const fLabel = firstTally
+      ? (firstTally.lastFrontDiff === 0 ? "A/S" : firstTally.lastFrontDiff > 0 ? "+" + firstTally.lastFrontDiff : String(firstTally.lastFrontDiff))
+      : "A/S";
+    const bLabel = firstTally
+      ? (firstTally.lastBackDiff === 0 ? "A/S" : firstTally.lastBackDiff > 0 ? "+" + firstTally.lastBackDiff : String(firstTally.lastBackDiff))
+      : "A/S";
+    const totLabel = firstTally
+      ? (firstTally.totalDiff === 0 ? "A/S" : firstTally.totalDiff > 0 ? "+" + firstTally.totalDiff : String(firstTally.totalDiff))
+      : "A/S";
 
     return (
       <>
       <div style={{fontFamily:"'Georgia',serif",minHeight:"100vh",background:C.bg,color:C.text,paddingBottom:100}}>
-        {/* Header */}
-        <div style={{background:"linear-gradient(180deg,"+C.card+" 0%,transparent 100%)",padding:"44px 20px 16px"}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-            <button onClick={()=>currentHole>1?setCurrentHole(h=>h-1):setStep("setup")} style={{background:"rgba(123,180,80,0.15)",border:"1px solid "+C.green,color:C.green,fontSize:13,cursor:"pointer",padding:"6px 14px",borderRadius:16,fontWeight:700}}>‹</button>
+
+        {/* ── HEADER ─────────────────────────────────────────────────────── */}
+        <div style={{background:"linear-gradient(180deg,"+C.card+" 0%,transparent 100%)",padding:"44px 16px 12px"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+            <button onClick={()=>currentHole>1?setCurrentHole(h=>h-1):setStep("setup")}
+              style={{background:"rgba(123,180,80,0.15)",border:"1px solid "+C.green,color:C.green,fontSize:13,cursor:"pointer",padding:"6px 14px",borderRadius:16,fontWeight:700}}>‹</button>
             <div style={{textAlign:"center"}}>
               <div style={{fontSize:11,color:C.muted,letterSpacing:2,textTransform:"uppercase"}}>Hole</div>
               <div style={{fontSize:48,fontWeight:800,color:C.text,lineHeight:1}}>{currentHole}</div>
@@ -840,137 +857,302 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
           </div>
         </div>
 
-        <div style={{padding:"14px 18px"}}>
-
-          {/* -- MY SCORE -- */}
-          <div style={{background:C.card,border:"2px solid "+C.green,borderRadius:14,padding:"16px",marginBottom:12}}>
-            <div style={{fontSize:11,color:C.green,letterSpacing:2,textTransform:"uppercase",marginBottom:12,fontWeight:600}}>⛳ Your Score</div>
-            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
-              <ScoreButton label="-" size={60} onClick={()=>{
-                const cur = myScore !== null ? myScore : effPar;
-                setScore("me", currentHole, cur - 1);
-              }}/>
-              <div style={{flex:1,textAlign:"center"}}>
-                <div style={{fontSize:72,fontWeight:800,color:C.text,lineHeight:1}}>
-                  {myScore !== null ? myScore : "-"}
-                </div>
-                {myScore !== null && (
-                  <div style={{fontSize:14,color:scoreColor(myScore,effPar),marginTop:4,fontWeight:700}}>
-                    {scoreName(myScore, effPar)}
-                  </div>
-                )}
-                {myScore === null && (
-                  <div style={{fontSize:12,color:C.muted,marginTop:4}}>tap + to start</div>
-                )}
+        {/* ── MATCH STANDING BAR (only when opponents exist) ─────────────── */}
+        {opponents.length > 0 && (
+          <div style={{background:C.card,borderBottom:"1px solid "+C.border,padding:"10px 16px"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <div>
+                {opponents.length === 1
+                  ? <div style={{fontWeight:800,fontSize:14}}>
+                      {"Me"} <span style={{fontSize:11,color:C.muted,fontWeight:400}}>vs</span> {opponents[0].name}
+                    </div>
+                  : <div style={{fontWeight:800,fontSize:14}}>
+                      {"Me"} <span style={{fontSize:11,color:C.muted,fontWeight:400}}>vs</span> {opponents.length} players
+                    </div>
+                }
+                <div style={{fontSize:11,color:C.muted}}>{course.name} · thru {Math.max(0,currentHole-1)} holes</div>
               </div>
-              <ScoreButton label="+" size={60} onClick={()=>{
-                const cur = myScore !== null ? myScore : effPar - 1;
-                setScore("me", currentHole, cur + 1);
-              }}/>
+              {firstOpp && (
+                <div style={{display:"flex",gap:14}}>
+                  {[["F9",fLabel],["B9",bLabel],["TOT",totLabel]].map(([lbl,val])=>(
+                    <div key={lbl} style={{textAlign:"center"}}>
+                      <div style={{fontSize:9,color:C.muted,letterSpacing:1}}>{lbl}</div>
+                      <div style={{fontSize:15,fontWeight:800,color:val==="A/S"?C.muted:val.startsWith("+")?C.green:C.red}}>{val}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
+        )}
 
-          {/* -- OPPONENT SCORES -- */}
-          {opponents.map(opp => {
-            const oppScore    = getScore(opp.playerId, currentHole);
-            const getsStroke  = oppGetsStrokeOnHole(opp, currentHole);
-            const iGetStroke  = iGetStrokeOnHole(opp, currentHole);
-            const tally       = getTally(scores, course, opp, courseId);
+        {/* ── TABS ────────────────────────────────────────────────────────── */}
+        <div style={{display:"flex",borderBottom:"1px solid "+C.border,background:"rgba(0,0,0,0.2)"}}>
+          {[["score","⛳ Score"],["match","📊 Match"]].map(([id,lbl])=>(
+            <button key={id} onClick={()=>setLiveTab(id)} style={{
+              flex:1,padding:"12px",fontSize:13,fontWeight:liveTab===id?700:500,
+              background:"transparent",color:liveTab===id?C.green:C.muted,
+              border:"none",borderBottom:liveTab===id?"2px solid "+C.green:"2px solid transparent",
+              cursor:"pointer"
+            }}>{lbl}</button>
+          ))}
+        </div>
 
-            return (
-              <div key={opp.playerId} style={{background:C.card,border:(getsStroke||iGetStroke?"1px solid rgba(232,184,75,0.5)":"1px solid "+C.border),borderRadius:14,padding:"14px",marginBottom:10}}>
-                {/* Header row */}
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
-                  <div>
-                    <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
-                      <div style={{fontWeight:700,fontSize:16,color:C.text}}>{opp.name}</div>
-                      {opp.sameGroup && <div style={{fontSize:10,color:C.green,background:"rgba(123,180,80,0.12)",padding:"2px 7px",borderRadius:8}}>Same Group</div>}
-                    </div>
-                    {/* Bet info always visible */}
-                    <div style={{fontSize:11,color:C.muted,marginTop:3}}>
-                      {opp.betType==="match"?"Match $"+opp.betAmount+"/hole"
-                        :opp.betType==="nassau"?"Nassau $"+opp.betAmount
-                        :opp.betType==="nassau-press"?"Nassau+Press $"+opp.betAmount
-                        :"Skins $"+opp.betAmount}
-                      {" · "}
-                      {opp.strokes===0?"Even":opp.strokes>0?"You give "+(opp.strokes/2)+"/side":"You get "+(Math.abs(opp.strokes)/2)+"/side"}
-                    </div>
-                    {getsStroke && <div style={{fontSize:11,color:C.gold,marginTop:2}}>⭐ {opp.name} gets a stroke this hole</div>}
-                    {iGetStroke && <div style={{fontSize:11,color:C.green,marginTop:2}}>⭐ You get a stroke this hole</div>}
-                    {!getsStroke && !iGetStroke && !opp.sameGroup && <div style={{fontSize:11,color:C.muted,marginTop:2}}>Different group · scores optional</div>}
-                  </div>
-                </div>
+        <div style={{padding:"16px"}}>
 
-                {/* Score row */}
-                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
-                  <ScoreButton label="-" size={52} onClick={()=>{
-                    const cur = oppScore !== null ? oppScore : effPar;
-                    setScore(opp.playerId, currentHole, cur - 1);
-                  }}/>
-                  <div style={{flex:1,textAlign:"center"}}>
-                    <div style={{fontSize:52,fontWeight:800,color:oppScore!==null?C.text:C.muted,lineHeight:1}}>
-                      {oppScore !== null ? oppScore : "-"}
-                    </div>
-                    {oppScore !== null && getsStroke && (
-                      <div style={{fontSize:11,color:C.gold,marginTop:2}}>Net score: {oppScore - 1}</div>
-                    )}
-                    {oppScore !== null && iGetStroke && (
-                      <div style={{fontSize:11,color:C.green,marginTop:2}}>Your net: {myScore !== null ? myScore - 1 : "-"}</div>
-                    )}
-                    {oppScore === null && <div style={{fontSize:11,color:C.muted,marginTop:2}}>tap + to enter</div>}
-                  </div>
-                  <ScoreButton label="+" size={52} onClick={()=>{
-                    const cur = oppScore !== null ? oppScore : effPar - 1;
-                    setScore(opp.playerId, currentHole, cur + 1);
-                  }}/>
-                </div>
-              </div>
-            );
-          })}
+          {/* ══ SCORE TAB ══════════════════════════════════════════════════ */}
+          {liveTab==="score"&&(<>
 
-          {/* Next / Finish */}
-          <BigBtn
-            onClick={advanceHole}
-            disabled={!canAdvance}
-            color={isLastHole?C.gold:C.green}
-            textColor="#0a1a0f"
-            style={{marginTop:8}}
-          >
-            {!canAdvance ? "Enter your score to continue"
-              : isLastHole ? "Finish Round ⛳"
-              : "Next - Hole " + (currentHole + 1)}
-          </BigBtn>
-
-          {/* Standing bar - shows below the Next button */}
-          {canAdvance && opponents.length > 0 && (
-            <div style={{marginTop:10,display:"flex",gap:8,flexWrap:"wrap",justifyContent:"center"}}>
-              {opponents.map(opp => {
-                const t = getTally(scores, course, opp, courseId);
-                const side = currentHole <= 9 ? "front" : "back";
-                const lastDiff = side === "front" ? t.lastFrontDiff : t.lastBackDiff;
-                const diffLabel = lastDiff === 0 ? "All Square"
-                  : lastDiff > 0 ? "You " + lastDiff + " Up"
-                  : opp.name.split(" ")[0] + " " + Math.abs(lastDiff) + " Up";
-                const pressCount = (t.pressDetail?.front?.bets?.length||1) + (t.pressDetail?.back?.bets?.length||1) - 2;
-                const pressBadge = pressCount > 0 ? " · " + pressCount + "P" : "";
-                return (
-                  <div key={opp.playerId} style={{
-                    background:C.card,border:"1px solid "+C.border,borderRadius:20,
-                    padding:"5px 12px",fontSize:12,display:"flex",alignItems:"center",gap:6
-                  }}>
-                    <span style={{color:C.muted,fontWeight:600}}>{opp.name.split(" ")[0]}:</span>
-                    <span style={{fontWeight:700,color:lastDiff>0?C.green:lastDiff<0?C.red:C.muted}}>
-                      {diffLabel}{pressBadge}
-                    </span>
-                  </div>
+            {/* Hole selector dots */}
+            <div style={{display:"flex",overflowX:"auto",gap:6,marginBottom:16,paddingBottom:4}}>
+              {course.holes.map(h=>{
+                const scored = getScore("me", h.hole) !== null;
+                return(
+                  <button key={h.hole} onClick={()=>setCurrentHole(h.hole)} style={{
+                    flexShrink:0,width:36,height:36,borderRadius:"50%",fontSize:12,fontWeight:700,cursor:"pointer",
+                    background:h.hole===currentHole?C.gold:scored?"rgba(123,180,80,0.15)":C.dim,
+                    color:h.hole===currentHole?"#0a1a0f":scored?C.green:C.muted,
+                    border:"1px solid "+(h.hole===currentHole?C.gold:scored?C.green:C.border)
+                  }}>{h.hole}</button>
                 );
               })}
             </div>
+
+            {/* Stroke indicator */}
+            {opponents.some(o=>oppGetsStrokeOnHole(o,currentHole)||iGetStrokeOnHole(o,currentHole))&&(
+              <div style={{background:"rgba(232,184,75,0.08)",border:"1px solid "+C.gold+"44",borderRadius:10,padding:"8px 14px",marginBottom:12,fontSize:12,color:C.gold,fontWeight:600}}>
+                {opponents.map(o=>{
+                  if(oppGetsStrokeOnHole(o,currentHole)) return "⭐ "+o.name+" gets a stroke this hole";
+                  if(iGetStrokeOnHole(o,currentHole)) return "⭐ You get a stroke vs "+o.name+" this hole";
+                  return null;
+                }).filter(Boolean).join("  ·  ")}
+              </div>
+            )}
+
+            {/* MY score — big green card */}
+            <div style={{background:C.card,border:"2px solid "+C.green,borderRadius:16,padding:"18px",marginBottom:12}}>
+              <div style={{fontSize:11,color:C.green,letterSpacing:2,textTransform:"uppercase",marginBottom:12,fontWeight:600}}>⛳ Your Score</div>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
+                <ScoreButton label="-" size={60} onClick={()=>{
+                  const cur = myScore !== null ? myScore : effPar;
+                  setScore("me", currentHole, cur - 1);
+                }}/>
+                <div style={{flex:1,textAlign:"center"}}>
+                  <div style={{fontSize:72,fontWeight:800,color:myScore!==null?C.text:C.muted,lineHeight:1}}>
+                    {myScore !== null ? myScore : "—"}
+                  </div>
+                  {myScore!==null&&<div style={{fontSize:14,color:scoreColor(myScore,effPar),marginTop:4,fontWeight:700}}>{scoreName(myScore,effPar)}</div>}
+                  {myScore===null&&<div style={{fontSize:12,color:C.muted,marginTop:8}}>tap + to enter</div>}
+                </div>
+                <ScoreButton label="+" size={60} onClick={()=>{
+                  const cur = myScore !== null ? myScore : effPar - 1;
+                  setScore("me", currentHole, cur + 1);
+                }}/>
+              </div>
+            </div>
+
+            {/* SAME-GROUP opponent scores — stacked, editable */}
+            {opponents.filter(o=>o.sameGroup).map(opp=>{
+              const oppScore   = getScore(opp.playerId, currentHole);
+              const getsStroke = oppGetsStrokeOnHole(opp, currentHole);
+              const iGetStroke = iGetStrokeOnHole(opp, currentHole);
+              return(
+                <div key={opp.playerId} style={{background:C.card,border:"1px solid "+(getsStroke||iGetStroke?"rgba(232,184,75,0.5)":C.border),borderRadius:14,padding:"14px",marginBottom:12}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+                    <div>
+                      <div style={{fontWeight:700,fontSize:15,color:C.text}}>{opp.name}</div>
+                      <div style={{fontSize:11,color:C.muted,marginTop:2}}>
+                        {opp.betType==="match"?"Match $"+opp.betAmount+"/hole"
+                          :opp.betType==="nassau"?"Nassau $"+opp.betAmount
+                          :opp.betType==="nassau-press"?"Nassau+Press $"+opp.betAmount
+                          :"Skins $"+opp.betAmount}
+                        {" · "}{opp.strokes===0?"Even":opp.strokes>0?"You give "+(opp.strokes/2)+"/side":"You get "+(Math.abs(opp.strokes)/2)+"/side"}
+                      </div>
+                      {getsStroke&&<div style={{fontSize:11,color:C.gold,marginTop:2}}>⭐ Gets a stroke this hole</div>}
+                      {iGetStroke&&<div style={{fontSize:11,color:C.green,marginTop:2}}>⭐ You get a stroke this hole</div>}
+                    </div>
+                    {oppScore!==null&&<div style={{fontSize:22,fontWeight:800,color:scoreColor(oppScore,effPar)}}>{oppScore}</div>}
+                  </div>
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
+                    <ScoreButton label="-" size={52} onClick={()=>{
+                      const cur = oppScore !== null ? oppScore : effPar;
+                      setScore(opp.playerId, currentHole, cur - 1);
+                    }}/>
+                    <div style={{flex:1,textAlign:"center"}}>
+                      <div style={{fontSize:52,fontWeight:800,color:oppScore!==null?C.text:C.muted,lineHeight:1}}>
+                        {oppScore !== null ? oppScore : "—"}
+                      </div>
+                      {oppScore!==null&&getsStroke&&<div style={{fontSize:11,color:C.gold,marginTop:2}}>Net: {oppScore-1}</div>}
+                      {oppScore!==null&&iGetStroke&&<div style={{fontSize:11,color:C.green,marginTop:2}}>Your net: {myScore!==null?myScore-1:"—"}</div>}
+                      {oppScore===null&&<div style={{fontSize:11,color:C.muted,marginTop:2}}>tap + to enter</div>}
+                    </div>
+                    <ScoreButton label="+" size={52} onClick={()=>{
+                      const cur = oppScore !== null ? oppScore : effPar - 1;
+                      setScore(opp.playerId, currentHole, cur + 1);
+                    }}/>
+                  </div>
+                </div>
+              );
+            })}
+
+            {/* DIFFERENT-GROUP opponents — read-only score display */}
+            {opponents.filter(o=>!o.sameGroup).map(opp=>{
+              const oppScore = getScore(opp.playerId, currentHole);
+              return(
+                <div key={opp.playerId} style={{background:C.card,border:"1px solid "+C.border,borderRadius:12,padding:"12px 16px",marginBottom:10,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                  <div>
+                    <div style={{fontSize:13,fontWeight:700,color:C.text}}>{opp.name}</div>
+                    <div style={{fontSize:11,color:C.muted}}>Different group · live score</div>
+                  </div>
+                  <div style={{fontSize:36,fontWeight:800,color:oppScore!==null?scoreColor(oppScore,effPar):C.dim}}>
+                    {oppScore !== null ? oppScore : "—"}
+                  </div>
+                </div>
+              );
+            })}
+
+            {/* Next / Finish */}
+            <BigBtn
+              onClick={advanceHole}
+              disabled={!canAdvance}
+              color={isLastHole?C.gold:C.green}
+              textColor="#0a1a0f"
+              style={{marginTop:8}}
+            >
+              {!canAdvance ? "Enter your score first"
+                : isLastHole ? "Finish Round ⛳"
+                : "Next — Hole " + (currentHole + 1)}
+            </BigBtn>
+
+            <div style={{textAlign:"center",fontSize:11,color:C.dim,marginTop:10}}>
+              Auto-saving · Round is safe if you close the app
+            </div>
+          </>)}
+
+          {/* ══ MATCH TAB ══════════════════════════════════════════════════ */}
+          {liveTab==="match"&&(
+            <div>
+              {opponents.map(opp=>{
+                const tally = getTally(scores, course, opp, courseId);
+                const side  = currentHole <= 9 ? "front" : "back";
+                const lastDiff = side === "front" ? tally.lastFrontDiff : tally.lastBackDiff;
+                const diffColor = lastDiff > 0 ? C.green : lastDiff < 0 ? C.red : C.muted;
+                const diffLabel = lastDiff === 0 ? "All Square"
+                  : lastDiff > 0 ? "You " + lastDiff + " Up"
+                  : opp.name.split(" ")[0] + " " + Math.abs(lastDiff) + " Up";
+                return(
+                  <div key={opp.playerId} style={{background:C.card,border:"1px solid "+C.border,borderRadius:14,padding:"16px",marginBottom:12}}>
+                    {/* Opponent header */}
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:14}}>
+                      <div>
+                        <div style={{fontWeight:800,fontSize:16}}>{opp.name}</div>
+                        <div style={{fontSize:11,color:C.muted,marginTop:2}}>
+                          {opp.betType==="nassau-press"?"Nassau+Press":"Nassau"} ${opp.betAmount}
+                          {" · "}{opp.strokes===0?"Even":opp.strokes>0?"You give "+(opp.strokes/2)+"/side":"You get "+(Math.abs(opp.strokes)/2)+"/side"}
+                        </div>
+                      </div>
+                      <div style={{textAlign:"right"}}>
+                        <div style={{fontSize:16,fontWeight:800,color:diffColor}}>{diffLabel}</div>
+                        <div style={{fontSize:10,color:C.muted}}>thru {Math.max(0,currentHole-1)}</div>
+                      </div>
+                    </div>
+
+                    {/* F9 / B9 / Total standing */}
+                    <div style={{display:"flex",gap:0,borderRadius:10,overflow:"hidden",border:"1px solid "+C.border,marginBottom:14}}>
+                      {[
+                        ["F9", tally.lastFrontDiff],
+                        ["B9", tally.lastBackDiff],
+                        ["Total", tally.totalDiff],
+                      ].map(([lbl,diff],i,arr)=>{
+                        const label = diff===0?"A/S":diff>0?"You "+diff+" Up":opp.name.split(" ")[0]+" "+Math.abs(diff)+" Up";
+                        const color = diff>0?C.green:diff<0?C.red:C.muted;
+                        return(
+                          <div key={lbl} style={{flex:1,padding:"10px 6px",textAlign:"center",borderRight:i<arr.length-1?"1px solid "+C.border:"none",background:"rgba(0,0,0,0.15)"}}>
+                            <div style={{fontSize:10,color:C.muted,marginBottom:4}}>{lbl}</div>
+                            <div style={{fontSize:13,fontWeight:800,color}}>{label}</div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Hole-by-hole scorecard */}
+                    <div style={{overflowX:"auto"}}>
+                      <table style={{width:"100%",borderCollapse:"collapse",fontSize:11,minWidth:340}}>
+                        <thead>
+                          <tr>
+                            <th style={{textAlign:"left",padding:"3px 4px",color:C.muted,fontWeight:600,width:60}}>Hole</th>
+                            {course.holes.filter(h=>h.side==="front").map(h=>(
+                              <th key={h.hole} style={{padding:"3px 2px",textAlign:"center",color:h.hole===currentHole?C.gold:C.muted,fontWeight:h.hole===currentHole?700:400}}>{h.hole}</th>
+                            ))}
+                            <th style={{padding:"3px 4px",textAlign:"center",color:C.green,fontWeight:700}}>F</th>
+                            {course.holes.filter(h=>h.side==="back").map(h=>(
+                              <th key={h.hole} style={{padding:"3px 2px",textAlign:"center",color:h.hole===currentHole?C.gold:C.muted,fontWeight:h.hole===currentHole?700:400}}>{h.hole}</th>
+                            ))}
+                            <th style={{padding:"3px 4px",textAlign:"center",color:C.green,fontWeight:700}}>B</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {/* My scores */}
+                          <tr style={{borderTop:"1px solid "+C.border}}>
+                            <td style={{padding:"4px",color:C.green,fontWeight:700,fontSize:11}}>Me</td>
+                            {course.holes.filter(h=>h.side==="front").map(h=>{
+                              const s=getScore("me",h.hole);
+                              return<td key={h.hole} style={{padding:"4px 2px",textAlign:"center",color:s!==null?scoreColor(s,h.par):C.dim,fontWeight:s!==null?700:400}}>{s??"-"}</td>;
+                            })}
+                            <td style={{padding:"4px",textAlign:"center",fontWeight:700,color:C.green}}>
+                              {course.holes.filter(h=>h.side==="front").some(h=>getScore("me",h.hole)!==null)
+                                ? course.holes.filter(h=>h.side==="front").reduce((s,h)=>s+(getScore("me",h.hole)||0),0)||"-"
+                                : "-"}
+                            </td>
+                            {course.holes.filter(h=>h.side==="back").map(h=>{
+                              const s=getScore("me",h.hole);
+                              return<td key={h.hole} style={{padding:"4px 2px",textAlign:"center",color:s!==null?scoreColor(s,h.par):C.dim,fontWeight:s!==null?700:400}}>{s??"-"}</td>;
+                            })}
+                            <td style={{padding:"4px",textAlign:"center",fontWeight:700,color:C.green}}>
+                              {course.holes.filter(h=>h.side==="back").some(h=>getScore("me",h.hole)!==null)
+                                ? course.holes.filter(h=>h.side==="back").reduce((s,h)=>s+(getScore("me",h.hole)||0),0)||"-"
+                                : "-"}
+                            </td>
+                          </tr>
+                          {/* Opponent scores */}
+                          <tr style={{borderTop:"1px solid "+C.border}}>
+                            <td style={{padding:"4px",color:C.gold,fontWeight:700,fontSize:11}}>{opp.name.split(" ")[0]}</td>
+                            {course.holes.filter(h=>h.side==="front").map(h=>{
+                              const s=getScore(opp.playerId,h.hole);
+                              return<td key={h.hole} style={{padding:"4px 2px",textAlign:"center",color:s!==null?scoreColor(s,h.par):C.dim,fontWeight:s!==null?700:400}}>{s??"-"}</td>;
+                            })}
+                            <td style={{padding:"4px",textAlign:"center",fontWeight:700,color:C.gold}}>
+                              {course.holes.filter(h=>h.side==="front").some(h=>getScore(opp.playerId,h.hole)!==null)
+                                ? course.holes.filter(h=>h.side==="front").reduce((s,h)=>s+(getScore(opp.playerId,h.hole)||0),0)||"-"
+                                : "-"}
+                            </td>
+                            {course.holes.filter(h=>h.side==="back").map(h=>{
+                              const s=getScore(opp.playerId,h.hole);
+                              return<td key={h.hole} style={{padding:"4px 2px",textAlign:"center",color:s!==null?scoreColor(s,h.par):C.dim,fontWeight:s!==null?700:400}}>{s??"-"}</td>;
+                            })}
+                            <td style={{padding:"4px",textAlign:"center",fontWeight:700,color:C.gold}}>
+                              {course.holes.filter(h=>h.side==="back").some(h=>getScore(opp.playerId,h.hole)!==null)
+                                ? course.holes.filter(h=>h.side==="back").reduce((s,h)=>s+(getScore(opp.playerId,h.hole)||0),0)||"-"
+                                : "-"}
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                );
+              })}
+
+              {opponents.length===0&&(
+                <div style={{textAlign:"center",padding:"40px 20px",color:C.muted}}>
+                  <div style={{fontSize:32,marginBottom:12}}>📊</div>
+                  <div style={{fontSize:15,fontWeight:600}}>No opponents yet</div>
+                  <div style={{fontSize:12,marginTop:6}}>Add opponents in setup to see match standings</div>
+                </div>
+              )}
+            </div>
           )}
 
-          <div style={{textAlign:"center",fontSize:11,color:C.dim,marginTop:10}}>
-            Auto-saving · Round is safe if you close the app
-          </div>
         </div>
       </div>
 
