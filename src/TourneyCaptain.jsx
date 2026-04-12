@@ -12,12 +12,13 @@ function safeInt(v,f=0){const n=parseInt(v,10);return isNaN(n)?f:n;}
 function relLabel(d){if(d===null||d===undefined)return"—";if(d===0)return"E";return d>0?"+"+d:String(d);}
 function relColor(d){if(d===null||d===undefined)return C.muted;if(d<0)return C.green;if(d>0)return C.red;return C.muted;}
 
-function calcTeamScore(teamScores,teamSize,holeData,birdieBonus,countBalls){
+function calcTeamScore(teamScores,teamSize,holeData,birdieBonus,countBalls,holePars){
   const byHole={};
   let front=0,back=0,total=0;
-  const balls=countBalls||Math.min(teamSize,2);
-  const frontPar=holeData.filter(h=>h.side==="front").reduce((s,h)=>s+h.par*balls,0);
-  const backPar=holeData.filter(h=>h.side==="back").reduce((s,h)=>s+h.par*balls,0);
+  const balls=parseInt(countBalls)||Math.min(teamSize,2);
+  const hpar=(h)=>(holePars?.[h.hole]??h.par);
+  const frontPar=holeData.filter(h=>h.side==="front").reduce((s,h)=>s+hpar(h)*balls,0);
+  const backPar=holeData.filter(h=>h.side==="back").reduce((s,h)=>s+hpar(h)*balls,0);
   for(const h of holeData){
     const scores=[];
     for(let p=0;p<teamSize;p++){const s=teamScores?.[p]?.[h.hole];if(s!==undefined&&s!==null)scores.push(safeInt(s));}
@@ -27,10 +28,10 @@ function calcTeamScore(teamScores,teamSize,holeData,birdieBonus,countBalls){
     let raw=bestN.reduce((s,v)=>s+v,0);
     let bonusApplied=0;
     if(birdieBonus){
-      const extraBirdies=scores.slice(balls).filter(s=>s<=h.par-1);
-      if(extraBirdies.length>0){bonusApplied=extraBirdies.reduce((sum,s)=>sum+(h.par-s),0);raw-=bonusApplied;}
+      const extraBirdies=scores.slice(balls).filter(s=>s<=hpar(h)-1);
+      if(extraBirdies.length>0){bonusApplied=extraBirdies.reduce((sum,s)=>sum+(hpar(h)-s),0);raw-=bonusApplied;}
     }
-    const diff=raw-(h.par*balls);
+    const diff=raw-(hpar(h)*balls);
     byHole[h.hole]={raw,diff,bonusApplied,scored:true};
     if(h.side==="front")front+=raw;else back+=raw;
     total+=raw;
@@ -125,11 +126,12 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
 
   if (!team || !holeData) return <div style={{ background:C.bg, minHeight:"100vh", display:"flex", alignItems:"center", justifyContent:"center", color:C.muted }}>Loading...</div>;
 
-  const sc = calcTeamScore(team.scores || {}, team.size || 4, course.holes, birdieBonus, tourney.count_balls||2);
+  const sc = calcTeamScore(team.scores || {}, team.size || 4, course.holes, birdieBonus, tourney.count_balls||2, tourney.hole_pars||{});
+  const effPar = (tourney.hole_pars||{})[currentHole] ?? holeData.par;  // effective par this hole
   const thisHoleScores = Array.from({length:team.size||4},(_,j)=>({j,s:getPlayerScore(j,currentHole)})).filter(x=>x.s!==null).sort((a,b)=>a.s-b.s);
   const best2Set = new Set(thisHoleScores.slice(0,2).map(x=>x.j));
-  const extraBirdies = thisHoleScores.slice(2).filter(x=>x.s<=holeData.par-1);
-  const bonusThisHole = birdieBonus&&extraBirdies.length>0?extraBirdies.reduce((sum,x)=>sum+(holeData.par-x.s),0):0;
+  const extraBirdies = thisHoleScores.slice(2).filter(x=>x.s<=effPar-1);
+  const bonusThisHole = birdieBonus&&extraBirdies.length>0?extraBirdies.reduce((sum,x)=>sum+(effPar-x.s),0):0;
 
   // ── ROSTER TAB ─────────────────────────────────────────────────────────────
   if (tab === "roster") {
@@ -206,7 +208,7 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
           <div style={{ textAlign:"center" }}>
             <div style={{ fontSize:11, color:C.muted, letterSpacing:2, textTransform:"uppercase" }}>Hole</div>
             <div style={{ fontSize:48, fontWeight:800, lineHeight:1 }}>{currentHole}</div>
-            <div style={{ fontSize:12, color:C.green, fontWeight:600 }}>Par {holeData.par} · Hdcp {holeData.hdcp}</div>
+            <div style={{ fontSize:12, color:C.green, fontWeight:600 }}>Par {effPar}{effPar!==holeData.par?" ⚡":""} · Hdcp {holeData.hdcp}</div>
             {saveStatus && <div style={{ fontSize:10, color:saveStatus==="saving"?C.gold:C.green, marginTop:2 }}>{saveStatus==="saving"?"💾 Saving...":"✓ Saved"}</div>}
           </div>
           <div style={{ display:"flex", flexDirection:"column", gap:6, alignItems:"flex-end" }}>
@@ -250,7 +252,7 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
                   </div>
                   {(tourney.teams||[])
                     .map((t,i)=>{
-                      const sc=calcTeamScore(t.scores||{},t.size||4,course.holes,tourney.birdie_bonus!==false,tourney.count_balls||2);
+                      const sc=calcTeamScore(t.scores||{},t.size||4,course.holes,tourney.birdie_bonus!==false,tourney.count_balls||2,tourney.hole_pars||{});
                       return{...t,i,sc};
                     })
                     .sort((a,b)=>a.sc.totalDiff-b.sc.totalDiff)
@@ -367,7 +369,7 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
         {Array.from({length:team.size||4},(_,j)=>{
           const score=getPlayerScore(j,currentHole);
           const isBest=best2Set.has(j)&&score!==null;
-          const diff=score!==null?score-holeData.par:null;
+          const diff=score!==null?score-effPar:null;
           return(
             <div key={j} style={{ background:isBest?"rgba(123,180,80,0.08)":C.card, border:`1px solid ${isBest?C.green:C.border}`, borderRadius:14, padding:"12px 14px", marginBottom:10 }}>
               <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
@@ -378,13 +380,13 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
                 {diff!==null&&<div style={{ fontSize:14, fontWeight:800, color:relColor(diff) }}>{relLabel(diff)}{diff<=-1?" 🐦":""}</div>}
               </div>
               <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:8 }}>
-                <button onClick={()=>setPlayerScore(j,currentHole,score!==null?Math.max(1,score-1):holeData.par-1)}
+                <button onClick={()=>setPlayerScore(j,currentHole,score!==null?Math.max(1,score-1):effPar-1)}
                   style={{ width:56,height:56,borderRadius:"50%",background:C.dim,border:`1px solid ${C.border}`,color:C.text,fontSize:30,fontWeight:700,cursor:"pointer" }}>−</button>
                 <div style={{ flex:1,textAlign:"center" }}>
                   <div style={{ fontSize:56,fontWeight:800,color:score!==null?C.text:C.muted,lineHeight:1 }}>{score!==null?score:"—"}</div>
                   {score===null&&<div style={{ fontSize:11,color:C.muted,marginTop:4 }}>tap + to enter</div>}
                 </div>
-                <button onClick={()=>setPlayerScore(j,currentHole,score!==null?score+1:holeData.par)}
+                <button onClick={()=>setPlayerScore(j,currentHole,score!==null?score+1:effPar)}
                   style={{ width:56,height:56,borderRadius:"50%",background:C.dim,border:`1px solid ${C.border}`,color:C.text,fontSize:30,fontWeight:700,cursor:"pointer" }}>+</button>
               </div>
             </div>
@@ -394,7 +396,7 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
         {/* This hole total */}
         {thisHoleScores.length>=1&&(()=>{
           const raw=thisHoleScores.slice(0,2).reduce((s,x)=>s+x.s,0)-bonusThisHole;
-          const d=raw-(holeData.par*2);
+          const d=raw-(effPar*(tourney.count_balls||2));
           return(
             <div style={{ background:"rgba(123,180,80,0.06)",border:`1px solid rgba(123,180,80,0.2)`,borderRadius:10,padding:"12px 16px",marginBottom:14 }}>
               <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center" }}>
@@ -460,6 +462,36 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
                 );
               })()}
             </div>
+
+            {/* South Toledo hole #4 par toggle — captain can also change */}
+            {tourney.course_id==="south-toledo"&&(
+              <div style={{ background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:"14px 16px",marginBottom:16 }}>
+                <div style={{ fontWeight:700,fontSize:14,marginBottom:4 }}>⛳ Hole #4 Par Override</div>
+                <div style={{ fontSize:11,color:C.muted,marginBottom:12 }}>Change mid-round — scores recalculate instantly for everyone.</div>
+                <div style={{ display:"flex",gap:8 }}>
+                  {[3,4].map(p=>{
+                    const current = (tourney.hole_pars||{})[4]??3;
+                    return(
+                      <button key={p} onClick={async()=>{
+                        const newHolePars={...(tourney.hole_pars||{}),4:p};
+                        setTourney(prev=>({...prev,hole_pars:newHolePars}));
+                        await sb.from("team_tournaments").update({hole_pars:newHolePars,updated_at:new Date().toISOString()}).eq("id",tourney.id);
+                      }} style={{
+                        flex:1,padding:"14px",
+                        background:current===p?C.green:C.surface,
+                        color:current===p?"#0a1a0f":C.muted,
+                        border:"1px solid "+(current===p?C.green:C.border),
+                        borderRadius:10,fontSize:15,fontWeight:current===p?800:500,cursor:"pointer"
+                      }}>Par {p}{p===3?" ✓":""}
+                      </button>
+                    );
+                  })}
+                </div>
+                {((tourney.hole_pars||{})[4]??3)===4&&(
+                  <div style={{ fontSize:11,color:C.gold,marginTop:8,textAlign:"center" }}>Playing as par 4 — effective course par 71</div>
+                )}
+              </div>
+            )}
 
             {/* Player names — captain's team only */}
             <div style={{ background:C.card,border:`1px solid ${C.border}`,borderRadius:14,padding:"14px" }}>
