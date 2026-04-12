@@ -12,13 +12,19 @@ function safeInt(v,f=0){const n=parseInt(v,10);return isNaN(n)?f:n;}
 function relLabel(d){if(d===null||d===undefined)return"—";if(d===0)return"E";return d>0?"+"+d:String(d);}
 function relColor(d){if(d===null||d===undefined)return C.muted;if(d<0)return C.green;if(d>0)return C.red;return C.muted;}
 
-function calcTeamScore(teamScores,teamSize,holeData,birdieBonus,countBalls,holePars){
+function calcTeamScore(teamScores,teamSize,holeData,birdieBonus,ballsByPar,holePars){
+  const getBalls=(par)=>{
+    if(typeof ballsByPar==="object"&&ballsByPar!==null&&!Array.isArray(ballsByPar)){
+      return parseInt(ballsByPar[par])||parseInt(ballsByPar[4])||2;
+    }
+    return parseInt(ballsByPar)||Math.min(teamSize,2);
+  };
   const byHole={};
   let front=0,back=0,total=0;
-  let frontPar=0,backPar=0;  // only accumulate par for SCORED holes
-  const balls=parseInt(countBalls)||Math.min(teamSize,2);
+  let frontPar=0,backPar=0;
   const hpar=(h)=>(holePars?.[h.hole]??h.par);
   for(const h of holeData){
+    const balls=getBalls(hpar(h));
     const scores=[];
     for(let p=0;p<teamSize;p++){const s=teamScores?.[p]?.[h.hole];if(s!==undefined&&s!==null)scores.push(safeInt(s));}
     if(scores.length===0){byHole[h.hole]=null;continue;}
@@ -31,7 +37,7 @@ function calcTeamScore(teamScores,teamSize,holeData,birdieBonus,countBalls,holeP
       if(extraBirdies.length>0){bonusApplied=extraBirdies.reduce((sum,s)=>sum+(hpar(h)-s),0);raw-=bonusApplied;}
     }
     const diff=raw-(hpar(h)*balls);
-    byHole[h.hole]={raw,diff,bonusApplied,scored:true};
+    byHole[h.hole]={raw,diff,bonusApplied,scored:true,balls};
     if(h.side==="front"){front+=raw;frontPar+=hpar(h)*balls;}
     else{back+=raw;backPar+=hpar(h)*balls;}
     total+=raw;
@@ -127,7 +133,7 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
 
   if (!team || !holeData) return <div style={{ background:C.bg, minHeight:"100vh", display:"flex", alignItems:"center", justifyContent:"center", color:C.muted }}>Loading...</div>;
 
-  const sc = calcTeamScore(team.scores || {}, team.size || 4, course.holes, birdieBonus, tourney.count_balls||2, tourney.hole_pars||{});
+  const sc = calcTeamScore(team.scores || {}, team.size || 4, course.holes, birdieBonus, tourney.ball_count_by_par||(tourney.count_balls?{3:tourney.count_balls,4:tourney.count_balls,5:tourney.count_balls}:{3:2,4:2,5:2}), tourney.hole_pars||{});
   const effPar = (tourney.hole_pars||{})[currentHole] ?? holeData.par;  // effective par this hole
   const thisHoleScores = Array.from({length:team.size||4},(_,j)=>({j,s:getPlayerScore(j,currentHole)})).filter(x=>x.s!==null).sort((a,b)=>a.s-b.s);
   const best2Set = new Set(thisHoleScores.slice(0,2).map(x=>x.j));
@@ -249,7 +255,7 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
                   </div>
                   {(tourney.teams||[])
                     .map((t,i)=>{
-                      const sc=calcTeamScore(t.scores||{},t.size||4,course.holes,tourney.birdie_bonus!==false,tourney.count_balls||2,tourney.hole_pars||{});
+                      const sc=calcTeamScore(t.scores||{},t.size||4,course.holes,tourney.birdie_bonus!==false,tourney.ball_count_by_par||(tourney.count_balls?{3:tourney.count_balls,4:tourney.count_balls,5:tourney.count_balls}:{3:2,4:2,5:2}),tourney.hole_pars||{});
                       return{...t,i,sc};
                     })
                     .sort((a,b)=>a.sc.totalDiff-b.sc.totalDiff)
@@ -392,13 +398,15 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
 
         {/* This hole total */}
         {thisHoleScores.length>=1&&(()=>{
-          const raw=thisHoleScores.slice(0,2).reduce((s,x)=>s+x.s,0)-bonusThisHole;
-          const d=raw-(effPar*(tourney.count_balls||2));
+          const bbp = tourney.ball_count_by_par||(tourney.count_balls?{3:tourney.count_balls,4:tourney.count_balls,5:tourney.count_balls}:{3:2,4:2,5:2});
+          const ballsHere = parseInt(bbp[effPar])||2;
+          const raw=thisHoleScores.slice(0,ballsHere).reduce((s,x)=>s+x.s,0)-bonusThisHole;
+          const d=raw-(effPar*ballsHere);
           return(
             <div style={{ background:"rgba(123,180,80,0.06)",border:`1px solid rgba(123,180,80,0.2)`,borderRadius:10,padding:"12px 16px",marginBottom:14 }}>
               <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center" }}>
                 <div>
-                  <div style={{ fontSize:12,color:C.muted }}>2 Best Ball this hole</div>
+                  <div style={{ fontSize:12,color:C.muted }}>{ballsHere} Best Ball this hole</div>
                   {bonusThisHole>0&&<div style={{ fontSize:11,color:C.green }}>incl. birdie bonus −{bonusThisHole}</div>}
                 </div>
                 <div style={{ textAlign:"right" }}>
@@ -439,26 +447,45 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
             {/* Ball count — captain can edit global setting */}
             <div style={{ background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:"14px 16px",marginBottom:16 }}>
               <div style={{ fontWeight:700,fontSize:14,marginBottom:4 }}>Balls Counted Per Hole</div>
-              <div style={{ fontSize:11,color:C.muted,marginBottom:10 }}>Tournament-wide setting — affects all teams equally.</div>
+              <div style={{ fontSize:11,color:C.muted,marginBottom:12 }}>Tournament-wide · affects all teams. Changes recalculate instantly.</div>
               {(()=>{
-                const cb = tourney.count_balls||2;
-                return(
-                  <div style={{ display:"flex",gap:8 }}>
-                    {[1,2,3,4,5].map(n=>(
-                      <button key={n} onClick={async()=>{
-                        const updatedTeams=(tourney.teams||[]).map(t=>({...t}));
-                        setTourney(prev=>({...prev,count_balls:n}));
-                        await sb.from("team_tournaments").update({count_balls:n,updated_at:new Date().toISOString()}).eq("id",tourney.id);
-                      }} style={{
-                        flex:1,padding:"12px 4px",
-                        background:cb===n?C.green:C.surface,
-                        color:cb===n?"#0a1a0f":C.muted,
-                        border:"1px solid "+(cb===n?C.green:C.border),
-                        borderRadius:10,fontSize:15,fontWeight:cb===n?800:500,cursor:"pointer"
-                      }}>{n}</button>
-                    ))}
+                const bbp = tourney.ball_count_by_par||(tourney.count_balls?{3:tourney.count_balls,4:tourney.count_balls,5:tourney.count_balls}:{3:2,4:2,5:2});
+                const update = async(newBbp)=>{
+                  setTourney(prev=>({...prev,ball_count_by_par:newBbp}));
+                  await sb.from("team_tournaments").update({ball_count_by_par:newBbp,updated_at:new Date().toISOString()}).eq("id",tourney.id);
+                };
+                return(<>
+                  {[3,4,5].map(par=>(
+                    <div key={par} style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+                      <div style={{width:44,fontSize:12,fontWeight:700,color:C.muted,flexShrink:0}}>Par {par}</div>
+                      <div style={{display:"flex",gap:5,flex:1}}>
+                        {[1,2,3,4,5].map(n=>(
+                          <button key={n} onClick={()=>update({...bbp,[par]:n})} style={{
+                            flex:1,padding:"9px 4px",
+                            background:parseInt(bbp[par])===n?C.green:C.surface,
+                            color:parseInt(bbp[par])===n?"#0a1a0f":C.muted,
+                            border:"1px solid "+(parseInt(bbp[par])===n?C.green:C.border),
+                            borderRadius:8,fontSize:13,fontWeight:parseInt(bbp[par])===n?800:500,cursor:"pointer"
+                          }}>{n}</button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                  <div style={{borderTop:"1px solid "+C.border,paddingTop:8,marginTop:4}}>
+                    <div style={{fontSize:10,color:C.dim,marginBottom:8,textAlign:"center"}}>Quick-set all pars at once</div>
+                    <div style={{display:"flex",gap:5}}>
+                      {[1,2,3,4,5].map(n=>(
+                        <button key={n} onClick={()=>update({3:n,4:n,5:n})} style={{
+                          flex:1,padding:"9px 4px",
+                          background:parseInt(bbp[3])===n&&parseInt(bbp[4])===n&&parseInt(bbp[5])===n?C.gold:C.surface,
+                          color:parseInt(bbp[3])===n&&parseInt(bbp[4])===n&&parseInt(bbp[5])===n?"#0a1a0f":C.muted,
+                          border:"1px solid "+(parseInt(bbp[3])===n&&parseInt(bbp[4])===n&&parseInt(bbp[5])===n?C.gold:C.border),
+                          borderRadius:8,fontSize:13,fontWeight:600,cursor:"pointer"
+                        }}>{n}</button>
+                      ))}
+                    </div>
                   </div>
-                );
+                </>);
               })()}
             </div>
 
@@ -478,7 +505,7 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
                       }} style={{
                         flex:1,padding:"14px",
                         background:current===p?C.green:C.surface,
-                        color:current===p?"#0a1a0f":C.muted,
+                        color:current===p?"#0a1a0f":C.text,
                         border:"1px solid "+(current===p?C.green:C.border),
                         borderRadius:10,fontSize:15,fontWeight:current===p?800:500,cursor:"pointer"
                       }}>Par {p}{p===3?" ✓":""}
