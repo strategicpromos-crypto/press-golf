@@ -563,7 +563,13 @@ export default function TeamTournament({onBack, user}){
               <div style={{display:"flex",gap:8}}>
                 {[3,4].map(p=>(
                   <button key={p} onClick={()=>setHolePars(prev=>({...prev,4:p}))}
-                    style={{flex:1,padding:"14px",background:(holePars[4]??3)===p?C.green:"rgba(255,255,255,0.08)",color:(holePars[4]??3)===p?"#0a1a0f":"#ffffff",border:"1px solid "+((holePars[4]??3)===p?C.green:"rgba(255,255,255,0.3)"),borderRadius:10,fontSize:16,fontWeight:(holePars[4]??3)===p?800:500,cursor:"pointer"}}>
+                    style={{
+                      flex:1,padding:"16px",
+                      background:(holePars[4]??3)===p?C.green:"#1a2a1a",
+                      color:(holePars[4]??3)===p?"#0a1a0f":"#ffffff",
+                      border:"2px solid "+((holePars[4]??3)===p?C.green:"rgba(255,255,255,0.3)"),
+                      borderRadius:10,fontSize:16,fontWeight:(holePars[4]??3)===p?800:600,cursor:"pointer"
+                    }}>
                     Par {p}{p===3?" (default)":""}
                   </button>
                 ))}
@@ -595,30 +601,30 @@ export default function TeamTournament({onBack, user}){
             <div style={{fontSize:11,color:C.muted,marginBottom:12}}>Set per par value. Tap a number to change. Quick-set all at once with the bottom row.</div>
             {[3,4,5].map(par=>(
               <div key={par} style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
-                <div style={{width:44,fontSize:13,fontWeight:700,color:C.muted,flexShrink:0}}>Par {par}</div>
+                <div style={{width:44,fontSize:13,fontWeight:700,color:C.text,flexShrink:0}}>Par {par}</div>
                 <div style={{display:"flex",gap:6,flex:1}}>
                   {[1,2,3,4,5].map(n=>(
                     <button key={n} onClick={()=>setBallsByPar(prev=>({...prev,[par]:n}))} style={{
-                      flex:1,padding:"10px 4px",
-                      background:ballsByPar[par]===n?C.green:C.surface,
-                      color:ballsByPar[par]===n?"#0a1a0f":C.muted,
-                      border:"1px solid "+(ballsByPar[par]===n?C.green:C.border),
-                      borderRadius:8,fontSize:14,fontWeight:ballsByPar[par]===n?800:500,cursor:"pointer"
+                      flex:1,padding:"12px 4px",
+                      background:ballsByPar[par]===n?C.green:"rgba(255,255,255,0.08)",
+                      color:ballsByPar[par]===n?"#0a1a0f":"#ffffff",
+                      border:"1px solid "+(ballsByPar[par]===n?C.green:"rgba(255,255,255,0.25)"),
+                      borderRadius:8,fontSize:15,fontWeight:ballsByPar[par]===n?800:600,cursor:"pointer"
                     }}>{n}</button>
                   ))}
                 </div>
               </div>
             ))}
-            <div style={{borderTop:"1px solid "+C.border,paddingTop:10,marginTop:4}}>
-              <div style={{fontSize:10,color:C.dim,marginBottom:8,textAlign:"center"}}>Quick-set all pars at once</div>
+            <div style={{borderTop:"1px solid "+C.border,paddingTop:12,marginTop:6}}>
+              <div style={{fontSize:12,color:C.text,fontWeight:600,marginBottom:8,textAlign:"center"}}>Quick-set all pars at once</div>
               <div style={{display:"flex",gap:6}}>
                 {[1,2,3,4,5].map(n=>(
                   <button key={n} onClick={()=>setBallsByPar({3:n,4:n,5:n})} style={{
-                    flex:1,padding:"10px 4px",
-                    background:ballsByPar[3]===n&&ballsByPar[4]===n&&ballsByPar[5]===n?C.gold:C.surface,
-                    color:ballsByPar[3]===n&&ballsByPar[4]===n&&ballsByPar[5]===n?"#0a1a0f":C.muted,
-                    border:"1px solid "+(ballsByPar[3]===n&&ballsByPar[4]===n&&ballsByPar[5]===n?C.gold:C.border),
-                    borderRadius:8,fontSize:14,fontWeight:600,cursor:"pointer"
+                    flex:1,padding:"12px 4px",
+                    background:ballsByPar[3]===n&&ballsByPar[4]===n&&ballsByPar[5]===n?C.gold:"rgba(255,255,255,0.08)",
+                    color:ballsByPar[3]===n&&ballsByPar[4]===n&&ballsByPar[5]===n?"#0a1a0f":"#ffffff",
+                    border:"1px solid "+(ballsByPar[3]===n&&ballsByPar[4]===n&&ballsByPar[5]===n?C.gold:"rgba(255,255,255,0.25)"),
+                    borderRadius:8,fontSize:15,fontWeight:700,cursor:"pointer"
                   }}>{n}</button>
                 ))}
               </div>
@@ -881,30 +887,30 @@ export default function TeamTournament({onBack, user}){
                 <div style={{fontSize:11,color:C.muted,marginBottom:12}}>Set per par value. Recalculates all scores instantly.</div>
                 {[3,4,5].map(par=>(
                   <div key={par} style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
-                    <div style={{width:44,fontSize:13,fontWeight:700,color:C.muted,flexShrink:0}}>Par {par}</div>
+                    <div style={{width:44,fontSize:13,fontWeight:700,color:C.text,flexShrink:0}}>Par {par}</div>
                     <div style={{display:"flex",gap:6,flex:1}}>
                       {[1,2,3,4,5].map(n=>(
                         <button key={n} onClick={()=>setBallsByPar(prev=>({...prev,[par]:n}))} style={{
-                          flex:1,padding:"10px 4px",
-                          background:ballsByPar[par]===n?C.green:C.surface,
-                          color:ballsByPar[par]===n?"#0a1a0f":C.muted,
-                          border:"1px solid "+(ballsByPar[par]===n?C.green:C.border),
-                          borderRadius:8,fontSize:14,fontWeight:ballsByPar[par]===n?800:500,cursor:"pointer"
+                          flex:1,padding:"12px 4px",
+                          background:ballsByPar[par]===n?C.green:"rgba(255,255,255,0.08)",
+                          color:ballsByPar[par]===n?"#0a1a0f":"#ffffff",
+                          border:"1px solid "+(ballsByPar[par]===n?C.green:"rgba(255,255,255,0.25)"),
+                          borderRadius:8,fontSize:15,fontWeight:ballsByPar[par]===n?800:600,cursor:"pointer"
                         }}>{n}</button>
                       ))}
                     </div>
                   </div>
                 ))}
-                <div style={{borderTop:"1px solid "+C.border,paddingTop:10,marginTop:4}}>
-                  <div style={{fontSize:10,color:C.dim,marginBottom:8,textAlign:"center"}}>Quick-set all pars at once</div>
+                <div style={{borderTop:"1px solid "+C.border,paddingTop:12,marginTop:6}}>
+                  <div style={{fontSize:12,color:C.text,fontWeight:600,marginBottom:8,textAlign:"center"}}>Quick-set all pars at once</div>
                   <div style={{display:"flex",gap:6}}>
                     {[1,2,3,4,5].map(n=>(
                       <button key={n} onClick={()=>setBallsByPar({3:n,4:n,5:n})} style={{
-                        flex:1,padding:"10px 4px",
-                        background:ballsByPar[3]===n&&ballsByPar[4]===n&&ballsByPar[5]===n?C.gold:C.surface,
-                        color:ballsByPar[3]===n&&ballsByPar[4]===n&&ballsByPar[5]===n?"#0a1a0f":C.muted,
-                        border:"1px solid "+(ballsByPar[3]===n&&ballsByPar[4]===n&&ballsByPar[5]===n?C.gold:C.border),
-                        borderRadius:8,fontSize:14,fontWeight:600,cursor:"pointer"
+                        flex:1,padding:"12px 4px",
+                        background:ballsByPar[3]===n&&ballsByPar[4]===n&&ballsByPar[5]===n?C.gold:"rgba(255,255,255,0.08)",
+                        color:ballsByPar[3]===n&&ballsByPar[4]===n&&ballsByPar[5]===n?"#0a1a0f":"#ffffff",
+                        border:"1px solid "+(ballsByPar[3]===n&&ballsByPar[4]===n&&ballsByPar[5]===n?C.gold:"rgba(255,255,255,0.25)"),
+                        borderRadius:8,fontSize:15,fontWeight:700,cursor:"pointer"
                       }}>{n}</button>
                     ))}
                   </div>
@@ -938,11 +944,11 @@ export default function TeamTournament({onBack, user}){
                     {[3,4].map(p=>(
                       <button key={p} onClick={()=>setHolePars(prev=>({...prev,4:p}))}
                         style={{
-                          flex:1,padding:"14px",
-                          background:(holePars[4]??3)===p?C.green:"rgba(255,255,255,0.08)",
+                          flex:1,padding:"16px",
+                          background:(holePars[4]??3)===p?C.green:"#1a2a1a",
                           color:(holePars[4]??3)===p?"#0a1a0f":"#ffffff",
-                          border:"1px solid "+((holePars[4]??3)===p?C.green:"rgba(255,255,255,0.3)"),
-                          borderRadius:10,fontSize:16,fontWeight:(holePars[4]??3)===p?800:500,cursor:"pointer"}}>
+                          border:"2px solid "+((holePars[4]??3)===p?C.green:"rgba(255,255,255,0.3)"),
+                          borderRadius:10,fontSize:16,fontWeight:(holePars[4]??3)===p?800:600,cursor:"pointer"}}>
                         Par {p}{p===3?" ✓ default":""}
                       </button>
                     ))}
