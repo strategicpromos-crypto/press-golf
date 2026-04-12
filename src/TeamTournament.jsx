@@ -4,7 +4,7 @@ import { sb } from "./supabase.js";
 import TourneyJoin from "./TourneyJoin.jsx";
 import TourneyCaptain from "./TourneyCaptain.jsx";
 import TourneySpectator from "./TourneySpectator.jsx";
-import { calcSkins, SkinsTab } from "./skins.js";
+import { calcSkins, SkinsTab } from "./skins.jsx";
 
 const C = {
   bg:"#080f0a", surface:"#0e1a10", card:"#121e14",
