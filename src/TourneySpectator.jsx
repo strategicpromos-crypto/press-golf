@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { sb } from "./supabase.js";
 import { COURSES } from "./golf.js";
+import { SkinsTab } from "./skins.js";
 
 const C = {
   bg:"#080f0a", surface:"#0e1a10", card:"#121e14",
@@ -94,8 +95,8 @@ export default function TourneySpectator({ tourney: initialTourney, onBack }) {
 
       {/* Tabs */}
       <div style={{ display:"flex", borderBottom:`1px solid ${C.border}`, background:"rgba(0,0,0,0.2)" }}>
-        {[["board","🏆 Standings"],["scorecard","📋 Scorecard"],["top10","⭐ Top 10"]].map(([id,lbl])=>(
-          <button key={id} onClick={()=>setTab(id)} style={{ flex:1, padding:"11px 2px", fontSize:12, fontWeight:tab===id?700:500, background:"transparent", color:tab===id?C.green:C.muted, border:"none", borderBottom:tab===id?`2px solid ${C.green}`:"2px solid transparent", cursor:"pointer" }}>{lbl}</button>
+        {[["board","🏆 Standings"],["scorecard","📋 Scorecard"],["top10","⭐ Top 10"],["skins","💰 Skins"]].map(([id,lbl])=>(
+          <button key={id} onClick={()=>setTab(id)} style={{ flex:1, padding:"10px 2px", fontSize:11, fontWeight:tab===id?700:500, background:"transparent", color:tab===id?C.green:C.muted, border:"none", borderBottom:tab===id?`2px solid ${C.green}`:"2px solid transparent", cursor:"pointer" }}>{lbl}</button>
         ))}
       </div>
 
@@ -213,6 +214,7 @@ export default function TourneySpectator({ tourney: initialTourney, onBack }) {
             </div>
           );
         })()}
+        {tab==="skins"&&<SkinsTab teams={tourney.teams||[]} course={course} holePars={tourney.hole_pars||{}} skinsEnabled={tourney.skins_enabled===true} bigBoyEnabled={tourney.big_boy_enabled===true}/>}
       </div>
     </div>
   );
