@@ -1390,10 +1390,10 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
                   {[3,4].map(p=>(
                     <button key={p} onClick={()=>setHolePars(prev=>({...prev,4:p}))}
                       style={{
-                        flex:1,padding:"14px",
-                        background:(holePars[4]??3)===p?C.green:"rgba(255,255,255,0.08)",
+                        flex:1,padding:"16px",
+                        background:(holePars[4]??3)===p?C.green:"#1a2a1a",
                         color:(holePars[4]??3)===p?"#0a1a0f":"#ffffff",
-                        border:"1px solid "+((holePars[4]??3)===p?C.green:"rgba(255,255,255,0.3)"),
+                        border:"2px solid "+((holePars[4]??3)===p?C.green:"rgba(255,255,255,0.3)"),
                         borderRadius:10,fontSize:16,fontWeight:(holePars[4]??3)===p?800:600,cursor:"pointer"
                       }}>
                       Par {p}{p===3?" ✓ default":""}
