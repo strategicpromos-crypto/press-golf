@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { sb } from "./supabase.js";
 import { COURSES } from "./golf.js";
-import { SkinsTab } from "./skins.js";
+import { SkinsTab } from "./skins.jsx";
 
 const C = {
   bg:"#080f0a", surface:"#0e1a10", card:"#121e14",
