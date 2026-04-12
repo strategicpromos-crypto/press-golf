@@ -765,6 +765,21 @@ export default function TeamTournament({onBack, user}){
           </div>
         </div>
 
+        {/* Hole dot selector — tap any hole to jump there */}
+        <div style={{display:"flex",overflowX:"auto",gap:6,padding:"10px 12px 6px",borderBottom:"none"}}>
+          {course.holes.map(h=>{
+            const hasScore=teams.some(t=>Object.values(t.scores||{}).some(ps=>ps?.[h.hole]!==undefined&&ps?.[h.hole]!==null));
+            return(
+              <button key={h.hole} onClick={()=>setCurrentHole(h.hole)} style={{
+                flexShrink:0,width:36,height:36,borderRadius:"50%",fontSize:12,fontWeight:700,cursor:"pointer",
+                background:h.hole===currentHole?C.gold:hasScore?"rgba(123,180,80,0.15)":C.dim,
+                color:h.hole===currentHole?"#0a1a0f":hasScore?C.green:C.muted,
+                border:"1px solid "+(h.hole===currentHole?C.gold:hasScore?C.green:C.border)
+              }}>{h.hole}</button>
+            );
+          })}
+        </div>
+
         {/* Team tabs */}
         <div style={{display:"flex",overflowX:"auto",padding:"8px 12px",gap:8,borderBottom:"1px solid "+C.border}}>
           {teams.map((t,i)=>(
