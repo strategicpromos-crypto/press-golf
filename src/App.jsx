@@ -469,6 +469,74 @@ function AcceptInviteScreen({code,user}){
   );
 }
 
+// ── SET NEW PASSWORD (after clicking reset link) ──────────────────────────────
+function SetNewPasswordScreen({onDone}){
+  const[pass,setPass]=useState("");
+  const[confirm,setConfirm]=useState("");
+  const[loading,setLoading]=useState(false);
+  const[err,setErr]=useState("");
+  const[done,setDone]=useState(false);
+
+  async function handleSet(){
+    setErr("");
+    if(pass.length<6){setErr("Password must be at least 6 characters.");return;}
+    if(pass!==confirm){setErr("Passwords don't match.");return;}
+    setLoading(true);
+    const{error}=await sb.auth.updateUser({password:pass});
+    setLoading(false);
+    if(error){setErr("Something went wrong: "+error.message);return;}
+    setDone(true);
+    setTimeout(()=>onDone(),1800);
+  }
+
+  const field={width:"100%",padding:"16px",background:"#0a1500",border:"1px solid rgba(123,180,80,0.25)",borderRadius:12,color:"#e8f0e9",fontSize:16,outline:"none",boxSizing:"border-box",fontFamily:"Georgia,serif"};
+
+  return(
+    <div style={{fontFamily:"Georgia,serif",minHeight:"100vh",background:C.bg,color:C.text,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"24px"}}>
+      <div style={{textAlign:"center",marginBottom:32}}>
+        <div style={{display:"inline-flex",alignItems:"center",justifyContent:"center",width:72,height:72,background:`linear-gradient(135deg,${C.green},#4a8030)`,borderRadius:20,marginBottom:14,boxShadow:`0 4px 24px ${C.green}44`}}>
+          <span style={{fontSize:36}}>⛳</span>
+        </div>
+        <div style={{fontSize:36,fontWeight:800,letterSpacing:-2,color:"#f0f7ec",lineHeight:1}}>Press</div>
+      </div>
+
+      <div style={{width:"100%",maxWidth:380,background:C.card,border:`1px solid ${C.border}`,borderRadius:20,padding:"28px 24px"}}>
+        {done?(
+          <div style={{textAlign:"center"}}>
+            <div style={{fontSize:32,marginBottom:12}}>✅</div>
+            <div style={{fontSize:20,fontWeight:800,marginBottom:8}}>Password updated!</div>
+            <div style={{fontSize:14,color:C.muted}}>Taking you to Press...</div>
+          </div>
+        ):(
+          <>
+            <div style={{fontSize:20,fontWeight:800,marginBottom:6}}>Set New Password</div>
+            <div style={{fontSize:13,color:C.muted,marginBottom:24}}>Choose a password you'll use to sign in to Press.</div>
+            <div style={{display:"flex",flexDirection:"column",gap:12}}>
+              <input
+                type="password" value={pass} onChange={e=>setPass(e.target.value)}
+                placeholder="New password (6+ characters)"
+                autoComplete="new-password" style={field}
+              />
+              <input
+                type="password" value={confirm} onChange={e=>setConfirm(e.target.value)}
+                placeholder="Confirm new password"
+                autoComplete="new-password" style={field}
+                onKeyDown={e=>e.key==="Enter"&&handleSet()}
+              />
+              {err&&<div style={{background:"rgba(224,80,80,0.1)",border:"1px solid rgba(224,80,80,0.3)",borderRadius:10,padding:"12px 14px",fontSize:14,color:C.red,lineHeight:1.5}}>{err}</div>}
+              <button
+                onClick={handleSet} disabled={loading}
+                style={{width:"100%",padding:"16px",background:loading?"#1a2a1a":C.green,color:loading?C.muted:"#0a1a0f",border:"none",borderRadius:12,fontSize:16,fontWeight:800,cursor:loading?"not-allowed":"pointer",fontFamily:"Georgia,serif"}}>
+                {loading?"Saving...":"Set Password & Sign In"}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── ROOT ──────────────────────────────────────────────────────────────────────
 export default function App(){
   const [user,setUser]=useState(null);
@@ -478,6 +546,7 @@ export default function App(){
   const [isPro,setIsPro]=useState(false);
   const [showProInfo,setShowProInfo]=useState(false);
   const [stripeSaving,setStripeSaving]=useState(false);
+  const [needsNewPassword,setNeedsNewPassword]=useState(false);
 
   const urlParams   = new URLSearchParams(window.location.search);
   const inviteCode  = urlParams.get("invite");
@@ -501,7 +570,17 @@ export default function App(){
       setUser(data.session?.user??null);
       setLoading(false);
     });
-    const{data:{subscription}}=sb.auth.onAuthStateChange((_e,session)=>{setUser(session?.user??null);});
+    const{data:{subscription}}=sb.auth.onAuthStateChange((event,session)=>{
+      if(event==="PASSWORD_RECOVERY"){
+        // User clicked the reset link — they're temporarily signed in
+        // but need to set a new password before proceeding
+        setUser(session?.user??null);
+        setNeedsNewPassword(true);
+        setLoading(false);
+      } else {
+        setUser(session?.user??null);
+      }
+    });
     return()=>subscription.unsubscribe();
   },[]);
 
@@ -547,6 +626,9 @@ export default function App(){
   if(roundParam && playerParam) return <OpponentScoreEntry roundId={roundParam} playerId={playerParam} onBack={()=>window.location.href="/"}/>;
 
   if(!user)return <AuthScreen onAuth={setUser} onPrivacy={()=>setShowPrivacy(true)}/>;
+
+  // PASSWORD RECOVERY — user clicked reset link, needs to set a new password
+  if(needsNewPassword) return <SetNewPasswordScreen onDone={()=>setNeedsNewPassword(false)}/>;
   // Tourney views — shown to captains/spectators who open a shared link
   if(tourneyView==="join"){
     return <TourneyLoader
@@ -687,6 +769,7 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
         const{data:oppData}=await sb.from("live_rounds")
           .select("id,course_name,opponents,current_hole,updated_at")
           .eq("status","active")
+          .neq("owner_id",user.id)          // never show rounds I created
           .contains("opponent_user_ids",[user.id])
           .order("updated_at",{ascending:false})
           .limit(1)
