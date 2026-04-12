@@ -14,12 +14,13 @@ function safeInt(v,f=0){const n=parseInt(v,10);return isNaN(n)?f:n;}
 function relLabel(d){if(d===null||d===undefined)return"—";if(d===0)return"E";return d>0?"+"+d:String(d);}
 function relColor(d){if(d===null||d===undefined)return C.muted;if(d<0)return C.green;if(d>0)return C.red;return C.muted;}
 
-function calcTeamScore(teamScores,teamSize,holeData,birdieBonus,countBalls){
+function calcTeamScore(teamScores,teamSize,holeData,birdieBonus,countBalls,holePars){
   const byHole={};
   let front=0,back=0,total=0;
-  const balls=countBalls||Math.min(teamSize,2);
-  const frontPar=holeData.filter(h=>h.side==="front").reduce((s,h)=>s+h.par*balls,0);
-  const backPar=holeData.filter(h=>h.side==="back").reduce((s,h)=>s+h.par*balls,0);
+  const balls=parseInt(countBalls)||Math.min(teamSize,2);
+  const hpar=(h)=>(holePars?.[h.hole]??h.par);
+  const frontPar=holeData.filter(h=>h.side==="front").reduce((s,h)=>s+hpar(h)*balls,0);
+  const backPar=holeData.filter(h=>h.side==="back").reduce((s,h)=>s+hpar(h)*balls,0);
   for(const h of holeData){
     const scores=[];
     for(let p=0;p<teamSize;p++){const s=teamScores?.[p]?.[h.hole];if(s!==undefined&&s!==null)scores.push(safeInt(s));}
@@ -27,8 +28,8 @@ function calcTeamScore(teamScores,teamSize,holeData,birdieBonus,countBalls){
     scores.sort((a,b)=>a-b);
     const bestN=scores.slice(0,balls);
     let raw=bestN.reduce((s,v)=>s+v,0);
-    if(birdieBonus){const eb=scores.slice(balls).filter(s=>s<=h.par-1);if(eb.length>0)raw-=eb.reduce((sum,s)=>sum+(h.par-s),0);}
-    byHole[h.hole]={raw,diff:raw-(h.par*balls),scored:true};
+    if(birdieBonus){const eb=scores.slice(balls).filter(s=>s<=hpar(h)-1);if(eb.length>0)raw-=eb.reduce((sum,s)=>sum+(hpar(h)-s),0);}
+    byHole[h.hole]={raw,diff:raw-(hpar(h)*balls),scored:true};
     if(h.side==="front")front+=raw;else back+=raw;total+=raw;
   }
   return{byHole,front,frontDiff:front-frontPar,back,backDiff:back-backPar,total,totalDiff:total-(frontPar+backPar)};
@@ -63,7 +64,7 @@ export default function TourneySpectator({ tourney: initialTourney, onBack }) {
   const board = (tourney?.teams || []).map((t,i) => ({
     ...t,
     color: t.color || TEAM_COLORS[i%TEAM_COLORS.length],
-    sc: calcTeamScore(t.scores||{}, t.size||4, course.holes, birdieBonus, countBalls)
+    sc: calcTeamScore(t.scores||{}, t.size||4, course.holes, birdieBonus, countBalls, tourney.hole_pars||{})
   })).sort((a,b) => a.sc.totalDiff - b.sc.totalDiff);
 
   const holesPlayed = course.holes.filter(h =>
