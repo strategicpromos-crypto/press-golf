@@ -233,7 +233,7 @@ export default function OpponentScoreEntry({ roundId, playerId }) {
   );
 
   const opp       = round?.opponents?.find(o=>o.playerId===playerId);
-  const partner   = round?.opponents?.find(o=>o.playerId!==playerId); // the person who created the round
+  const partnerName = round?.owner_name || "Partner";  // always the round creator's name
   const course    = COURSES[round?.course_id||"south-toledo"];
   const holeData  = course?.holes[currentHole-1];
   const myScore   = myScores[currentHole]??null;
@@ -302,7 +302,7 @@ export default function OpponentScoreEntry({ roundId, playerId }) {
       <div style={{background:C.card,borderBottom:`1px solid ${C.border}`,padding:"12px 16px"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
           <div>
-            <div style={{fontWeight:800,fontSize:15}}>{opp.name} <span style={{fontSize:11,color:C.muted,fontWeight:400}}>vs</span> {partner?.name||"Partner"}</div>
+            <div style={{fontWeight:800,fontSize:15}}>{opp.name} <span style={{fontSize:11,color:C.muted,fontWeight:400}}>vs</span> {partnerName}</div>
             <div style={{fontSize:11,color:C.muted}}>{round.course_name} · {holesPlayed} holes entered</div>
           </div>
           <div style={{display:"flex",gap:16}}>
@@ -343,7 +343,7 @@ export default function OpponentScoreEntry({ roundId, playerId }) {
             {/* Stroke indicator */}
             {(kenGetsStroke||partnerGetsStroke)&&(
               <div style={{background:"rgba(232,184,75,0.08)",border:`1px solid ${C.gold}44`,borderRadius:10,padding:"8px 14px",marginBottom:12,fontSize:12,color:C.gold,fontWeight:600}}>
-                ⭐ {kenGetsStroke?"You get a stroke this hole":`${partner?.name||"Partner"} gets a stroke this hole`}
+                ⭐ {kenGetsStroke?"You get a stroke this hole":`${partnerName} gets a stroke this hole`}
               </div>
             )}
 
@@ -368,7 +368,7 @@ export default function OpponentScoreEntry({ roundId, playerId }) {
             {/* Partner score (read only, live) */}
             <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:"12px 16px",marginBottom:16,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <div>
-                <div style={{fontSize:12,color:C.muted}}>{partner?.name||"Partner"}'s score this hole</div>
+                <div style={{fontSize:12,color:C.muted}}>{partnerName}'s score this hole</div>
                 {partnerGetsStroke&&<div style={{fontSize:11,color:C.gold}}>⭐ Gets a stroke</div>}
               </div>
               <div style={{fontSize:36,fontWeight:800,color:partnerScore!==null?scoreColor(partnerScore,holeData.par):C.dim}}>
@@ -392,7 +392,7 @@ export default function OpponentScoreEntry({ roundId, playerId }) {
             {isLastHole&&myScore!==null&&(
               <div style={{marginTop:12,background:"rgba(232,184,75,0.08)",border:`1px solid ${C.gold}33`,borderRadius:12,padding:"12px 16px",textAlign:"center"}}>
                 <div style={{fontSize:13,color:C.gold,fontWeight:600,marginBottom:4}}>Round finished!</div>
-                <div style={{fontSize:12,color:C.muted}}>Your scores have been sent to {partner?.name||"your partner"}. Check the Match tab for final standings.</div>
+                <div style={{fontSize:12,color:C.muted}}>Your scores have been sent to {partnerName}. Check the Match tab for final standings.</div>
               </div>
             )}
           </>
@@ -441,7 +441,7 @@ export default function OpponentScoreEntry({ roundId, playerId }) {
                     })}
                   </tr>
                   <tr style={{borderTop:`1px solid ${C.dim}`}}>
-                    <td style={{padding:"4px 6px",fontWeight:700,color:C.muted,fontSize:12}}>{partner?.name||"Partner"}</td>
+                    <td style={{padding:"4px 6px",fontWeight:700,color:C.muted,fontSize:12}}>{partnerName}</td>
                     {course.holes.map(h=>{
                       const s=partnerScores[h.hole]??null;
                       const stroke=strokeHoles.includes(h.hole)&&opp.strokes<0;
