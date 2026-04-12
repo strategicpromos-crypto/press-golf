@@ -14,13 +14,19 @@ function safeInt(v,f=0){const n=parseInt(v,10);return isNaN(n)?f:n;}
 function relLabel(d){if(d===null||d===undefined)return"—";if(d===0)return"E";return d>0?"+"+d:String(d);}
 function relColor(d){if(d===null||d===undefined)return C.muted;if(d<0)return C.green;if(d>0)return C.red;return C.muted;}
 
-function calcTeamScore(teamScores,teamSize,holeData,birdieBonus,countBalls,holePars){
+function calcTeamScore(teamScores,teamSize,holeData,birdieBonus,ballsByPar,holePars){
+  const getBalls=(par)=>{
+    if(typeof ballsByPar==="object"&&ballsByPar!==null&&!Array.isArray(ballsByPar)){
+      return parseInt(ballsByPar[par])||parseInt(ballsByPar[4])||2;
+    }
+    return parseInt(ballsByPar)||Math.min(teamSize,2);
+  };
   const byHole={};
   let front=0,back=0,total=0;
-  let frontPar=0,backPar=0;  // only accumulate par for SCORED holes
-  const balls=parseInt(countBalls)||Math.min(teamSize,2);
+  let frontPar=0,backPar=0;
   const hpar=(h)=>(holePars?.[h.hole]??h.par);
   for(const h of holeData){
+    const balls=getBalls(hpar(h));
     const scores=[];
     for(let p=0;p<teamSize;p++){const s=teamScores?.[p]?.[h.hole];if(s!==undefined&&s!==null)scores.push(safeInt(s));}
     if(scores.length===0){byHole[h.hole]=null;continue;}
@@ -45,7 +51,7 @@ export default function TourneySpectator({ tourney: initialTourney, onBack }) {
 
   const course      = COURSES[tourney?.course_id || "south-toledo"];
   const birdieBonus = tourney?.birdie_bonus !== false;
-  const countBalls  = tourney?.count_balls || 2;
+  const ballsByPar  = tourney?.ball_count_by_par||(tourney?.count_balls?{3:tourney.count_balls,4:tourney.count_balls,5:tourney.count_balls}:{3:2,4:2,5:2});
 
   useEffect(()=>{
     // Real-time subscription — updates instantly when director or captains enter scores
@@ -66,7 +72,7 @@ export default function TourneySpectator({ tourney: initialTourney, onBack }) {
   const board = (tourney?.teams || []).map((t,i) => ({
     ...t,
     color: t.color || TEAM_COLORS[i%TEAM_COLORS.length],
-    sc: calcTeamScore(t.scores||{}, t.size||4, course.holes, birdieBonus, countBalls, tourney.hole_pars||{})
+    sc: calcTeamScore(t.scores||{}, t.size||4, course.holes, birdieBonus, ballsByPar, tourney.hole_pars||{})
   })).sort((a,b) => a.sc.totalDiff - b.sc.totalDiff);
 
   const holesPlayed = course.holes.filter(h =>
