@@ -203,20 +203,16 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
       {/* Header */}
       <div style={{ background:`linear-gradient(180deg,${C.card} 0%,transparent 100%)`, padding:"44px 16px 12px" }}>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
-          <button onClick={()=>currentHole>1?setCurrentHole(h=>h-1):null}
-            style={{ background:"rgba(123,180,80,0.15)", border:`1px solid ${C.green}`, color:currentHole>1?C.green:C.dim, fontSize:13, cursor:currentHole>1?"pointer":"default", padding:"6px 14px", borderRadius:16, fontWeight:700 }}>‹</button>
+          <button onClick={onBack}
+            style={{ background:"rgba(123,180,80,0.15)", border:`1px solid ${C.green}`, color:C.green, fontSize:13, cursor:"pointer", padding:"6px 14px", borderRadius:16, fontWeight:700 }}>‹ Back</button>
           <div style={{ textAlign:"center" }}>
             <div style={{ fontSize:11, color:C.muted, letterSpacing:2, textTransform:"uppercase" }}>Hole</div>
             <div style={{ fontSize:48, fontWeight:800, lineHeight:1 }}>{currentHole}</div>
             <div style={{ fontSize:12, color:C.green, fontWeight:600 }}>Par {effPar}{effPar!==holeData.par?" ⚡":""} · Hdcp {holeData.hdcp}</div>
             {saveStatus && <div style={{ fontSize:10, color:saveStatus==="saving"?C.gold:C.green, marginTop:2 }}>{saveStatus==="saving"?"💾 Saving...":"✓ Saved"}</div>}
           </div>
-          <div style={{ display:"flex", flexDirection:"column", gap:6, alignItems:"flex-end" }}>
-            <button onClick={()=>setShowSummary(true)}
-              style={{ background:"rgba(232,184,75,0.15)", border:`1px solid ${C.gold}`, color:C.gold, fontSize:13, cursor:"pointer", padding:"8px 16px", borderRadius:12, fontWeight:700 }}>📊 Leaderboard</button>
-            <button onClick={()=>setShowCaptainSettings(true)}
-              style={{ background:"rgba(123,180,80,0.15)", border:`1px solid ${C.green}`, color:C.green, fontSize:15, cursor:"pointer", padding:"12px 20px", borderRadius:12, fontWeight:700 }}>⚙️ Settings</button>
-          </div>
+          <button onClick={()=>setShowCaptainSettings(true)}
+            style={{ background:"rgba(123,180,80,0.15)", border:`1px solid ${C.green}`, color:C.green, fontSize:15, cursor:"pointer", padding:"12px 20px", borderRadius:12, fontWeight:700 }}>⚙️ Settings</button>
         </div>
         {/* Progress */}
         <div style={{ display:"flex", gap:2 }}>
@@ -414,16 +410,18 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
         })()}
 
         {/* Next hole */}
+        <button onClick={()=>setShowSummary(true)} style={{
+          width:"100%",padding:"14px",background:"rgba(232,184,75,0.12)",
+          color:C.gold,border:"1px solid "+C.gold+"44",borderRadius:12,
+          fontSize:15,fontWeight:700,cursor:"pointer",marginBottom:10
+        }}>📊 Leaderboard</button>
+
         <button onClick={()=>!isLastHole&&setCurrentHole(h=>h+1)} disabled={isLastHole} style={{
           width:"100%",padding:"18px",background:isLastHole?"#1a2a1a":C.green,
           color:isLastHole?C.muted:"#0a1a0f",border:"none",borderRadius:14,
           fontSize:17,fontWeight:800,cursor:isLastHole?"not-allowed":"pointer",marginBottom:12
         }}>
           {isLastHole?"Round Complete! ⛳":"Next — Hole "+(currentHole+1)}
-        </button>
-
-        <button onClick={onBack} style={{ width:"100%",padding:"14px",background:"transparent",color:C.muted,border:`1px solid ${C.border}`,borderRadius:12,fontSize:14,fontWeight:600,cursor:"pointer" }}>
-          ← Back to Tournament
         </button>
       </div>
 
