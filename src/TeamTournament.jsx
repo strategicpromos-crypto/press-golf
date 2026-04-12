@@ -141,7 +141,7 @@ function NumStepper({value,onChange,min=0,max=99,label}){
   );
 }
 
-export default function TeamTournament({onBack, user}){
+export default function TeamTournament({onBack, user, onDelete}){
   const[screen,setScreen]=useState("home");
   const[courseId,setCourseId]=useState("south-toledo");
   const[birdieBonus,setBirdieBonus]=useState(true);
@@ -291,9 +291,16 @@ export default function TeamTournament({onBack, user}){
     if(deleteInput.toUpperCase()!=="DELETE")return;
     await sb.from("team_tournaments").delete().eq("id",confirmDelete);
     setSavedTourneys(prev=>prev.filter(t=>t.id!==confirmDelete));
-    if(tourneyId===confirmDelete){setTourneyId(null);setTeams([]);setDirectorCode(null);}
+    // Clear ALL active tournament state so home screen updates instantly
+    setTourneyId(null);
+    setTeams([]);
+    setDirectorCode(null);
+    setCurrentHole(1);
     setConfirmDelete(null);
     setDeleteInput("");
+    // Tell App.jsx to clear the "Tournament In Progress" banner immediately
+    if(onDelete) onDelete();
+    setScreen("home");
   }
 
   function buildTeams(n,existing=[]){
