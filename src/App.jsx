@@ -1175,7 +1175,7 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
   );
 
   if(view==="tournament") return(
-    <TeamTournament user={user} onBack={()=>setView("roster")}/>
+    <TeamTournament user={user} onBack={()=>setView("roster")} onDelete={()=>setActiveTourney(null)}/>
   );
 
   if(view==="liveround") return(
