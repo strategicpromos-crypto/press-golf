@@ -88,7 +88,7 @@ const selStyle = {
 function scoreName(score, par) {
   if (score === par - 2) return "Eagle 🦅";
   if (score === par - 1) return "Birdie 🐦";
-  if (score === par)     return "Par v";
+  if (score === par)     return "Par";
   if (score === par + 1) return "Bogey";
   if (score === par + 2) return "Double 😬";
   return score > par ? "+" + (score - par) : "" + (score - par);
@@ -817,15 +817,12 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
     // F9 / B9 / TOT standing labels for the bar — use first opponent for now
     const firstOpp = opponents[0];
     const firstTally = firstOpp ? getTally(scores, course, firstOpp, courseId) : null;
-    const fLabel = firstTally
-      ? (firstTally.lastFrontDiff === 0 ? "A/S" : firstTally.lastFrontDiff > 0 ? "+" + firstTally.lastFrontDiff : String(firstTally.lastFrontDiff))
-      : "A/S";
-    const bLabel = firstTally
-      ? (firstTally.lastBackDiff === 0 ? "A/S" : firstTally.lastBackDiff > 0 ? "+" + firstTally.lastBackDiff : String(firstTally.lastBackDiff))
-      : "A/S";
-    const totLabel = firstTally
-      ? (firstTally.totalDiff === 0 ? "A/S" : firstTally.totalDiff > 0 ? "+" + firstTally.totalDiff : String(firstTally.totalDiff))
-      : "A/S";
+    const fDiff = firstTally?.lastFrontDiff ?? 0;
+    const bDiff = firstTally?.lastBackDiff  ?? 0;
+    const tDiff = fDiff + bDiff;
+    const fLabel = !firstTally ? "A/S" : fDiff===0?"A/S":fDiff>0?"+"+fDiff:String(fDiff);
+    const bLabel = !firstTally ? "A/S" : bDiff===0?"A/S":bDiff>0?"+"+bDiff:String(bDiff);
+    const totLabel = !firstTally ? "A/S" : tDiff===0?"A/S":tDiff>0?"+"+tDiff:String(tDiff);
 
     return (
       <>
@@ -874,10 +871,10 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
               </div>
               {firstOpp && (
                 <div style={{display:"flex",gap:14}}>
-                  {[["F9",fLabel],["B9",bLabel],["TOT",totLabel]].map(([lbl,val])=>(
+                  {[["F9",fLabel,fDiff],["B9",bLabel,bDiff],["TOT",totLabel,tDiff]].map(([lbl,val,diff])=>(
                     <div key={lbl} style={{textAlign:"center"}}>
                       <div style={{fontSize:9,color:C.muted,letterSpacing:1}}>{lbl}</div>
-                      <div style={{fontSize:15,fontWeight:800,color:val==="A/S"?C.muted:val.startsWith("+")?C.green:C.red}}>{val}</div>
+                      <div style={{fontSize:15,fontWeight:800,color:val==="A/S"?C.muted:diff>0?C.green:C.red}}>{val}</div>
                     </div>
                   ))}
                 </div>
@@ -1062,7 +1059,7 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
                       {[
                         ["F9", tally.lastFrontDiff],
                         ["B9", tally.lastBackDiff],
-                        ["Total", tally.totalDiff],
+                        ["Total", (tally.lastFrontDiff??0)+(tally.lastBackDiff??0)],
                       ].map(([lbl,diff],i,arr)=>{
                         const label = diff===0?"A/S":diff>0?"You "+diff+" Up":opp.name.split(" ")[0]+" "+Math.abs(diff)+" Up";
                         const color = diff>0?C.green:diff<0?C.red:C.muted;
