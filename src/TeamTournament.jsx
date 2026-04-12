@@ -84,13 +84,21 @@ function Top10Tab({ teams, course }){
   );
 }
 
-function calcTeamScore(teamScores,teamSize,holeData,birdieBonus,countBalls,holePars){
+function calcTeamScore(teamScores,teamSize,holeData,birdieBonus,ballsByPar,holePars){
+  // ballsByPar: {3:N, 4:N, 5:N} — balls counted per hole by par value
+  // Falls back to legacy single number if a plain int is passed
+  const getBalls=(par)=>{
+    if(typeof ballsByPar==="object"&&ballsByPar!==null&&!Array.isArray(ballsByPar)){
+      return parseInt(ballsByPar[par])||parseInt(ballsByPar[4])||2;
+    }
+    return parseInt(ballsByPar)||Math.min(teamSize,2);
+  };
   const byHole={};
   let front=0,back=0,total=0;
-  let frontPar=0,backPar=0;  // only accumulate par for SCORED holes
-  const balls=parseInt(countBalls)||Math.min(teamSize,2);
+  let frontPar=0,backPar=0;
   const hpar=(h)=>(holePars?.[h.hole]??h.par);
   for(const h of holeData){
+    const balls=getBalls(hpar(h));
     const scores=[];
     for(let p=0;p<teamSize;p++){const s=teamScores?.[p]?.[h.hole];if(s!==undefined&&s!==null)scores.push(safeInt(s));}
     if(scores.length===0){byHole[h.hole]=null;continue;}
@@ -103,13 +111,13 @@ function calcTeamScore(teamScores,teamSize,holeData,birdieBonus,countBalls,holeP
       if(extraBirdies.length>0){bonusApplied=extraBirdies.reduce((sum,s)=>sum+(hpar(h)-s),0);raw-=bonusApplied;}
     }
     const diff=raw-(hpar(h)*balls);
-    byHole[h.hole]={raw,diff,bonusApplied,scored:true};
+    byHole[h.hole]={raw,diff,bonusApplied,scored:true,balls};
     if(h.side==="front"){front+=raw;frontPar+=hpar(h)*balls;}
     else{back+=raw;backPar+=hpar(h)*balls;}
     total+=raw;
   }
   const totalPar=frontPar+backPar;
-  return{byHole,front,frontDiff:front-frontPar,back,backDiff:back-backPar,total,totalDiff:total-totalPar,frontPar,backPar,totalPar,countBalls:balls};
+  return{byHole,front,frontDiff:front-frontPar,back,backDiff:back-backPar,total,totalDiff:total-totalPar,frontPar,backPar,totalPar};
 }
 
 function BigBtn({children,onClick,color=C.green,disabled=false,style={}}){
@@ -137,7 +145,7 @@ export default function TeamTournament({onBack, user}){
   const[screen,setScreen]=useState("home");
   const[courseId,setCourseId]=useState("south-toledo");
   const[birdieBonus,setBirdieBonus]=useState(true);
-  const[countBalls,setCountBalls]=useState(2);
+  const[ballsByPar,setBallsByPar]=useState({3:2,4:2,5:2}); // balls counted per hole by par
   const[holePars,setHolePars]=useState({});        // override pars: {4:4} = hole 4 → par 4
   const[numTeams,setNumTeams]=useState(8);
   const[activeTeam,setActiveTeam]=useState(0);
@@ -196,7 +204,7 @@ export default function TeamTournament({onBack, user}){
         teams,
         course_id:courseId,
         birdie_bonus:birdieBonus,
-        count_balls:countBalls,
+        ball_count_by_par:ballsByPar,
         hole_pars:holePars,
         current_hole:currentHole,
         status:screen==="scoring"?"active":"setup",
@@ -234,7 +242,7 @@ export default function TeamTournament({onBack, user}){
       name,
       course_id:courseId,
       birdie_bonus:birdieBonus,
-      count_balls:countBalls,
+      ball_count_by_par:ballsByPar,
       hole_pars:holePars,
       teams:teamsWithPins,
       current_hole:1,
@@ -258,7 +266,7 @@ export default function TeamTournament({onBack, user}){
       setTourneyId(data.id);
       setCourseId(data.course_id||"south-toledo");
       setBirdieBonus(data.birdie_bonus!==false);
-      setCountBalls(data.count_balls||2);
+      setBallsByPar(data.ball_count_by_par||(data.count_balls?{3:data.count_balls,4:data.count_balls,5:data.count_balls}:{3:2,4:2,5:2}));
       setHolePars(data.hole_pars||{});
       setTeams(data.teams||[]);
       setNumTeams((data.teams||[]).length);
@@ -310,7 +318,7 @@ export default function TeamTournament({onBack, user}){
   }
 
   function getLeaderboard(){
-    return teams.map(t=>({...t,sc:calcTeamScore(t.scores,t.size,course.holes,birdieBonus,countBalls,holePars)}))
+    return teams.map(t=>({...t,sc:calcTeamScore(t.scores,t.size,course.holes,birdieBonus,ballsByPar,holePars)}))
       .sort((a,b)=>a.sc.totalDiff-b.sc.totalDiff);
   }
 
@@ -555,7 +563,7 @@ export default function TeamTournament({onBack, user}){
               <div style={{display:"flex",gap:8}}>
                 {[3,4].map(p=>(
                   <button key={p} onClick={()=>setHolePars(prev=>({...prev,4:p}))}
-                    style={{flex:1,padding:"14px",background:(holePars[4]??3)===p?C.green:C.surface,color:(holePars[4]??3)===p?"#0a1a0f":C.muted,border:"1px solid "+((holePars[4]??3)===p?C.green:C.border),borderRadius:10,fontSize:16,fontWeight:(holePars[4]??3)===p?800:500,cursor:"pointer"}}>
+                    style={{flex:1,padding:"14px",background:(holePars[4]??3)===p?C.green:"rgba(255,255,255,0.08)",color:(holePars[4]??3)===p?"#0a1a0f":"#ffffff",border:"1px solid "+((holePars[4]??3)===p?C.green:"rgba(255,255,255,0.3)"),borderRadius:10,fontSize:16,fontWeight:(holePars[4]??3)===p?800:500,cursor:"pointer"}}>
                     Par {p}{p===3?" (default)":""}
                   </button>
                 ))}
@@ -581,30 +589,39 @@ export default function TeamTournament({onBack, user}){
             </div>
           </div>
 
-          {/* Scores to count per hole */}
+          {/* Scores to count per hole — by par */}
           <div style={{background:C.card,border:"1px solid "+C.border,borderRadius:12,padding:"14px 16px",marginBottom:16}}>
-            <div style={{marginBottom:10}}>
-              <div style={{fontWeight:700,fontSize:15,marginBottom:2}}>Scores That Count Per Hole</div>
-              <div style={{fontSize:11,color:C.muted}}>
-                {countBalls===1?"Low ball — 1 best score counts":countBalls===2?"2 best ball — 2 lowest scores count":`${countBalls} best ball — ${countBalls} lowest scores count`}
+            <div style={{fontWeight:700,fontSize:15,marginBottom:2}}>Scores That Count Per Hole</div>
+            <div style={{fontSize:11,color:C.muted,marginBottom:12}}>Set per par value. Tap a number to change. Quick-set all at once with the bottom row.</div>
+            {[3,4,5].map(par=>(
+              <div key={par} style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+                <div style={{width:44,fontSize:13,fontWeight:700,color:C.muted,flexShrink:0}}>Par {par}</div>
+                <div style={{display:"flex",gap:6,flex:1}}>
+                  {[1,2,3,4,5].map(n=>(
+                    <button key={n} onClick={()=>setBallsByPar(prev=>({...prev,[par]:n}))} style={{
+                      flex:1,padding:"10px 4px",
+                      background:ballsByPar[par]===n?C.green:C.surface,
+                      color:ballsByPar[par]===n?"#0a1a0f":C.muted,
+                      border:"1px solid "+(ballsByPar[par]===n?C.green:C.border),
+                      borderRadius:8,fontSize:14,fontWeight:ballsByPar[par]===n?800:500,cursor:"pointer"
+                    }}>{n}</button>
+                  ))}
+                </div>
               </div>
-            </div>
-            <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-              {[1,2,3,4,5].map(n=>(
-                <button key={n} onClick={()=>setCountBalls(n)} style={{
-                  flex:1, minWidth:48, padding:"12px 4px",
-                  background:countBalls===n?C.green:C.surface,
-                  color:countBalls===n?"#0a1a0f":C.muted,
-                  border:`1px solid ${countBalls===n?C.green:C.border}`,
-                  borderRadius:10, fontSize:15, fontWeight:countBalls===n?800:500,
-                  cursor:"pointer"
-                }}>
-                  {n}
-                </button>
-              ))}
-            </div>
-            <div style={{fontSize:10,color:C.dim,marginTop:8,textAlign:"center"}}>
-              Tap to select how many scores count from each team on every hole
+            ))}
+            <div style={{borderTop:"1px solid "+C.border,paddingTop:10,marginTop:4}}>
+              <div style={{fontSize:10,color:C.dim,marginBottom:8,textAlign:"center"}}>Quick-set all pars at once</div>
+              <div style={{display:"flex",gap:6}}>
+                {[1,2,3,4,5].map(n=>(
+                  <button key={n} onClick={()=>setBallsByPar({3:n,4:n,5:n})} style={{
+                    flex:1,padding:"10px 4px",
+                    background:ballsByPar[3]===n&&ballsByPar[4]===n&&ballsByPar[5]===n?C.gold:C.surface,
+                    color:ballsByPar[3]===n&&ballsByPar[4]===n&&ballsByPar[5]===n?"#0a1a0f":C.muted,
+                    border:"1px solid "+(ballsByPar[3]===n&&ballsByPar[4]===n&&ballsByPar[5]===n?C.gold:C.border),
+                    borderRadius:8,fontSize:14,fontWeight:600,cursor:"pointer"
+                  }}>{n}</button>
+                ))}
+              </div>
             </div>
           </div>
 
@@ -705,10 +722,11 @@ export default function TeamTournament({onBack, user}){
   // SCORING
   if(screen==="scoring"&&holeData){
     const team=teams[activeTeam];
-    const sc=calcTeamScore(team.scores,team.size,course.holes,birdieBonus,countBalls,holePars);
+    const sc=calcTeamScore(team.scores,team.size,course.holes,birdieBonus,ballsByPar,holePars);
     const thisHoleScores=Array.from({length:team.size},(_,j)=>({j,s:getPlayerScore(team,j,currentHole)})).filter(x=>x.s!==null).sort((a,b)=>a.s-b.s);
-    const effPar = holePars[currentHole] ?? holeData.par;  // effective par for this hole
-    const best2Set=new Set(thisHoleScores.slice(0,countBalls).map(x=>x.j));
+    const effPar = holePars[currentHole] ?? holeData.par;
+    const ballsThisHole = (typeof ballsByPar==="object"?parseInt(ballsByPar[effPar])||2:parseInt(ballsByPar)||2);
+    const best2Set=new Set(thisHoleScores.slice(0,ballsThisHole).map(x=>x.j));
     const birdieCount=thisHoleScores.filter(x=>x.s<=effPar-1).length;
     const bonusThisHole=birdieBonus&&birdieCount>=3?birdieCount-2:0;
 
@@ -805,14 +823,14 @@ export default function TeamTournament({onBack, user}){
 
           {/* This hole total */}
           {thisHoleScores.length>=1&&(()=>{
-            const best2scores=thisHoleScores.slice(0,countBalls).map(x=>x.s);
+            const best2scores=thisHoleScores.slice(0,ballsThisHole).map(x=>x.s);
             const raw=best2scores.reduce((s,v)=>s+v,0)-bonusThisHole;
-            const d=raw-(effPar*countBalls);
+            const d=raw-(effPar*ballsThisHole);
             return(
               <div style={{background:"rgba(123,180,80,0.06)",border:"1px solid rgba(123,180,80,0.2)",borderRadius:10,padding:"12px 16px",marginBottom:14}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                   <div>
-                    <div style={{fontSize:12,color:C.muted}}>{countBalls} Best Ball this hole</div>
+                    <div style={{fontSize:12,color:C.muted}}>{ballsThisHole} Best Ball this hole</div>
                     {bonusThisHole>0&&<div style={{fontSize:11,color:C.green}}>+ birdie bonus −{bonusThisHole}</div>}
                   </div>
                   <div style={{textAlign:"right"}}>
@@ -842,9 +860,10 @@ export default function TeamTournament({onBack, user}){
 
         {/* ── DIRECTOR SETTINGS OVERLAY ────────────────────────────────── */}
         {showSettings&&(()=>{
-          // countBalls guard — check any team would be under-counted
+          // guard — check any team has fewer players than max balls being counted
+          const maxBalls = Math.max(ballsByPar[3]||2, ballsByPar[4]||2, ballsByPar[5]||2);
           const cbWarnings = teams
-            .filter(t=>(t.size||2) < countBalls)
+            .filter(t=>(t.size||2) < maxBalls)
             .map(t=>t.name||"A team");
 
           return(
@@ -856,24 +875,43 @@ export default function TeamTournament({onBack, user}){
               </div>
               <div style={{fontSize:12,color:C.muted,marginBottom:20}}>Changes save automatically and sync to all captains and spectators in real time.</div>
 
-              {/* ── BALL COUNT ─────────────────────────────────────────── */}
+              {/* ── BALL COUNT BY PAR ──────────────────────────────────── */}
               <div style={{background:C.card,border:"1px solid "+C.border,borderRadius:12,padding:"14px 16px",marginBottom:12}}>
                 <div style={{fontWeight:700,fontSize:14,marginBottom:4}}>Balls Counted Per Hole</div>
-                <div style={{fontSize:11,color:C.muted,marginBottom:10}}>Global setting — applies to all teams. All existing scores recalculate instantly.</div>
-                <div style={{display:"flex",gap:8,marginBottom:cbWarnings.length>0?8:0}}>
-                  {[1,2,3,4,5].map(n=>(
-                    <button key={n} onClick={()=>setCountBalls(n)} style={{
-                      flex:1,padding:"14px 4px",
-                      background:countBalls===n?C.green:C.surface,
-                      color:countBalls===n?"#0a1a0f":C.muted,
-                      border:"1px solid "+(countBalls===n?C.green:C.border),
-                      borderRadius:10,fontSize:16,fontWeight:countBalls===n?800:500,cursor:"pointer"
-                    }}>{n}</button>
-                  ))}
+                <div style={{fontSize:11,color:C.muted,marginBottom:12}}>Set per par value. Recalculates all scores instantly.</div>
+                {[3,4,5].map(par=>(
+                  <div key={par} style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+                    <div style={{width:44,fontSize:13,fontWeight:700,color:C.muted,flexShrink:0}}>Par {par}</div>
+                    <div style={{display:"flex",gap:6,flex:1}}>
+                      {[1,2,3,4,5].map(n=>(
+                        <button key={n} onClick={()=>setBallsByPar(prev=>({...prev,[par]:n}))} style={{
+                          flex:1,padding:"10px 4px",
+                          background:ballsByPar[par]===n?C.green:C.surface,
+                          color:ballsByPar[par]===n?"#0a1a0f":C.muted,
+                          border:"1px solid "+(ballsByPar[par]===n?C.green:C.border),
+                          borderRadius:8,fontSize:14,fontWeight:ballsByPar[par]===n?800:500,cursor:"pointer"
+                        }}>{n}</button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+                <div style={{borderTop:"1px solid "+C.border,paddingTop:10,marginTop:4}}>
+                  <div style={{fontSize:10,color:C.dim,marginBottom:8,textAlign:"center"}}>Quick-set all pars at once</div>
+                  <div style={{display:"flex",gap:6}}>
+                    {[1,2,3,4,5].map(n=>(
+                      <button key={n} onClick={()=>setBallsByPar({3:n,4:n,5:n})} style={{
+                        flex:1,padding:"10px 4px",
+                        background:ballsByPar[3]===n&&ballsByPar[4]===n&&ballsByPar[5]===n?C.gold:C.surface,
+                        color:ballsByPar[3]===n&&ballsByPar[4]===n&&ballsByPar[5]===n?"#0a1a0f":C.muted,
+                        border:"1px solid "+(ballsByPar[3]===n&&ballsByPar[4]===n&&ballsByPar[5]===n?C.gold:C.border),
+                        borderRadius:8,fontSize:14,fontWeight:600,cursor:"pointer"
+                      }}>{n}</button>
+                    ))}
+                  </div>
                 </div>
                 {cbWarnings.length>0&&(
-                  <div style={{background:"rgba(224,80,80,0.1)",border:"1px solid rgba(224,80,80,0.3)",borderRadius:8,padding:"10px 12px",fontSize:12,color:C.red}}>
-                    ⚠️ {cbWarnings.join(", ")} {cbWarnings.length===1?"has":"have"} fewer players than balls to count. Increase team size or reduce ball count.
+                  <div style={{background:"rgba(224,80,80,0.1)",border:"1px solid rgba(224,80,80,0.3)",borderRadius:8,padding:"10px 12px",fontSize:12,color:C.red,marginTop:10}}>
+                    ⚠️ {cbWarnings.join(", ")} {cbWarnings.length===1?"has":"have"} fewer players than balls to count.
                   </div>
                 )}
               </div>
@@ -901,9 +939,9 @@ export default function TeamTournament({onBack, user}){
                       <button key={p} onClick={()=>setHolePars(prev=>({...prev,4:p}))}
                         style={{
                           flex:1,padding:"14px",
-                          background:(holePars[4]??3)===p?C.green:C.surface,
-                          color:(holePars[4]??3)===p?"#0a1a0f":C.muted,
-                          border:"1px solid "+((holePars[4]??3)===p?C.green:C.border),
+                          background:(holePars[4]??3)===p?C.green:"rgba(255,255,255,0.08)",
+                          color:(holePars[4]??3)===p?"#0a1a0f":"#ffffff",
+                          border:"1px solid "+((holePars[4]??3)===p?C.green:"rgba(255,255,255,0.3)"),
                           borderRadius:10,fontSize:16,fontWeight:(holePars[4]??3)===p?800:500,cursor:"pointer"}}>
                         Par {p}{p===3?" ✓ default":""}
                       </button>
@@ -920,7 +958,7 @@ export default function TeamTournament({onBack, user}){
               {teams.map((team,i)=>{
                 const size = team.size||2;
                 const spd  = team.strokesPerSide||0;
-                const sizeWarning = size < countBalls;
+                const sizeWarning = size < Math.max(ballsByPar[3]||2,ballsByPar[4]||2,ballsByPar[5]||2);
                 return(
                   <div key={i} style={{background:C.card,border:"1px solid "+(sizeWarning?C.red+"44":C.border),borderRadius:14,padding:"14px",marginBottom:12}}>
 
@@ -1029,7 +1067,12 @@ export default function TeamTournament({onBack, user}){
           <button onClick={()=>setScreen("scoring")} style={{background:"rgba(123,180,80,0.15)",border:"1px solid "+C.green,color:C.green,fontSize:13,cursor:"pointer",padding:"8px 16px",borderRadius:20,fontWeight:700,marginBottom:12,display:"block"}}>‹ Back to Scoring</button>
           <div style={{textAlign:"center"}}>
             <div style={{fontSize:26,fontWeight:800}}>🏆 {course.name}</div>
-            <div style={{fontSize:12,color:C.muted,marginTop:4}}>{countBalls} Best Ball{birdieBonus?" · Birdie Bonus ✓":""} · Hole {currentHole}</div>
+            <div style={{fontSize:12,color:C.muted,marginTop:4}}>
+              {ballsByPar[3]===ballsByPar[4]&&ballsByPar[4]===ballsByPar[5]
+                ? `${ballsByPar[4]||2} Best Ball`
+                : `Par3:${ballsByPar[3]||2} Par4:${ballsByPar[4]||2} Par5:${ballsByPar[5]||2}`
+              }{birdieBonus?" · Birdie Bonus ✓":""} · Hole {currentHole}
+            </div>
           </div>
         </div>
 
