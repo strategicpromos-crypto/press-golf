@@ -84,12 +84,13 @@ function Top10Tab({ teams, course }){
   );
 }
 
-function calcTeamScore(teamScores,teamSize,holeData,birdieBonus,countBalls){
+function calcTeamScore(teamScores,teamSize,holeData,birdieBonus,countBalls,holePars){
   const byHole={};
   let front=0,back=0,total=0;
-  const balls=countBalls||Math.min(teamSize,2); // fallback: min(teamSize,2)
-  const frontPar=holeData.filter(h=>h.side==="front").reduce((s,h)=>s+h.par*balls,0);
-  const backPar=holeData.filter(h=>h.side==="back").reduce((s,h)=>s+h.par*balls,0);
+  const balls=parseInt(countBalls)||Math.min(teamSize,2); // always int
+  const hpar=(h)=>(holePars?.[h.hole]??h.par);           // effective par for hole
+  const frontPar=holeData.filter(h=>h.side==="front").reduce((s,h)=>s+hpar(h)*balls,0);
+  const backPar=holeData.filter(h=>h.side==="back").reduce((s,h)=>s+hpar(h)*balls,0);
   const totalPar=frontPar+backPar;
   for(const h of holeData){
     const scores=[];
@@ -100,10 +101,10 @@ function calcTeamScore(teamScores,teamSize,holeData,birdieBonus,countBalls){
     let raw=bestN.reduce((s,v)=>s+v,0);
     let bonusApplied=0;
     if(birdieBonus){
-      const extraBirdies=scores.slice(balls).filter(s=>s<=h.par-1);
-      if(extraBirdies.length>0){bonusApplied=extraBirdies.reduce((sum,s)=>sum+(h.par-s),0);raw-=bonusApplied;}
+      const extraBirdies=scores.slice(balls).filter(s=>s<=hpar(h)-1);
+      if(extraBirdies.length>0){bonusApplied=extraBirdies.reduce((sum,s)=>sum+(hpar(h)-s),0);raw-=bonusApplied;}
     }
-    const diff=raw-(h.par*balls);
+    const diff=raw-(hpar(h)*balls);
     byHole[h.hole]={raw,diff,bonusApplied,scored:true};
     if(h.side==="front")front+=raw;else back+=raw;
     total+=raw;
@@ -137,6 +138,7 @@ export default function TeamTournament({onBack, user}){
   const[courseId,setCourseId]=useState("south-toledo");
   const[birdieBonus,setBirdieBonus]=useState(true);
   const[countBalls,setCountBalls]=useState(2);
+  const[holePars,setHolePars]=useState({});        // override pars: {4:4} = hole 4 → par 4
   const[numTeams,setNumTeams]=useState(8);
   const[activeTeam,setActiveTeam]=useState(0);
   const[currentHole,setCurrentHole]=useState(1);
@@ -195,6 +197,7 @@ export default function TeamTournament({onBack, user}){
         course_id:courseId,
         birdie_bonus:birdieBonus,
         count_balls:countBalls,
+        hole_pars:holePars,
         current_hole:currentHole,
         status:screen==="scoring"?"active":"setup",
         updated_at:new Date().toISOString(),
@@ -204,7 +207,7 @@ export default function TeamTournament({onBack, user}){
       loadSaved();
     },800);
     return()=>clearTimeout(saveTimer.current);
-  },[teams,currentHole,courseId,birdieBonus,screen,tourneyId]);
+  },[teams,currentHole,courseId,birdieBonus,holePars,screen,tourneyId]);
 
   // ── Create new tournament in DB ────────────────────────────────────────────
   async function createTourney(builtTeams){
@@ -232,6 +235,7 @@ export default function TeamTournament({onBack, user}){
       course_id:courseId,
       birdie_bonus:birdieBonus,
       count_balls:countBalls,
+      hole_pars:holePars,
       teams:teamsWithPins,
       current_hole:1,
       status:"setup",
@@ -255,6 +259,7 @@ export default function TeamTournament({onBack, user}){
       setCourseId(data.course_id||"south-toledo");
       setBirdieBonus(data.birdie_bonus!==false);
       setCountBalls(data.count_balls||2);
+      setHolePars(data.hole_pars||{});
       setTeams(data.teams||[]);
       setNumTeams((data.teams||[]).length);
       setCurrentHole(data.current_hole||1);
@@ -305,7 +310,7 @@ export default function TeamTournament({onBack, user}){
   }
 
   function getLeaderboard(){
-    return teams.map(t=>({...t,sc:calcTeamScore(t.scores,t.size,course.holes,birdieBonus,countBalls)}))
+    return teams.map(t=>({...t,sc:calcTeamScore(t.scores,t.size,course.holes,birdieBonus,countBalls,holePars)}))
       .sort((a,b)=>a.sc.totalDiff-b.sc.totalDiff);
   }
 
@@ -535,12 +540,33 @@ export default function TeamTournament({onBack, user}){
           {/* Course */}
           <div style={{marginBottom:16}}>
             <Lbl>Course</Lbl>
-            <select value={courseId} onChange={e=>setCourseId(e.target.value)} style={{width:"100%",padding:"14px",background:C.surface,border:"1px solid "+C.border,borderRadius:10,color:C.text,fontSize:15,outline:"none",WebkitAppearance:"none"}}>
+            <select value={courseId} onChange={e=>{setCourseId(e.target.value);setHolePars({});}} style={{width:"100%",padding:"14px",background:C.surface,border:"1px solid "+C.border,borderRadius:10,color:C.text,fontSize:15,outline:"none",WebkitAppearance:"none"}}>
               {Object.entries(COURSES).map(([id,c])=>(
                 <option key={id} value={id}>{c.name} — Par {c.par}</option>
               ))}
             </select>
           </div>
+
+          {/* South Toledo hole #4 par toggle */}
+          {courseId==="south-toledo"&&(
+            <div style={{background:C.card,border:"1px solid "+C.border,borderRadius:12,padding:"14px 16px",marginBottom:16}}>
+              <div style={{fontWeight:700,fontSize:15,marginBottom:4}}>South Toledo — Hole #4</div>
+              <div style={{fontSize:11,color:C.muted,marginBottom:12}}>Normally par 3. Some groups play it as par 4. Set before teeing off.</div>
+              <div style={{display:"flex",gap:8}}>
+                {[3,4].map(p=>(
+                  <button key={p} onClick={()=>setHolePars(prev=>({...prev,4:p}))}
+                    style={{flex:1,padding:"14px",background:(holePars[4]??3)===p?C.green:C.surface,color:(holePars[4]??3)===p?"#0a1a0f":C.muted,border:"1px solid "+((holePars[4]??3)===p?C.green:C.border),borderRadius:10,fontSize:16,fontWeight:(holePars[4]??3)===p?800:500,cursor:"pointer"}}>
+                    Par {p}{p===3?" (default)":""}
+                  </button>
+                ))}
+              </div>
+              {(holePars[4]??3)===4&&(
+                <div style={{fontSize:11,color:C.gold,marginTop:8,textAlign:"center"}}>
+                  ⛳ Hole #4 playing as par 4 — course par becomes 71
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Birdie Bonus */}
           <div style={{background:C.card,border:"1px solid "+C.border,borderRadius:12,padding:"14px 16px",marginBottom:16}}>
@@ -679,10 +705,11 @@ export default function TeamTournament({onBack, user}){
   // SCORING
   if(screen==="scoring"&&holeData){
     const team=teams[activeTeam];
-    const sc=calcTeamScore(team.scores,team.size,course.holes,birdieBonus,countBalls);
+    const sc=calcTeamScore(team.scores,team.size,course.holes,birdieBonus,countBalls,holePars);
     const thisHoleScores=Array.from({length:team.size},(_,j)=>({j,s:getPlayerScore(team,j,currentHole)})).filter(x=>x.s!==null).sort((a,b)=>a.s-b.s);
+    const effPar = holePars[currentHole] ?? holeData.par;  // effective par for this hole
     const best2Set=new Set(thisHoleScores.slice(0,countBalls).map(x=>x.j));
-    const birdieCount=thisHoleScores.filter(x=>x.s<=holeData.par-1).length;
+    const birdieCount=thisHoleScores.filter(x=>x.s<=effPar-1).length;
     const bonusThisHole=birdieBonus&&birdieCount>=3?birdieCount-2:0;
 
     return(
@@ -695,7 +722,9 @@ export default function TeamTournament({onBack, user}){
             <div style={{textAlign:"center"}}>
               <div style={{fontSize:11,color:C.muted,letterSpacing:2,textTransform:"uppercase"}}>Hole</div>
               <div style={{fontSize:48,fontWeight:800,lineHeight:1}}>{currentHole}</div>
-              <div style={{fontSize:12,color:C.green,fontWeight:600}}>Par {holeData.par} · Hdcp {holeData.hdcp}</div>
+              <div style={{fontSize:12,color:C.green,fontWeight:600}}>
+                Par {effPar}{effPar!==holeData.par?" ⚡":""}  · Hdcp {holeData.hdcp}
+              </div>
               {saveStatus&&<div style={{fontSize:10,color:saveStatus==="saving"?C.gold:C.green,marginTop:2}}>{saveStatus==="saving"?"💾 Saving...":"✓ Saved"}</div>}
             </div>
             <div style={{display:"flex",flexDirection:"column",gap:6,alignItems:"flex-end"}}>
@@ -750,7 +779,7 @@ export default function TeamTournament({onBack, user}){
           {Array.from({length:team.size},(_,j)=>{
             const score=getPlayerScore(team,j,currentHole);
             const isBest=best2Set.has(j)&&score!==null;
-            const diff=score!==null?score-holeData.par:null;
+            const diff=score!==null?score-effPar:null;
             return(
               <div key={j} style={{background:isBest?"rgba(123,180,80,0.08)":C.card,border:"1px solid "+(isBest?C.green:C.border),borderRadius:14,padding:"12px 14px",marginBottom:10}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
@@ -761,13 +790,13 @@ export default function TeamTournament({onBack, user}){
                   {diff!==null&&<div style={{fontSize:14,fontWeight:800,color:relColor(diff)}}>{relLabel(diff)}{diff<=-1?" 🐦":""}</div>}
                 </div>
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
-                  <button onClick={()=>setPlayerScore(activeTeam,j,currentHole,score!==null?Math.max(1,score-1):holeData.par-1)}
+                  <button onClick={()=>setPlayerScore(activeTeam,j,currentHole,score!==null?Math.max(1,score-1):effPar-1)}
                     style={{width:56,height:56,borderRadius:"50%",background:C.dim,border:"1px solid "+C.border,color:C.text,fontSize:30,fontWeight:700,cursor:"pointer"}}>−</button>
                   <div style={{flex:1,textAlign:"center"}}>
                     <div style={{fontSize:56,fontWeight:800,color:score!==null?C.text:C.muted,lineHeight:1}}>{score!==null?score:"—"}</div>
                     {score===null&&<div style={{fontSize:11,color:C.muted,marginTop:4}}>tap + to enter</div>}
                   </div>
-                  <button onClick={()=>setPlayerScore(activeTeam,j,currentHole,score!==null?score+1:holeData.par)}
+                  <button onClick={()=>setPlayerScore(activeTeam,j,currentHole,score!==null?score+1:effPar)}
                     style={{width:56,height:56,borderRadius:"50%",background:C.dim,border:"1px solid "+C.border,color:C.text,fontSize:30,fontWeight:700,cursor:"pointer"}}>+</button>
                 </div>
               </div>
@@ -776,9 +805,9 @@ export default function TeamTournament({onBack, user}){
 
           {/* This hole total */}
           {thisHoleScores.length>=1&&(()=>{
-            const best2scores=thisHoleScores.slice(0,2).map(x=>x.s);
+            const best2scores=thisHoleScores.slice(0,countBalls).map(x=>x.s);
             const raw=best2scores.reduce((s,v)=>s+v,0)-bonusThisHole;
-            const d=raw-(holeData.par*2);
+            const d=raw-(effPar*countBalls);
             return(
               <div style={{background:"rgba(123,180,80,0.06)",border:"1px solid rgba(123,180,80,0.2)",borderRadius:10,padding:"12px 16px",marginBottom:14}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
@@ -861,6 +890,30 @@ export default function TeamTournament({onBack, user}){
                   </button>
                 </div>
               </div>
+
+              {/* ── SOUTH TOLEDO HOLE #4 PAR TOGGLE ────────────────────── */}
+              {courseId==="south-toledo"&&(
+                <div style={{background:C.card,border:"1px solid "+C.border,borderRadius:12,padding:"14px 16px",marginBottom:20}}>
+                  <div style={{fontWeight:700,fontSize:14,marginBottom:4}}>⛳ Hole #4 Par Override</div>
+                  <div style={{fontSize:11,color:C.muted,marginBottom:12}}>Recalculates all scores instantly when changed mid-round.</div>
+                  <div style={{display:"flex",gap:8}}>
+                    {[3,4].map(p=>(
+                      <button key={p} onClick={()=>setHolePars(prev=>({...prev,4:p}))}
+                        style={{
+                          flex:1,padding:"14px",
+                          background:(holePars[4]??3)===p?C.green:C.surface,
+                          color:(holePars[4]??3)===p?"#0a1a0f":C.muted,
+                          border:"1px solid "+((holePars[4]??3)===p?C.green:C.border),
+                          borderRadius:10,fontSize:16,fontWeight:(holePars[4]??3)===p?800:500,cursor:"pointer"}}>
+                        Par {p}{p===3?" ✓ default":""}
+                      </button>
+                    ))}
+                  </div>
+                  {(holePars[4]??3)===4&&(
+                    <div style={{fontSize:11,color:C.gold,marginTop:8,textAlign:"center"}}>Playing as par 4 — effective course par 71</div>
+                  )}
+                </div>
+              )}
 
               {/* ── TEAMS ───────────────────────────────────────────────── */}
               <div style={{fontSize:11,color:C.green,letterSpacing:1.5,textTransform:"uppercase",marginBottom:10,fontWeight:600}}>Teams</div>
