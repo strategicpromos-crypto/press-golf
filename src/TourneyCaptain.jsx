@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { sb } from "./supabase.js";
 import { COURSES } from "./golf.js";
+import { SkinsTab } from "./skins.js";
 
 const C = {
   bg:"#080f0a", surface:"#0e1a10", card:"#121e14",
@@ -243,7 +244,7 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
               const medals=["🥇","🥈","🥉"];
               return(<>
                 <div style={{display:"flex",gap:0,marginBottom:16,border:"1px solid "+C.border,borderRadius:10,overflow:"hidden"}}>
-                  {[["standings","🏆 Standings"],["top10","⭐ Top 10"]].map(([id,lbl])=>(
+                  {[["standings","🏆 Standings"],["top10","⭐ Top 10"],["skins","💰 Skins"]].map(([id,lbl])=>(
                     <button key={id} onClick={()=>setBTab(id)} style={{flex:1,padding:"11px",fontSize:12,fontWeight:bTab===id?700:500,background:bTab===id?C.green:"transparent",color:bTab===id?"#0a1a0f":C.muted,border:"none",cursor:"pointer"}}>{lbl}</button>
                   ))}
                 </div>
@@ -311,6 +312,7 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
                     </div>
                   ));
                 })()}
+                {bTab==="skins"&&<SkinsTab teams={tourney.teams||[]} course={course} holePars={tourney.hole_pars||{}} skinsEnabled={tourney.skins_enabled===true} bigBoyEnabled={tourney.big_boy_enabled===true}/>}
               </>);
             })()}
 
@@ -525,23 +527,42 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
                 <div style={{ width:12,height:12,borderRadius:"50%",background:team.color }}/>
                 <div style={{ fontWeight:800,fontSize:16,color:C.text }}>{team.name}</div>
               </div>
-              <div style={{ fontSize:11,color:C.muted,marginBottom:8,fontWeight:600 }}>Player Names</div>
-              <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:8 }}>
+              <div style={{ fontSize:11,color:C.muted,marginBottom:8,fontWeight:600 }}>Player Names{tourney.big_boy_enabled?" · tap BB to enroll in Big Boy":""}</div>
+              <div style={{ display:"flex",flexDirection:"column",gap:8 }}>
                 {Array.from({length:team.size||2},(_,j)=>(
-                  <input key={j}
-                    value={team.players?.[j]||""}
-                    onChange={e=>{
-                      const updatedTeams=(tourney.teams||[]).map((t,ti)=>{
-                        if(ti!==teamIdx)return t;
-                        const p=[...(t.players||Array(t.size||2).fill(""))];
-                        p[j]=e.target.value;
-                        return{...t,players:p};
-                      });
-                      setTourney(prev=>({...prev,teams:updatedTeams}));
-                      scheduleSync(updatedTeams);
-                    }}
-                    placeholder={"Player "+(j+1)}
-                    style={{ padding:"11px 12px",background:C.bg,border:`1px solid ${C.border}`,borderRadius:8,color:C.text,fontSize:14,outline:"none" }}/>
+                  <div key={j} style={{display:"flex",alignItems:"center",gap:8}}>
+                    <input
+                      value={team.players?.[j]||""}
+                      onChange={e=>{
+                        const updatedTeams=(tourney.teams||[]).map((t,ti)=>{
+                          if(ti!==teamIdx)return t;
+                          const p=[...(t.players||Array(t.size||2).fill(""))];
+                          p[j]=e.target.value;
+                          return{...t,players:p};
+                        });
+                        setTourney(prev=>({...prev,teams:updatedTeams}));
+                        scheduleSync(updatedTeams);
+                      }}
+                      placeholder={"Player "+(j+1)}
+                      style={{ flex:1,padding:"11px 12px",background:C.bg,border:`1px solid ${C.border}`,borderRadius:8,color:C.text,fontSize:14,outline:"none" }}/>
+                    {tourney.big_boy_enabled&&(
+                      <button onClick={()=>{
+                        const updatedTeams=(tourney.teams||[]).map((t,ti)=>{
+                          if(ti!==teamIdx)return t;
+                          const bb=[...(t.bigBoy||Array(t.size||2).fill(false))];
+                          bb[j]=!bb[j];
+                          return{...t,bigBoy:bb};
+                        });
+                        setTourney(prev=>({...prev,teams:updatedTeams}));
+                        scheduleSync(updatedTeams);
+                      }} style={{
+                        flexShrink:0,padding:"8px 11px",borderRadius:8,fontSize:11,fontWeight:700,cursor:"pointer",
+                        background:team.bigBoy?.[j]?C.gold:"rgba(255,255,255,0.06)",
+                        color:team.bigBoy?.[j]?"#0a1a0f":"rgba(255,255,255,0.4)",
+                        border:"1px solid "+(team.bigBoy?.[j]?"rgba(232,184,75,0.6)":"rgba(255,255,255,0.15)")
+                      }}>BB</button>
+                    )}
+                  </div>
                 ))}
               </div>
               <div style={{ fontSize:11,color:C.dim,marginTop:10,textAlign:"center" }}>
