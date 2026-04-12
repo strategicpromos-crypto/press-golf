@@ -316,6 +316,7 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
   const [step,        setStep]        = useState("setup");
   const [courseId,    setCourseId]    = useState("south-toledo");
   const [holePars,    setHolePars]    = useState({});           // per-hole par overrides e.g. {4:4}
+  const [myName,      setMyName]      = useState("");
   const [opponents,   setOpponents]   = useState([]);
   const [scores,      setScores]      = useState({});
   const [currentHole, setCurrentHole] = useState(1);
@@ -428,6 +429,7 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
       owner_id: user.id,
       course_id: courseId,
       course_name: course.name,
+      owner_name: myName.trim() || "Partner",
       opponents,
       scores: {},
       current_hole: 1,
@@ -646,6 +648,18 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
       </div>
 
       <div style={{padding:"0 20px"}}>
+        {/* My name */}
+        <div style={{marginBottom:16}}>
+          <Lbl>Your Name</Lbl>
+          <input
+            value={myName}
+            onChange={e=>setMyName(e.target.value)}
+            placeholder="e.g. Michael"
+            style={{width:"100%",padding:"14px",background:C.surface,border:"1px solid "+C.border,borderRadius:10,color:C.text,fontSize:16,fontWeight:700,outline:"none",boxSizing:"border-box"}}
+          />
+          <div style={{fontSize:11,color:C.muted,marginTop:6}}>Shows on your opponents' scorecards</div>
+        </div>
+
         {/* Course picker */}
         <div style={{marginBottom:16}}>
           <Lbl>Select Course</Lbl>
