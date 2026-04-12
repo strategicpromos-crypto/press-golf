@@ -17,10 +17,9 @@ function relColor(d){if(d===null||d===undefined)return C.muted;if(d<0)return C.g
 function calcTeamScore(teamScores,teamSize,holeData,birdieBonus,countBalls,holePars){
   const byHole={};
   let front=0,back=0,total=0;
+  let frontPar=0,backPar=0;  // only accumulate par for SCORED holes
   const balls=parseInt(countBalls)||Math.min(teamSize,2);
   const hpar=(h)=>(holePars?.[h.hole]??h.par);
-  const frontPar=holeData.filter(h=>h.side==="front").reduce((s,h)=>s+hpar(h)*balls,0);
-  const backPar=holeData.filter(h=>h.side==="back").reduce((s,h)=>s+hpar(h)*balls,0);
   for(const h of holeData){
     const scores=[];
     for(let p=0;p<teamSize;p++){const s=teamScores?.[p]?.[h.hole];if(s!==undefined&&s!==null)scores.push(safeInt(s));}
@@ -30,9 +29,12 @@ function calcTeamScore(teamScores,teamSize,holeData,birdieBonus,countBalls,holeP
     let raw=bestN.reduce((s,v)=>s+v,0);
     if(birdieBonus){const eb=scores.slice(balls).filter(s=>s<=hpar(h)-1);if(eb.length>0)raw-=eb.reduce((sum,s)=>sum+(hpar(h)-s),0);}
     byHole[h.hole]={raw,diff:raw-(hpar(h)*balls),scored:true};
-    if(h.side==="front")front+=raw;else back+=raw;total+=raw;
+    if(h.side==="front"){front+=raw;frontPar+=hpar(h)*balls;}
+    else{back+=raw;backPar+=hpar(h)*balls;}
+    total+=raw;
   }
-  return{byHole,front,frontDiff:front-frontPar,back,backDiff:back-backPar,total,totalDiff:total-(frontPar+backPar)};
+  const totalPar=frontPar+backPar;
+  return{byHole,front,frontDiff:front-frontPar,back,backDiff:back-backPar,total,totalDiff:total-totalPar};
 }
 
 export default function TourneySpectator({ tourney: initialTourney, onBack }) {
