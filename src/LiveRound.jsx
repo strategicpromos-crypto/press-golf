@@ -315,6 +315,7 @@ function getTally(scores, course, opp, courseId) {
 export default function LiveRound({ user, players, onBack, onPostToLedger }) {
   const [step,        setStep]        = useState("setup");
   const [courseId,    setCourseId]    = useState("south-toledo");
+  const [holePars,    setHolePars]    = useState({});           // per-hole par overrides e.g. {4:4}
   const [opponents,   setOpponents]   = useState([]);
   const [scores,      setScores]      = useState({});
   const [currentHole, setCurrentHole] = useState(1);
@@ -340,6 +341,7 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
 
   const course = COURSES[courseId];
   const holeData = course?.holes[currentHole - 1];
+  const effPar   = holeData ? (holePars[currentHole] ?? holeData.par) : 4;
   const saveTimer = useRef(null);
 
   // -- Check for existing active round on mount ------------------------------
@@ -371,13 +373,15 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
     if (!liveRoundId || step !== "playing") return;
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(async () => {
-      // Read current DB state first, then merge only MY scores
-      // This prevents overwriting opponent scores that came in via real-time
+      // Keys I own: "me" + every same-group opponent
+      const myKeys = ["me", ...opponents.filter(o => o.sameGroup).map(o => o.playerId)];
+      // Read current DB state first, then merge only MY keys
       const { data: current } = await sb.from("live_rounds")
         .select("scores")
         .eq("id", liveRoundId)
         .single();
-      const merged = { ...(current?.scores || {}), me: scores["me"] || {} };
+      const myScores = Object.fromEntries(myKeys.map(k => [k, scores[k] || {}]));
+      const merged = { ...(current?.scores || {}), ...myScores };
       await sb.from("live_rounds").update({
         scores: merged,
         current_hole: currentHole,
@@ -390,7 +394,6 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
   // -- Real-time score sync from opponents -----------------------------------
   useEffect(() => {
     if (!liveRoundId || step !== "playing") return;
-    // Subscribe to changes on this live round
     realtimeSub.current = sb
       .channel("live_round_" + liveRoundId)
       .on("postgres_changes", {
@@ -399,12 +402,13 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
         table: "live_rounds",
         filter: "id=eq." + liveRoundId,
       }, payload => {
-        // Merge incoming scores with local — never lose either side's scores
+        // Merge incoming scores — protect ALL keys I own (me + sameGroup opponents)
         if (payload.new?.scores) {
-          setScores(prev => ({
-            ...payload.new.scores,  // start with DB state (has everyone)
-            me: prev["me"] || {},   // always keep MY local scores (most up to date)
-          }));
+          setScores(prev => {
+            const myKeys = ["me", ...opponents.filter(o => o.sameGroup).map(o => o.playerId)];
+            const myProtected = Object.fromEntries(myKeys.map(k => [k, prev[k] || {}]));
+            return { ...payload.new.scores, ...myProtected };
+          });
         }
       })
       .subscribe();
@@ -818,7 +822,7 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
             <div style={{textAlign:"center"}}>
               <div style={{fontSize:11,color:C.muted,letterSpacing:2,textTransform:"uppercase"}}>Hole</div>
               <div style={{fontSize:48,fontWeight:800,color:C.text,lineHeight:1}}>{currentHole}</div>
-              <div style={{fontSize:12,color:C.green,fontWeight:600}}>Par {holeData.par} - Hdcp {holeData.hdcp}</div>
+              <div style={{fontSize:12,color:C.green,fontWeight:600}}>Par {effPar}{effPar!==holeData.par?" ⚡":""} · Hdcp {holeData.hdcp}</div>
             </div>
             <div style={{display:"flex",flexDirection:"column",gap:6,alignItems:"flex-end"}}>
               <button onClick={onBack} style={{background:"rgba(123,180,80,0.15)",border:"1px solid "+C.green,color:C.green,fontSize:11,cursor:"pointer",padding:"5px 10px",borderRadius:12,fontWeight:700}}>🏠 Home</button>
@@ -843,7 +847,7 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
             <div style={{fontSize:11,color:C.green,letterSpacing:2,textTransform:"uppercase",marginBottom:12,fontWeight:600}}>⛳ Your Score</div>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
               <ScoreButton label="-" size={60} onClick={()=>{
-                const cur = myScore !== null ? myScore : holeData.par;
+                const cur = myScore !== null ? myScore : effPar;
                 setScore("me", currentHole, cur - 1);
               }}/>
               <div style={{flex:1,textAlign:"center"}}>
@@ -851,8 +855,8 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
                   {myScore !== null ? myScore : "-"}
                 </div>
                 {myScore !== null && (
-                  <div style={{fontSize:14,color:scoreColor(myScore,holeData.par),marginTop:4,fontWeight:700}}>
-                    {scoreName(myScore, holeData.par)}
+                  <div style={{fontSize:14,color:scoreColor(myScore,effPar),marginTop:4,fontWeight:700}}>
+                    {scoreName(myScore, effPar)}
                   </div>
                 )}
                 {myScore === null && (
@@ -860,7 +864,7 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
                 )}
               </div>
               <ScoreButton label="+" size={60} onClick={()=>{
-                const cur = myScore !== null ? myScore : holeData.par - 1;
+                const cur = myScore !== null ? myScore : effPar - 1;
                 setScore("me", currentHole, cur + 1);
               }}/>
             </div>
@@ -900,7 +904,7 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
                 {/* Score row */}
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
                   <ScoreButton label="-" size={52} onClick={()=>{
-                    const cur = oppScore !== null ? oppScore : holeData.par;
+                    const cur = oppScore !== null ? oppScore : effPar;
                     setScore(opp.playerId, currentHole, cur - 1);
                   }}/>
                   <div style={{flex:1,textAlign:"center"}}>
@@ -916,7 +920,7 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
                     {oppScore === null && <div style={{fontSize:11,color:C.muted,marginTop:2}}>tap + to enter</div>}
                   </div>
                   <ScoreButton label="+" size={52} onClick={()=>{
-                    const cur = oppScore !== null ? oppScore : holeData.par - 1;
+                    const cur = oppScore !== null ? oppScore : effPar - 1;
                     setScore(opp.playerId, currentHole, cur + 1);
                   }}/>
                 </div>
@@ -1183,6 +1187,33 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
                 </div>
               );
             })}
+
+            {/* South Toledo hole #4 par toggle */}
+            {courseId==="south-toledo"&&(
+              <div style={{background:C.card,border:"1px solid "+C.border,borderRadius:14,padding:"16px",marginBottom:12}}>
+                <div style={{fontWeight:700,fontSize:15,marginBottom:4}}>⛳ Hole #4 Par Override</div>
+                <div style={{fontSize:11,color:C.muted,marginBottom:12}}>Normally par 3. Toggle if your group plays it as par 4.</div>
+                <div style={{display:"flex",gap:8}}>
+                  {[3,4].map(p=>(
+                    <button key={p} onClick={()=>setHolePars(prev=>({...prev,4:p}))}
+                      style={{
+                        flex:1,padding:"14px",
+                        background:(holePars[4]??3)===p?C.green:C.surface,
+                        color:(holePars[4]??3)===p?"#0a1a0f":C.muted,
+                        border:"1px solid "+((holePars[4]??3)===p?C.green:C.border),
+                        borderRadius:10,fontSize:16,fontWeight:(holePars[4]??3)===p?800:500,cursor:"pointer"
+                      }}>
+                      Par {p}{p===3?" ✓ default":""}
+                    </button>
+                  ))}
+                </div>
+                {(holePars[4]??3)===4&&(
+                  <div style={{fontSize:11,color:C.gold,marginTop:8,textAlign:"center"}}>
+                    ⚡ Hole #4 playing as par 4
+                  </div>
+                )}
+              </div>
+            )}
 
             <button onClick={()=>setShowRoundSettings(false)} style={{width:"100%",padding:"18px",background:C.green,color:"#0a1a0f",border:"none",borderRadius:12,fontSize:16,fontWeight:800,cursor:"pointer",marginTop:8}}>
               ✓ Done — Back to Round
