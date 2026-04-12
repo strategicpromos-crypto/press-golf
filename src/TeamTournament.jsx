@@ -4,6 +4,7 @@ import { sb } from "./supabase.js";
 import TourneyJoin from "./TourneyJoin.jsx";
 import TourneyCaptain from "./TourneyCaptain.jsx";
 import TourneySpectator from "./TourneySpectator.jsx";
+import { calcSkins, SkinsTab } from "./skins.js";
 
 const C = {
   bg:"#080f0a", surface:"#0e1a10", card:"#121e14",
@@ -120,6 +121,7 @@ function calcTeamScore(teamScores,teamSize,holeData,birdieBonus,ballsByPar,holeP
   return{byHole,front,frontDiff:front-frontPar,back,backDiff:back-backPar,total,totalDiff:total-totalPar,frontPar,backPar,totalPar};
 }
 
+
 function BigBtn({children,onClick,color=C.green,disabled=false,style={}}){
   return(<button onClick={onClick} disabled={disabled} style={{width:"100%",padding:"18px",background:disabled?"#1a2a1a":color,color:disabled?C.muted:"#0a1a0f",border:"none",borderRadius:14,fontSize:17,fontWeight:800,cursor:disabled?"not-allowed":"pointer",opacity:disabled?0.5:1,fontFamily:"Georgia,serif",...style}}>{children}</button>);
 }
@@ -146,6 +148,8 @@ export default function TeamTournament({onBack, user, onDelete}){
   const[courseId,setCourseId]=useState("south-toledo");
   const[birdieBonus,setBirdieBonus]=useState(true);
   const[ballsByPar,setBallsByPar]=useState({3:2,4:2,5:2}); // balls counted per hole by par
+  const[skinsEnabled,setSkinsEnabled]=useState(false);
+  const[bigBoyEnabled,setBigBoyEnabled]=useState(false);
   const[holePars,setHolePars]=useState({});        // override pars: {4:4} = hole 4 → par 4
   const[numTeams,setNumTeams]=useState(8);
   const[activeTeam,setActiveTeam]=useState(0);
@@ -206,6 +210,8 @@ export default function TeamTournament({onBack, user, onDelete}){
         birdie_bonus:birdieBonus,
         ball_count_by_par:ballsByPar,
         hole_pars:holePars,
+        skins_enabled:skinsEnabled,
+        big_boy_enabled:bigBoyEnabled,
         current_hole:currentHole,
         status:screen==="scoring"?"active":"setup",
         updated_at:new Date().toISOString(),
@@ -244,6 +250,8 @@ export default function TeamTournament({onBack, user, onDelete}){
       birdie_bonus:birdieBonus,
       ball_count_by_par:ballsByPar,
       hole_pars:holePars,
+      skins_enabled:skinsEnabled,
+      big_boy_enabled:bigBoyEnabled,
       teams:teamsWithPins,
       current_hole:1,
       status:"setup",
@@ -268,6 +276,8 @@ export default function TeamTournament({onBack, user, onDelete}){
       setBirdieBonus(data.birdie_bonus!==false);
       setBallsByPar(data.ball_count_by_par||(data.count_balls?{3:data.count_balls,4:data.count_balls,5:data.count_balls}:{3:2,4:2,5:2}));
       setHolePars(data.hole_pars||{});
+      setSkinsEnabled(data.skins_enabled===true);
+      setBigBoyEnabled(data.big_boy_enabled===true);
       setTeams(data.teams||[]);
       setNumTeams((data.teams||[]).length);
       setCurrentHole(data.current_hole||1);
@@ -602,6 +612,35 @@ export default function TeamTournament({onBack, user, onDelete}){
             </div>
           </div>
 
+          {/* Skins */}
+          <div style={{background:C.card,border:"1px solid "+C.border,borderRadius:12,padding:"14px 16px",marginBottom:skinsEnabled?8:16}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <div>
+                <div style={{fontWeight:700,fontSize:15}}>💰 Skins Game</div>
+                <div style={{fontSize:11,color:C.muted,marginTop:3}}>{skinsEnabled?"Tracking skins — live tab in leaderboard":"Off for this tournament"}</div>
+              </div>
+              <button onClick={()=>{setSkinsEnabled(b=>!b);if(skinsEnabled)setBigBoyEnabled(false);}} style={{width:52,height:28,borderRadius:14,border:"none",cursor:"pointer",background:skinsEnabled?C.green:"#333",position:"relative",transition:"background 0.2s",flexShrink:0}}>
+                <div style={{position:"absolute",top:4,left:skinsEnabled?26:4,width:20,height:20,borderRadius:"50%",background:"#fff",transition:"left 0.2s"}}/>
+              </button>
+            </div>
+          </div>
+
+          {/* Big Boy — only shows when skins on */}
+          {skinsEnabled&&(
+            <div style={{background:"rgba(232,184,75,0.06)",border:"1px solid rgba(232,184,75,0.25)",borderRadius:12,padding:"14px 16px",marginBottom:16,marginLeft:8}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <div>
+                  <div style={{fontWeight:700,fontSize:14,color:C.gold}}>⭐ Big Boy Skins</div>
+                  <div style={{fontSize:11,color:C.muted,marginTop:3}}>{bigBoyEnabled?"Opt-in parallel game — BB players only":"Off"}</div>
+                </div>
+                <button onClick={()=>setBigBoyEnabled(b=>!b)} style={{width:52,height:28,borderRadius:14,border:"none",cursor:"pointer",background:bigBoyEnabled?C.gold:"#333",position:"relative",transition:"background 0.2s",flexShrink:0}}>
+                  <div style={{position:"absolute",top:4,left:bigBoyEnabled?26:4,width:20,height:20,borderRadius:"50%",background:"#fff",transition:"left 0.2s"}}/>
+                </button>
+              </div>
+              {bigBoyEnabled&&<div style={{fontSize:11,color:C.gold,marginTop:8,lineHeight:1.5}}>Mark players "BB" on each team's setup below. BB players compete only against other BB players — no teammate exception.</div>}
+            </div>
+          )}
+
           {/* Scores to count per hole — by par */}
           <div style={{background:C.card,border:"1px solid "+C.border,borderRadius:12,padding:"14px 16px",marginBottom:16}}>
             <div style={{fontWeight:700,fontSize:15,marginBottom:2}}>Scores That Count Per Hole</div>
@@ -666,10 +705,20 @@ export default function TeamTournament({onBack, user, onDelete}){
                 <NumStepper label="Strokes received per side" value={team.strokesPerSide} min={0} max={9} onChange={v=>updateTeam(i,{strokesPerSide:v})}/>
                 {team.strokesPerSide>0&&<div style={{fontSize:11,color:C.gold,marginTop:4,paddingLeft:4}}>Starts {team.strokesPerSide*2} under par for the round</div>}
               </div>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+              <div style={{display:"flex",flexDirection:"column",gap:8}}>
                 {Array.from({length:team.size},(_,j)=>(
-                  <input key={j} value={team.players[j]||""} onChange={e=>{const p=[...team.players];p[j]=e.target.value;updateTeam(i,{players:p});}}
-                    placeholder={"Player "+(j+1)} style={{padding:"10px",background:C.surface,border:"1px solid "+C.border,borderRadius:8,color:C.text,fontSize:13,outline:"none"}}/>
+                  <div key={j} style={{display:"flex",alignItems:"center",gap:8}}>
+                    <input value={team.players[j]||""} onChange={e=>{const p=[...team.players];p[j]=e.target.value;updateTeam(i,{players:p});}}
+                      placeholder={"Player "+(j+1)} style={{flex:1,padding:"10px",background:C.surface,border:"1px solid "+C.border,borderRadius:8,color:C.text,fontSize:13,outline:"none"}}/>
+                    {bigBoyEnabled&&(
+                      <button onClick={()=>{const bb=[...(team.bigBoy||Array(team.size).fill(false))];bb[j]=!bb[j];updateTeam(i,{bigBoy:bb});}}
+                        style={{flexShrink:0,padding:"6px 10px",borderRadius:8,fontSize:11,fontWeight:700,cursor:"pointer",
+                          background:(team.bigBoy?.[j])?C.gold:"rgba(255,255,255,0.06)",
+                          color:(team.bigBoy?.[j])?"#0a1a0f":"rgba(255,255,255,0.4)",
+                          border:"1px solid "+((team.bigBoy?.[j])?"rgba(232,184,75,0.6)":"rgba(255,255,255,0.15)")
+                        }}>BB</button>
+                    )}
+                  </div>
                 ))}
               </div>
             </div>
@@ -945,7 +994,7 @@ export default function TeamTournament({onBack, user, onDelete}){
               </div>
 
               {/* ── BIRDIE BONUS ────────────────────────────────────────── */}
-              <div style={{background:C.card,border:"1px solid "+C.border,borderRadius:12,padding:"14px 16px",marginBottom:20}}>
+              <div style={{background:C.card,border:"1px solid "+C.border,borderRadius:12,padding:"14px 16px",marginBottom:12}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                   <div>
                     <div style={{fontWeight:700,fontSize:14}}>Birdie Bonus</div>
@@ -956,6 +1005,32 @@ export default function TeamTournament({onBack, user, onDelete}){
                   </button>
                 </div>
               </div>
+
+              {/* ── SKINS ───────────────────────────────────────────────── */}
+              <div style={{background:C.card,border:"1px solid "+C.border,borderRadius:12,padding:"14px 16px",marginBottom:skinsEnabled?8:20}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                  <div>
+                    <div style={{fontWeight:700,fontSize:14}}>💰 Skins Game</div>
+                    <div style={{fontSize:11,color:C.muted,marginTop:2}}>{skinsEnabled?"Live skins tab in leaderboard":"Off"}</div>
+                  </div>
+                  <button onClick={async()=>{const v=!skinsEnabled;setSkinsEnabled(v);if(!v)setBigBoyEnabled(false);await sb.from("team_tournaments").update({skins_enabled:v,big_boy_enabled:v?bigBoyEnabled:false,updated_at:new Date().toISOString()}).eq("id",tourneyId);}} style={{width:52,height:28,borderRadius:14,border:"none",cursor:"pointer",background:skinsEnabled?C.green:"#333",position:"relative",flexShrink:0,transition:"background 0.2s"}}>
+                    <div style={{position:"absolute",top:4,left:skinsEnabled?26:4,width:20,height:20,borderRadius:"50%",background:"#fff",transition:"left 0.2s"}}/>
+                  </button>
+                </div>
+              </div>
+              {skinsEnabled&&(
+                <div style={{background:"rgba(232,184,75,0.06)",border:"1px solid rgba(232,184,75,0.25)",borderRadius:12,padding:"14px 16px",marginBottom:20,marginLeft:8}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                    <div>
+                      <div style={{fontWeight:700,fontSize:13,color:C.gold}}>⭐ Big Boy Skins</div>
+                      <div style={{fontSize:11,color:C.muted,marginTop:2}}>{bigBoyEnabled?"Parallel opt-in game — BB vs BB only":"Off"}</div>
+                    </div>
+                    <button onClick={async()=>{const v=!bigBoyEnabled;setBigBoyEnabled(v);await sb.from("team_tournaments").update({big_boy_enabled:v,updated_at:new Date().toISOString()}).eq("id",tourneyId);}} style={{width:52,height:28,borderRadius:14,border:"none",cursor:"pointer",background:bigBoyEnabled?C.gold:"#333",position:"relative",flexShrink:0,transition:"background 0.2s"}}>
+                      <div style={{position:"absolute",top:4,left:bigBoyEnabled?26:4,width:20,height:20,borderRadius:"50%",background:"#fff",transition:"left 0.2s"}}/>
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {/* ── SOUTH TOLEDO HOLE #4 PAR TOGGLE ────────────────────── */}
               {courseId==="south-toledo"&&(
@@ -1106,8 +1181,8 @@ export default function TeamTournament({onBack, user, onDelete}){
 
         {/* Tabs */}
         <div style={{display:"flex",borderBottom:"1px solid "+C.border,background:"rgba(0,0,0,0.2)"}}>
-          {[["standings","🏆 Standings"],["scorecard","📋 Scorecard"],["top10","⭐ Top 10"]].map(([id,lbl])=>(
-            <button key={id} onClick={()=>setLbTab(id)} style={{flex:1,padding:"12px 4px",fontSize:12,fontWeight:lbTab===id?700:500,background:"transparent",color:lbTab===id?C.green:C.muted,border:"none",borderBottom:lbTab===id?"2px solid "+C.green:"2px solid transparent",cursor:"pointer"}}>{lbl}</button>
+          {[["standings","🏆 Standings"],["scorecard","📋 Scorecard"],["top10","⭐ Top 10"],["skins","💰 Skins"]].map(([id,lbl])=>(
+            <button key={id} onClick={()=>setLbTab(id)} style={{flex:1,padding:"10px 2px",fontSize:11,fontWeight:lbTab===id?700:500,background:"transparent",color:lbTab===id?C.green:C.muted,border:"none",borderBottom:lbTab===id?"2px solid "+C.green:"2px solid transparent",cursor:"pointer"}}>{lbl}</button>
           ))}
         </div>
 
@@ -1176,6 +1251,8 @@ export default function TeamTournament({onBack, user, onDelete}){
           )}
 
           {lbTab==="top10"&&<Top10Tab teams={teams} course={course}/>}
+
+          {lbTab==="skins"&&<SkinsTab teams={teams} course={course} holePars={holePars} skinsEnabled={skinsEnabled} bigBoyEnabled={bigBoyEnabled}/>}
         </div>
       </div>
     );
