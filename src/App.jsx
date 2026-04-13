@@ -559,9 +559,33 @@ export default function App(){
   const [tourneyView,       setTourneyView]       = useState(null);
   const [tourneyData,       setTourneyData]       = useState(null);
   const [tourneyCaptainIdx, setTourneyCaptainIdx] = useState(null);
+  const [captainLoading,    setCaptainLoading]    = useState(false);
 
+  // On startup: restore captain session from localStorage if no URL params
   useEffect(()=>{
-    if(tourneyId) setTourneyView("join");
+    if(tourneyId) { setTourneyView("join"); return; }
+    // Check if captain has a saved session
+    try {
+      const saved = localStorage.getItem("press_captain_session");
+      if(saved){
+        const {tid, tidx, savedAt} = JSON.parse(saved);
+        // Sessions expire after 24 hours
+        const age = Date.now() - savedAt;
+        if(tid && tidx !== undefined && age < 24*60*60*1000){
+          setCaptainLoading(true);
+          sb.from("team_tournaments").select("*").eq("id",tid).single().then(({data})=>{
+            setCaptainLoading(false);
+            if(data && data.status !== "deleted"){
+              setTourneyData(data);
+              setTourneyCaptainIdx(tidx);
+              setTourneyView("captain_resume"); // show resume prompt, not auto-jump
+            } else {
+              localStorage.removeItem("press_captain_session");
+            }
+          });
+        }
+      }
+    } catch(e){ localStorage.removeItem("press_captain_session"); }
   },[tourneyId]);
   const stripeSuccess=urlParams.get("stripe")==="success";
 
@@ -629,6 +653,37 @@ export default function App(){
 
   // PASSWORD RECOVERY — user clicked reset link, needs to set a new password
   if(needsNewPassword) return <SetNewPasswordScreen onDone={()=>setNeedsNewPassword(false)}/>;
+
+  // Captain loading from localStorage restore
+  if(captainLoading) return(
+    <div style={{fontFamily:"Georgia,serif",minHeight:"100vh",background:"#080f0a",color:"#e8f0e9",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:16}}>
+      <div style={{width:40,height:40,border:"3px solid #1e2f20",borderTop:"3px solid #7bb450",borderRadius:"50%",animation:"spin 0.8s linear infinite"}}/>
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+      <div style={{color:"#6b7f6d",fontSize:14}}>Restoring your tournament...</div>
+    </div>
+  );
+
+  // Captain resume prompt — shown when app opens and saved session found
+  if(tourneyView==="captain_resume"&&tourneyData){
+    const team=(tourneyData.teams||[])[tourneyCaptainIdx];
+    return(
+      <div style={{fontFamily:"Georgia,serif",minHeight:"100vh",background:"#080f0a",color:"#e8f0e9",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:24}}>
+        <div style={{fontSize:48,marginBottom:16}}>⛳</div>
+        <div style={{fontSize:22,fontWeight:800,marginBottom:6,textAlign:"center"}}>Tournament In Progress</div>
+        <div style={{fontSize:14,color:"#6b7f6d",marginBottom:4,textAlign:"center"}}>{tourneyData.name}</div>
+        <div style={{fontSize:13,color:"#e8b84b",marginBottom:32,textAlign:"center"}}>{team?.name||"Your Team"} · Hole {tourneyData.current_hole||1}</div>
+        <div style={{width:"100%",maxWidth:320,display:"flex",flexDirection:"column",gap:10}}>
+          <button onClick={()=>setTourneyView("captain")} style={{width:"100%",padding:"18px",background:"#7bb450",color:"#0a1a0f",border:"none",borderRadius:14,fontSize:17,fontWeight:800,cursor:"pointer"}}>
+            ▶ Resume Scoring
+          </button>
+          <button onClick={()=>{localStorage.removeItem("press_captain_session");setTourneyView(null);setTourneyData(null);}} style={{width:"100%",padding:"14px",background:"transparent",color:"#6b7f6d",border:"1px solid rgba(123,180,80,0.2)",borderRadius:12,fontSize:14,fontWeight:600,cursor:"pointer"}}>
+            Not my tournament
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   // Tourney views — shown to captains/spectators who open a shared link
   if(tourneyView==="join"){
     return <TourneyLoader
@@ -636,23 +691,24 @@ export default function App(){
       teamIdx={tourneyTeam!==null&&tourneyTeam!==undefined?parseInt(tourneyTeam):null}
       isSpectator={spectate==="1"}
       onBack={()=>{setTourneyView(null);window.history.replaceState({},"","/");}}
-      onCaptain={(t,idx)=>{setTourneyData(t);setTourneyCaptainIdx(idx);setTourneyView("captain");}}
+      onCaptain={(t,idx)=>{
+        // Save captain session to localStorage so PWA can restore it
+        try{ localStorage.setItem("press_captain_session",JSON.stringify({tid:t.id,tidx:idx,savedAt:Date.now()})); }catch(e){}
+        setTourneyData(t);setTourneyCaptainIdx(idx);setTourneyView("captain");
+      }}
       onSpectator={(t)=>{setTourneyData(t);setTourneyView("spectator");}}
     />;
   }
   if(tourneyView==="captain"){
     return <TourneyCaptain tourney={tourneyData} teamIdx={tourneyCaptainIdx}
-      onBack={()=>{setTourneyView(null);window.history.replaceState({},"","/");}}/>;
+      onBack={()=>{
+        // Keep captain session in localStorage — they may want to come back
+        setTourneyView(null);window.history.replaceState({},"","/");
+      }}/>;
   }
   if(tourneyView==="spectator"){
     return <TourneySpectator tourney={tourneyData}
       onBack={()=>{setTourneyView(null);window.history.replaceState({},"","/");}}/>;
-  }
-  if (tourneyView === "captain") {
-    return <TourneyCaptain tourney={tourneyData} teamIdx={tourneyCaptainIdx} onBack={() => setTourneyView("join")} />;
-  }
-  if (tourneyView === "spectator") {
-    return <TourneySpectator tourney={tourneyData} onBack={() => setTourneyView(null)} />;
   }
 
   if(inviteCode)return <AcceptInviteScreen code={inviteCode} user={user}/>;
@@ -736,15 +792,18 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
     if(cr.data)setCancelRequests(cr.data);
     if(sr.data)setStrokeRequests(sr.data);
 
-    // Fetch active team tournament
+    // Fetch active team tournament — include recent setup ones that may have scores
+    // (guards against status corruption bug where leaderboard visit reset status to "setup")
     const{data:atData}=await sb.from("team_tournaments")
       .select("id,name,course_id,current_hole,teams,director_code,status")
       .eq("owner_id",user.id)
-      .eq("status","active")
+      .in("status",["active","setup"])
       .order("updated_at",{ascending:false})
       .limit(1)
       .maybeSingle();
-    setActiveTourney(atData||null);
+    // Only show in banner if it has scores OR is already active
+    const hasScores=(atData?.teams||[]).some(t=>Object.keys(t?.scores||{}).length>0);
+    setActiveTourney((atData?.status==="active"||hasScores)?atData:null);
     setLoading(false);
   },[user.id]);
 
