@@ -174,13 +174,12 @@ export default function TeamTournament({onBack, user, onDelete}){
 
   // ── Real-time: director sees captain scores instantly ──────────────────────
   useEffect(()=>{
-    if(!tourneyId||screen!=="scoring")return;
+    if(!tourneyId||(screen!=="scoring"&&screen!=="leaderboard"))return;
     subRef.current=sb
       .channel("director_"+tourneyId)
       .on("postgres_changes",{event:"UPDATE",schema:"public",table:"team_tournaments",filter:"id=eq."+tourneyId},
         payload=>{
           if(payload.new?.teams){
-            // Only update teams from DB — don't overwrite local director edits in progress
             setTeams(payload.new.teams);
           }
         })
@@ -285,8 +284,16 @@ export default function TeamTournament({onBack, user, onDelete}){
       setNumTeams((data.teams||[]).length);
       setCurrentHole(data.current_hole||1);
       setActiveTeam(0);
-      setDirectorCode(data.director_code||null); // restore share code
-      setScreen(data.status==="active"?"scoring":"setup");
+      setDirectorCode(data.director_code||null);
+      // Go to scoring if: status is active OR any team has scores entered
+      // This prevents the setup loop bug where a corrupted status sent director back to setup
+      const hasScores=(data.teams||[]).some(t=>Object.keys(t.scores||{}).length>0);
+      const goToScoring=data.status==="active"||hasScores;
+      // Also fix: if we have scores, repair the DB status right now
+      if(hasScores&&data.status!=="active"){
+        await sb.from("team_tournaments").update({status:"active",updated_at:new Date().toISOString()}).eq("id",data.id);
+      }
+      setScreen(goToScoring?"scoring":"setup");
     }
     setLoading(false);
   }
@@ -375,8 +382,13 @@ export default function TeamTournament({onBack, user, onDelete}){
 
   // HOME
   if(screen==="home"){
-    const active=(savedTourneys||[]).filter(t=>t.status==="active");
-    const setups=(savedTourneys||[]).filter(t=>t.status==="setup");
+    // Show in "active" section: status=active OR has any scores (guards against status corruption)
+    const active=(savedTourneys||[]).filter(t=>
+      t.status==="active"||(t.teams||[]).some(tm=>Object.keys(tm?.scores||{}).length>0)
+    );
+    const setups=(savedTourneys||[]).filter(t=>
+      t.status==="setup"&&!(t.teams||[]).some(tm=>Object.keys(tm?.scores||{}).length>0)
+    );
     return(
       <div style={{fontFamily:"Georgia,serif",minHeight:"100vh",background:C.bg,color:C.text,paddingBottom:40,position:"relative"}}>
         <div style={{background:"linear-gradient(180deg,"+C.card+" 0%,transparent 100%)",padding:"50px 24px 24px"}}>
