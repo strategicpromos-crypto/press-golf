@@ -71,12 +71,17 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
       .on("postgres_changes",{event:"UPDATE",schema:"public",table:"team_tournaments",filter:"id=eq."+tourney.id},
         payload=>{
           if(payload.new){
-            // Merge incoming — keep our team's scores local, update everything else
             setTourney(prev=>{
               const incoming = payload.new;
-              const mergedTeams = (incoming.teams||[]).map((t,i)=>
-                i===teamIdx ? {...t, scores:(prev.teams||[])[i]?.scores||t.scores} : t
-              );
+              // Keep our team's LOCAL scores (most up to date — we may have unsaved changes)
+              // For all other teams take the DB version (their captains own those scores)
+              const myLocalScores = (prev.teams||[])[teamIdx]?.scores;
+              const mergedTeams = (incoming.teams||[]).map((t,i)=>{
+                if(i===teamIdx && myLocalScores){
+                  return {...t, scores: myLocalScores};
+                }
+                return t;
+              });
               return {...incoming, teams:mergedTeams};
             });
           }
@@ -89,8 +94,18 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
     if (saveTimer.current) clearTimeout(saveTimer.current);
     setSaveStatus("saving");
     saveTimer.current = setTimeout(async () => {
+      // Read current DB state first, then only overwrite OUR team's data
+      // This prevents two captains saving simultaneously from wiping each other
+      const { data: current } = await sb.from("team_tournaments")
+        .select("teams")
+        .eq("id", tourney.id)
+        .single();
+      const dbTeams = current?.teams || updatedTeams;
+      const safeTeams = dbTeams.map((t, i) =>
+        i === teamIdx ? updatedTeams[i] : t
+      );
       await sb.from("team_tournaments")
-        .update({ teams: updatedTeams, updated_at: new Date().toISOString() })
+        .update({ teams: safeTeams, updated_at: new Date().toISOString() })
         .eq("id", tourney.id);
       setSaveStatus("saved");
       setTimeout(() => setSaveStatus(""), 2000);
