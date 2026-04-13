@@ -200,10 +200,13 @@ export default function TeamTournament({onBack, user, onDelete}){
 
   // ── Auto-save whenever teams/scores/hole change ────────────────────────────
   useEffect(()=>{
-    if(!tourneyId||screen==="home"||screen==="saved")return;
+    if(!tourneyId||screen==="home"||screen==="saved"||screen==="join")return;
     if(saveTimer.current)clearTimeout(saveTimer.current);
     setSaveStatus("saving");
     saveTimer.current=setTimeout(async()=>{
+      // Never downgrade status — once scoring starts, always stay "active"
+      // Leaderboard screen should not reset status to "setup"
+      const newStatus = (screen==="scoring"||screen==="leaderboard") ? "active" : "setup";
       await sb.from("team_tournaments").update({
         teams,
         course_id:courseId,
@@ -213,7 +216,7 @@ export default function TeamTournament({onBack, user, onDelete}){
         skins_enabled:skinsEnabled,
         big_boy_enabled:bigBoyEnabled,
         current_hole:currentHole,
-        status:screen==="scoring"?"active":"setup",
+        status:newStatus,
         updated_at:new Date().toISOString(),
       }).eq("id",tourneyId);
       setSaveStatus("saved");
@@ -221,7 +224,7 @@ export default function TeamTournament({onBack, user, onDelete}){
       loadSaved();
     },800);
     return()=>clearTimeout(saveTimer.current);
-  },[teams,currentHole,courseId,birdieBonus,holePars,screen,tourneyId]);
+  },[teams,currentHole,courseId,birdieBonus,holePars,ballsByPar,skinsEnabled,bigBoyEnabled,tourneyId]);
 
   // ── Create new tournament in DB ────────────────────────────────────────────
   async function createTourney(builtTeams){
