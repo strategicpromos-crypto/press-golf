@@ -745,7 +745,10 @@ export default function TeamTournament({onBack, user, onDelete}){
             const spectatorLink=`${appUrl}?tourney=${tourneyId}&spectate=1`;
             return(
               <div style={{background:"rgba(123,180,80,0.06)",border:"1px solid rgba(123,180,80,0.2)",borderRadius:14,padding:"16px",marginBottom:16}}>
-                <div style={{fontSize:11,color:C.green,letterSpacing:1.5,textTransform:"uppercase",marginBottom:12,fontWeight:600}}>🔗 Share Tournament</div>
+                <div style={{fontSize:11,color:C.green,letterSpacing:1.5,textTransform:"uppercase",marginBottom:8,fontWeight:600}}>🔗 Share Tournament</div>
+                <div style={{background:"rgba(232,184,75,0.1)",border:"1px solid rgba(232,184,75,0.3)",borderRadius:10,padding:"10px 12px",marginBottom:12,fontSize:12,color:C.gold,lineHeight:1.5}}>
+                  ⚠️ <strong>Send these links ONCE before teeing off.</strong> Each captain link is tied to this tournament ID. If you create a new tournament, these links will stop working.
+                </div>
 
                 {/* Spectator link */}
                 <div style={{marginBottom:16}}>
@@ -761,7 +764,10 @@ export default function TeamTournament({onBack, user, onDelete}){
 
                 {/* Captain links — no PIN, just tap and score */}
                 <div style={{fontSize:13,fontWeight:700,color:C.text,marginBottom:4}}>⛳ Team Captains</div>
-                <div style={{fontSize:11,color:C.muted,marginBottom:10}}>Each captain gets their own link — tap it and they're straight into scoring. No PIN needed.</div>
+                <div style={{fontSize:11,color:C.muted,marginBottom:6}}>Each captain gets their own link — tap it and they're straight into scoring.</div>
+                <div style={{fontSize:10,color:C.dim,marginBottom:10,fontFamily:"monospace",background:C.surface,padding:"6px 10px",borderRadius:8,wordBreak:"break-all"}}>
+                  Tournament ID: {tourneyId?.slice(0,8)}...
+                </div>
                 {teams.map((team,i)=>{
                   const captainLink=`${appUrl}?tourney=${tourneyId}&team=${i}`;
                   const smsBody=`⛳ You're captain of ${team.name}!\n\nTap to enter scores:\n${captainLink}\n\nScores update live on the leaderboard. — Press Golf`;
