@@ -423,19 +423,23 @@ export default function TeamTournament({onBack, user, onDelete}){
                     </div>
                   ):(
                     <>
-                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:2}}>
                         <div style={{fontWeight:700,fontSize:15,color:C.gold}}>{t.name||"Tournament"}</div>
                         <button onClick={()=>deleteTourney(t.id)} style={{background:"transparent",border:"none",color:C.muted,fontSize:18,cursor:"pointer",padding:"0 4px"}}>✕</button>
                       </div>
-                      <div style={{fontSize:11,color:C.muted,marginBottom:10}}>
+                      <div style={{fontSize:11,color:C.muted,marginBottom:4}}>
                         {COURSES[t.course_id]?.name||t.course_id} · Hole {t.current_hole} · {(t.teams||[]).length} teams
+                      </div>
+                      {/* Lock notice — active tournament links are permanent */}
+                      <div style={{fontSize:10,color:"rgba(232,184,75,0.6)",marginBottom:10}}>
+                        🔒 Links locked — captain links are permanent for this tournament
                       </div>
                       <div style={{display:"flex",gap:8}}>
                         <button onClick={()=>resumeTourney(t)} disabled={loading} style={{flex:2,padding:"11px",background:C.gold,color:"#0a1a0f",border:"none",borderRadius:10,fontSize:14,fontWeight:800,cursor:"pointer"}}>
                           {loading?"Loading...":"▶ Resume Round"}
                         </button>
                         <button onClick={async()=>{await resumeTourney(t);setScreen("leaderboard");}} style={{flex:1,padding:"11px",background:"transparent",color:C.gold,border:"1px solid "+C.gold+"44",borderRadius:10,fontSize:13,fontWeight:700,cursor:"pointer"}}>
-                          📊 Leaderboard
+                          📊 LB
                         </button>
                       </div>
                     </>
@@ -445,7 +449,7 @@ export default function TeamTournament({onBack, user, onDelete}){
             </div>
           )}
 
-          {/* Saved setups (pre-built, not started) */}
+          {/* Saved setups (pre-built, not started — no DB lock yet) */}
           {setups.length>0&&(
             <div style={{marginBottom:20}}>
               <div style={{fontSize:11,color:C.green,letterSpacing:1.5,textTransform:"uppercase",marginBottom:10,fontWeight:600}}>📋 Saved Setups</div>
@@ -470,14 +474,23 @@ export default function TeamTournament({onBack, user, onDelete}){
                         <div style={{fontWeight:700,fontSize:15}}>{t.name||"Tournament Setup"}</div>
                         <button onClick={()=>deleteTourney(t.id)} style={{background:"transparent",border:"none",color:C.muted,fontSize:18,cursor:"pointer",padding:"0 4px"}}>✕</button>
                       </div>
-                      <div style={{fontSize:11,color:C.muted,marginBottom:10}}>
+                      <div style={{fontSize:11,color:C.muted,marginBottom:4}}>
                         {COURSES[t.course_id]?.name||t.course_id} · {(t.teams||[]).length} teams · Last edited {new Date(t.updated_at).toLocaleDateString()}
+                      </div>
+                      <div style={{fontSize:10,color:C.muted,marginBottom:10}}>
+                        Links generated when you Tee Off
                       </div>
                       <div style={{display:"flex",gap:8}}>
                         <button onClick={()=>resumeTourney(t)} disabled={loading} style={{flex:1,padding:"11px",background:C.green,color:"#0a1a0f",border:"none",borderRadius:10,fontSize:13,fontWeight:800,cursor:"pointer"}}>
                           ✏️ Edit Setup
                         </button>
-                        <button onClick={async()=>{await resumeTourney(t);setCurrentHole(1);setActiveTeam(0);setScreen("scoring");}} style={{flex:1,padding:"11px",background:"transparent",color:C.green,border:"1px solid "+C.green+"44",borderRadius:10,fontSize:13,fontWeight:700,cursor:"pointer"}}>
+                        <button onClick={async()=>{
+                          // Tee Off on a setup tournament — lock it and go
+                          await resumeTourney(t);
+                          setCurrentHole(1);setActiveTeam(0);
+                          await sb.from("team_tournaments").update({status:"active",current_hole:1,updated_at:new Date().toISOString()}).eq("id",t.id);
+                          setScreen("scoring");
+                        }} style={{flex:1,padding:"11px",background:"transparent",color:C.green,border:"1px solid "+C.green+"44",borderRadius:10,fontSize:13,fontWeight:700,cursor:"pointer"}}>
                           ⛳ Tee Off
                         </button>
                       </div>
@@ -488,13 +501,20 @@ export default function TeamTournament({onBack, user, onDelete}){
             </div>
           )}
 
-          {/* New tournament */}
-          <BigBtn onClick={async()=>{
-            const builtTeams=buildTeams(numTeams);
-            setTeams(builtTeams);
-            setCurrentHole(1);setActiveTeam(0);
-            const id=await createTourney(builtTeams);
-            setTourneyId(id);
+          {/* New tournament — goes to setup screen, DB entry created only on Tee Off */}
+          <BigBtn onClick={()=>{
+            // Reset state for a fresh setup — no DB entry created yet
+            setTourneyId(null);
+            setDirectorCode(null);
+            setTeams(buildTeams(numTeams));
+            setCurrentHole(1);
+            setActiveTeam(0);
+            setCourseId("south-toledo");
+            setBirdieBonus(true);
+            setBallsByPar({3:2,4:2,5:2});
+            setHolePars({});
+            setSkinsEnabled(false);
+            setBigBoyEnabled(false);
             setScreen("setup");
           }}>+ New Tournament Setup</BigBtn>
 
@@ -793,10 +813,27 @@ export default function TeamTournament({onBack, user, onDelete}){
 
           <div style={{height:8}}/>
           <BigBtn onClick={async()=>{
+            setLoading(true);
+            let id=tourneyId;
+            if(!id){
+              // First time teeing off — create the DB entry now and lock the ID
+              id=await createTourney(teams);
+              setTourneyId(id);
+            } else {
+              // Already exists — just flip status to active (ID never changes)
+              await sb.from("team_tournaments").update({
+                teams,course_id:courseId,birdie_bonus:birdieBonus,
+                ball_count_by_par:ballsByPar,hole_pars:holePars,
+                skins_enabled:skinsEnabled,big_boy_enabled:bigBoyEnabled,
+                status:"active",current_hole:1,updated_at:new Date().toISOString()
+              }).eq("id",id);
+            }
+            setLoading(false);
             setCurrentHole(1);setActiveTeam(0);
-            if(tourneyId){await sb.from("team_tournaments").update({status:"active",current_hole:1}).eq("id",tourneyId);}
             setScreen("scoring");
-          }}>Tee It Up! ⛳</BigBtn>
+          }}>
+            {loading?"Creating...":"⛳ Tee It Up!"}
+          </BigBtn>
         </div>
       </div>
     );
