@@ -13,6 +13,12 @@ const PRICE_ID  = "price_1Tip7m2LCsgE9Ikh0yUEVgE8";
 const APP_URL   = "https://press-golf.vercel.app";
 const FREE_PLAYER_LIMIT = 2;
 
+// ── BETA FLAG ──────────────────────────────────────────────────────────────────
+// Set to true during beta to auto-sign-in after account creation.
+// Users skip the "check your email" step entirely.
+// Flip to false before public launch.
+const BETA_AUTO_LOGIN = true;
+
 const BET_TYPES = ["Skins","Nassau","Wolf","Birdies","Closest to Pin","Long Drive","Greenie","Press","Custom"];
 const CURRENT_SEASON = new Date().getFullYear();
 
@@ -280,18 +286,26 @@ function AuthScreen({onAuth,onPrivacy}){
   function friendlyError(e){
     if(!e) return "Something went wrong. Try again.";
     const m = e.toLowerCase();
-    if(m.includes("invalid login") || m.includes("invalid credentials")) return "Wrong email or password. Try again.";
-    if(m.includes("already registered") || m.includes("already exists")) return "That email already has an account. Tap Sign In below.";
-    if(m.includes("password")) return "Password must be at least 6 characters.";
-    if(m.includes("email")) return "Please enter a valid email address.";
-    if(m.includes("rate limit") || m.includes("too many")) return "Too many attempts. Wait a minute and try again.";
+    if(m.includes("invalid login")||m.includes("invalid credentials")||m.includes("invalid email or password"))
+      return "Wrong email or password. Double-check and try again.";
+    if(m.includes("already registered")||m.includes("already exists"))
+      return "That email already has an account — tap Sign In below.";
+    if(m.includes("password"))
+      return "Password must be at least 6 characters.";
+    if(m.includes("email"))
+      return "Please enter a valid email address.";
+    if(m.includes("rate limit")||m.includes("too many"))
+      return "Too many attempts. Wait a minute and try again.";
+    if(m.includes("network")||m.includes("fetch"))
+      return "No internet connection. Check your signal and try again.";
     return "Something went wrong. Please try again.";
   }
 
+  // Smart create: signs up and immediately signs in — no email confirmation needed
   async function handleCreate(){
     setErr(""); setMsg("");
     if(!name.trim()){ setErr("Please enter your name."); return; }
-    if(!email.trim()){ setErr("Please enter your email."); return; }
+    if(!email.trim()){ setErr("Please enter your email address."); return; }
     if(pass.length < 6){ setErr("Password must be at least 6 characters."); return; }
     setLoading(true);
     const { data, error } = await sb.auth.signUp({
@@ -299,22 +313,40 @@ function AuthScreen({onAuth,onPrivacy}){
       password: pass,
       options: { data: { display_name: name.trim() } }
     });
+
+    if(error){ setLoading(false); setErr(friendlyError(error.message)); return; }
+
+    // BETA: auto sign-in immediately after signup — no email confirmation step
+    if(BETA_AUTO_LOGIN){
+      const { data: signInData, error: signInError } = await sb.auth.signInWithPassword({
+        email: email.trim(),
+        password: pass,
+      });
+      setLoading(false);
+      if(signInError){ setErr(friendlyError(signInError.message)); return; }
+      if(signInData?.user){ onAuth(signInData.user); return; }
+    }
+
     setLoading(false);
-    if(error){ setErr(friendlyError(error.message)); return; }
-    // Email confirmation is OFF so user is signed in immediately
+    // Non-beta fallback: user is signed in if email confirmation is off
     if(data?.user){ onAuth(data.user); return; }
-    setMsg("Account created! Check your email then sign in.");
+    setErr("Almost there! Check your email for a confirmation link, then come back and sign in.");
     setScreen("signin");
   }
 
   async function handleSignIn(){
     setErr(""); setMsg("");
-    if(!email.trim()){ setErr("Please enter your email."); return; }
+    if(!email.trim()){ setErr("Please enter your email address."); return; }
     if(!pass){ setErr("Please enter your password."); return; }
     setLoading(true);
     const { data, error } = await sb.auth.signInWithPassword({ email: email.trim(), password: pass });
     setLoading(false);
-    if(error){ setErr(friendlyError(error.message)); return; }
+    if(error){
+      // If wrong password, offer reset right in the error message
+      const msg = friendlyError(error.message);
+      setErr(msg);
+      return;
+    }
     onAuth(data.user);
   }
 
@@ -322,20 +354,40 @@ function AuthScreen({onAuth,onPrivacy}){
     setErr(""); setMsg("");
     if(!email.trim()){ setErr("Enter your email address above first."); return; }
     setLoading(true);
-    await sb.auth.resetPasswordForEmail(email.trim());
+    await sb.auth.resetPasswordForEmail(email.trim(), {
+      redirectTo: window.location.origin,
+    });
     setLoading(false);
-    setMsg("Password reset link sent to " + email + ". Check your inbox.");
+    // Show helpful instructions including spam folder tip
+    setMsg("Reset link sent to " + email.trim() + ". Check your inbox — and your spam/junk folder if you don't see it within 2 minutes.");
   }
 
-  // ── Shared field styles ────────────────────────────────────────────────────
-  const field = { width:"100%", padding:"16px", background:"#0a1500", border:"1px solid rgba(123,180,80,0.25)", borderRadius:12, color:"#e8f0e9", fontSize:16, outline:"none", boxSizing:"border-box", fontFamily:"Georgia,serif" };
+  // Apple Sign In — zero friction for iOS users
+  async function handleApple(){
+    setErr("");
+    const { error } = await sb.auth.signInWithOAuth({
+      provider: "apple",
+      options: { redirectTo: window.location.origin }
+    });
+    if(error) setErr("Apple Sign In unavailable. Please use email instead.");
+  }
+
+  const field = {
+    width:"100%", padding:"16px",
+    background:"#0a1500",
+    border:"1px solid rgba(123,180,80,0.25)",
+    borderRadius:12, color:"#e8f0e9", fontSize:16,
+    outline:"none", boxSizing:"border-box", fontFamily:"Georgia,serif"
+  };
+
+  const isApple = /iphone|ipad|ipod|mac/i.test(navigator.userAgent);
 
   return(
     <div style={{fontFamily:"Georgia,serif", minHeight:"100vh", background:C.bg, color:C.text, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:"24px 24px 60px"}}>
 
       {/* Logo */}
       <div style={{textAlign:"center", marginBottom:32}}>
-        <div style={{display:"inline-flex", alignItems:"center", justifyContent:"center", width:72, height:72, background:`linear-gradient(135deg,${C.green},#4a8030)`, borderRadius:20, marginBottom:14, boxShadow:`0 4px 24px ${C.green}44`}}>
+        <div style={{display:"inline-flex", alignItems:"center", justifyContent:"center", width:72, height:72, background:`linear-gradient(135deg,${C.green},#4a8030)`, borderRadius:20, marginBottom:14}}>
           <span style={{fontSize:36}}>⛳</span>
         </div>
         <div style={{fontSize:46, fontWeight:800, letterSpacing:-2, color:"#f0f7ec", lineHeight:1}}>Press</div>
@@ -344,19 +396,44 @@ function AuthScreen({onAuth,onPrivacy}){
 
       <div style={{width:"100%", maxWidth:380}}>
 
-        {/* CREATE ACCOUNT screen (default) */}
+        {/* ── CREATE ACCOUNT ── */}
         {screen==="create"&&(
           <div style={{background:C.card, border:`1px solid ${C.border}`, borderRadius:20, padding:"28px 24px"}}>
-            <div style={{fontSize:20, fontWeight:800, marginBottom:6}}>Create your free account</div>
-            <div style={{fontSize:13, color:C.muted, marginBottom:24}}>Track golf bets, rounds, and season stats with your group.</div>
+            <div style={{fontSize:20, fontWeight:800, marginBottom:4}}>Create your free account</div>
+            <div style={{fontSize:13, color:C.muted, marginBottom:12}}>Track golf bets, rounds, and season stats.</div>
+
+            {/* Beta notice */}
+            {BETA_AUTO_LOGIN&&(
+              <div style={{background:"rgba(232,184,75,0.1)",border:"1px solid rgba(232,184,75,0.25)",borderRadius:10,padding:"8px 12px",marginBottom:16,fontSize:12,color:C.gold}}>
+                ⭐ Beta — you'll be signed in automatically after creating your account.
+              </div>
+            )}
+
+            {/* Apple Sign In — shown on Apple devices */}
+            {isApple&&(
+              <>
+                <button onClick={handleApple} style={{width:"100%", padding:"16px", background:"#fff", color:"#000", border:"none", borderRadius:12, fontSize:16, fontWeight:700, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:10, marginBottom:12}}>
+                  <span style={{fontSize:20}}>🍎</span> Continue with Apple
+                </button>
+                <div style={{display:"flex", alignItems:"center", gap:10, marginBottom:12}}>
+                  <div style={{flex:1, height:1, background:C.border}}/>
+                  <div style={{fontSize:12, color:C.muted}}>or use email</div>
+                  <div style={{flex:1, height:1, background:C.border}}/>
+                </div>
+              </>
+            )}
 
             <div style={{display:"flex", flexDirection:"column", gap:12}}>
-              <input value={name} onChange={e=>setName(e.target.value)} placeholder="Your name" autoComplete="name" style={field}/>
-              <input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="Email address" autoCapitalize="none" autoComplete="email" style={field}/>
-              <input type="password" value={pass} onChange={e=>setPass(e.target.value)} placeholder="Choose a password (6+ characters)" autoComplete="new-password" style={field}/>
+              <input value={name} onChange={e=>setName(e.target.value)} placeholder="Your name"
+                autoComplete="name" style={field}/>
+              <input type="email" value={email} onChange={e=>setEmail(e.target.value)}
+                placeholder="Email address" autoCapitalize="none" autoCorrect="off"
+                autoComplete="email" style={field}/>
+              <input type="password" value={pass} onChange={e=>setPass(e.target.value)}
+                placeholder="Password (6+ characters)"
+                autoComplete="new-password" style={field}/>
 
               {err&&<div style={{background:"rgba(224,80,80,0.1)", border:"1px solid rgba(224,80,80,0.3)", borderRadius:10, padding:"12px 14px", fontSize:14, color:C.red, lineHeight:1.5}}>{err}</div>}
-              {msg&&<div style={{background:"rgba(123,180,80,0.1)", border:"1px solid rgba(123,180,80,0.3)", borderRadius:10, padding:"12px 14px", fontSize:14, color:C.green, lineHeight:1.5}}>{msg}</div>}
 
               <button onClick={handleCreate} disabled={loading} style={{width:"100%", padding:"18px", background:loading?"#1a2a1a":C.green, color:loading?C.muted:"#0a1a0f", border:"none", borderRadius:12, fontSize:17, fontWeight:800, cursor:loading?"wait":"pointer", marginTop:4}}>
                 {loading?"Creating account...":"Create Account →"}
@@ -370,17 +447,44 @@ function AuthScreen({onAuth,onPrivacy}){
           </div>
         )}
 
-        {/* SIGN IN screen */}
+        {/* ── SIGN IN ── */}
         {screen==="signin"&&(
           <div style={{background:C.card, border:`1px solid ${C.border}`, borderRadius:20, padding:"28px 24px"}}>
-            <div style={{fontSize:20, fontWeight:800, marginBottom:6}}>Welcome back</div>
-            <div style={{fontSize:13, color:C.muted, marginBottom:24}}>Sign in to your Press account.</div>
+            <div style={{fontSize:20, fontWeight:800, marginBottom:4}}>Welcome back</div>
+            <div style={{fontSize:13, color:C.muted, marginBottom:20}}>Sign in to your Press account.</div>
+
+            {/* Apple Sign In */}
+            {isApple&&(
+              <>
+                <button onClick={handleApple} style={{width:"100%", padding:"16px", background:"#fff", color:"#000", border:"none", borderRadius:12, fontSize:16, fontWeight:700, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:10, marginBottom:12}}>
+                  <span style={{fontSize:20}}>🍎</span> Sign in with Apple
+                </button>
+                <div style={{display:"flex", alignItems:"center", gap:10, marginBottom:12}}>
+                  <div style={{flex:1, height:1, background:C.border}}/>
+                  <div style={{fontSize:12, color:C.muted}}>or use email</div>
+                  <div style={{flex:1, height:1, background:C.border}}/>
+                </div>
+              </>
+            )}
 
             <div style={{display:"flex", flexDirection:"column", gap:12}}>
-              <input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="Email address" autoCapitalize="none" autoComplete="email" style={field}/>
-              <input type="password" value={pass} onChange={e=>setPass(e.target.value)} placeholder="Password" autoComplete="current-password" style={field}/>
+              <input type="email" value={email} onChange={e=>setEmail(e.target.value)}
+                placeholder="Email address" autoCapitalize="none" autoCorrect="off"
+                autoComplete="email" style={field}/>
+              <input type="password" value={pass} onChange={e=>setPass(e.target.value)}
+                placeholder="Password" autoComplete="current-password" style={field}
+                onKeyDown={e=>e.key==="Enter"&&handleSignIn()}/>
 
-              {err&&<div style={{background:"rgba(224,80,80,0.1)", border:"1px solid rgba(224,80,80,0.3)", borderRadius:10, padding:"12px 14px", fontSize:14, color:C.red, lineHeight:1.5}}>{err}</div>}
+              {err&&(
+                <div style={{background:"rgba(224,80,80,0.1)", border:"1px solid rgba(224,80,80,0.3)", borderRadius:10, padding:"12px 14px", fontSize:14, color:C.red, lineHeight:1.5}}>
+                  {err}
+                  {err.includes("Wrong email or password")&&(
+                    <button onClick={()=>{setScreen("forgot");setErr("");}} style={{display:"block", marginTop:8, background:"none", border:"none", color:C.gold, fontSize:13, fontWeight:700, cursor:"pointer", padding:0}}>
+                      → Forgot your password?
+                    </button>
+                  )}
+                </div>
+              )}
               {msg&&<div style={{background:"rgba(123,180,80,0.1)", border:"1px solid rgba(123,180,80,0.3)", borderRadius:10, padding:"12px 14px", fontSize:14, color:C.green, lineHeight:1.5}}>{msg}</div>}
 
               <button onClick={handleSignIn} disabled={loading} style={{width:"100%", padding:"18px", background:loading?"#1a2a1a":C.green, color:loading?C.muted:"#0a1a0f", border:"none", borderRadius:12, fontSize:17, fontWeight:800, cursor:loading?"wait":"pointer", marginTop:4}}>
@@ -399,20 +503,32 @@ function AuthScreen({onAuth,onPrivacy}){
           </div>
         )}
 
-        {/* FORGOT PASSWORD screen */}
+        {/* ── FORGOT PASSWORD ── */}
         {screen==="forgot"&&(
           <div style={{background:C.card, border:`1px solid ${C.border}`, borderRadius:20, padding:"28px 24px"}}>
-            <div style={{fontSize:20, fontWeight:800, marginBottom:6}}>Reset your password</div>
-            <div style={{fontSize:13, color:C.muted, marginBottom:24}}>Enter your email and we'll send you a reset link.</div>
+            <div style={{fontSize:20, fontWeight:800, marginBottom:4}}>Reset your password</div>
+            <div style={{fontSize:13, color:C.muted, marginBottom:20}}>
+              We'll email you a link to set a new password.
+            </div>
 
             <div style={{display:"flex", flexDirection:"column", gap:12}}>
-              <input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="Email address" autoCapitalize="none" style={field}/>
+              <input type="email" value={email} onChange={e=>setEmail(e.target.value)}
+                placeholder="Your email address" autoCapitalize="none" autoCorrect="off"
+                style={field}/>
 
               {err&&<div style={{background:"rgba(224,80,80,0.1)", border:"1px solid rgba(224,80,80,0.3)", borderRadius:10, padding:"12px 14px", fontSize:14, color:C.red, lineHeight:1.5}}>{err}</div>}
-              {msg&&<div style={{background:"rgba(123,180,80,0.1)", border:"1px solid rgba(123,180,80,0.3)", borderRadius:10, padding:"12px 14px", fontSize:14, color:C.green, lineHeight:1.5}}>{msg}</div>}
+              {msg&&(
+                <div style={{background:"rgba(123,180,80,0.1)", border:"1px solid rgba(123,180,80,0.3)", borderRadius:10, padding:"12px 14px", fontSize:14, color:C.green, lineHeight:1.6}}>
+                  {msg}
+                  <div style={{marginTop:10, paddingTop:10, borderTop:"1px solid rgba(123,180,80,0.2)", fontSize:12, color:C.muted}}>
+                    📱 On iPhone: check your Mail app Junk folder or VIP inbox.<br/>
+                    📧 On Gmail: check Spam or Promotions tab.
+                  </div>
+                </div>
+              )}
 
-              <button onClick={handleForgot} disabled={loading} style={{width:"100%", padding:"18px", background:loading?"#1a2a1a":C.green, color:loading?C.muted:"#0a1a0f", border:"none", borderRadius:12, fontSize:17, fontWeight:800, cursor:loading?"wait":"pointer", marginTop:4}}>
-                {loading?"Sending...":"Send Reset Link →"}
+              <button onClick={handleForgot} disabled={loading||!!msg} style={{width:"100%", padding:"18px", background:loading||msg?"#1a2a1a":C.green, color:loading||msg?C.muted:"#0a1a0f", border:"none", borderRadius:12, fontSize:17, fontWeight:800, cursor:loading||msg?"default":"pointer", marginTop:4}}>
+                {loading?"Sending...":msg?"Link Sent ✓":"Send Reset Link →"}
               </button>
             </div>
 
@@ -1274,15 +1390,27 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
             ⭐ View Pro Features
           </button>
         )}
-        {/* Live Round Button */}
-        <button onClick={()=>setView("liveround")} style={{background:`linear-gradient(135deg,${C.green},#4a8030)`,border:"none",color:"#0a1a0f",padding:"12px 24px",borderRadius:20,fontSize:14,fontWeight:800,cursor:"pointer",marginBottom:8,boxShadow:`0 4px 16px ${C.green}44`,letterSpacing:0.5}}>
-          ⛳ Live Round
+        {/* ── BUDDY GAME ── */}
+        <button onClick={()=>setView("liveround")} style={{width:"100%",maxWidth:360,background:`linear-gradient(135deg,${C.green},#4a8030)`,border:"none",color:"#0a1a0f",padding:"0",borderRadius:16,cursor:"pointer",marginBottom:10,boxShadow:`0 4px 16px ${C.green}33`,textAlign:"left",overflow:"hidden"}}>
+          <div style={{padding:"14px 18px"}}>
+            <div style={{fontSize:16,fontWeight:800,letterSpacing:0.3,marginBottom:3}}>⛳ Buddy Game</div>
+            <div style={{fontSize:11,fontWeight:600,opacity:0.75}}>Nassau · Match Play · Skins</div>
+            <div style={{fontSize:11,opacity:0.6,marginTop:2}}>You vs 1–3 players · quick setup</div>
+          </div>
         </button>
-        <button onClick={()=>setView("tournament")} style={{background:`linear-gradient(135deg,${C.gold},#b8860b)`,border:"none",color:"#0a1a0f",padding:"10px 20px",borderRadius:20,fontSize:13,fontWeight:800,cursor:"pointer",marginBottom:8,boxShadow:`0 4px 16px ${C.gold}44`,letterSpacing:0.5}}>
-          🏆 Team Tournament
+
+        {/* ── OUTING / TOURNAMENT ── */}
+        <button onClick={()=>setView("tournament")} style={{width:"100%",maxWidth:360,background:`linear-gradient(135deg,${C.gold},#b8860b)`,border:"none",color:"#0a1a0f",padding:"0",borderRadius:16,cursor:"pointer",marginBottom:10,boxShadow:`0 4px 16px ${C.gold}33`,textAlign:"left",overflow:"hidden"}}>
+          <div style={{padding:"14px 18px"}}>
+            <div style={{fontSize:16,fontWeight:800,letterSpacing:0.3,marginBottom:3}}>🏆 Outing / Tournament</div>
+            <div style={{fontSize:11,fontWeight:600,opacity:0.75}}>Best Ball · Teams · Leaderboard</div>
+            <div style={{fontSize:11,opacity:0.6,marginTop:2}}>Director sends links to captains</div>
+          </div>
         </button>
-        <button onClick={()=>setView("joinTourney")} style={{background:"transparent",border:`1.5px solid ${C.green}66`,color:C.green,padding:"9px 20px",borderRadius:20,fontSize:13,fontWeight:700,cursor:"pointer",marginBottom:12}}>
-          🔑 Join a Tournament
+
+        {/* ── JOIN ── */}
+        <button onClick={()=>setView("joinTourney")} style={{width:"100%",maxWidth:360,background:"transparent",border:`1.5px solid ${C.green}55`,color:C.green,padding:"10px 18px",borderRadius:14,fontSize:13,fontWeight:700,cursor:"pointer",marginBottom:12,textAlign:"left"}}>
+          🔑 Join a Tournament &nbsp;<span style={{fontSize:11,fontWeight:400,opacity:0.6}}>— got a code or link?</span>
         </button>
 
         <div style={{display:"flex",background:"rgba(0,0,0,0.35)",border:`1px solid ${C.border}`,borderRadius:14,overflow:"hidden",maxWidth:360,margin:"0 auto"}}>
