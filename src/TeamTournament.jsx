@@ -302,8 +302,11 @@ export default function TeamTournament({onBack, user, onDelete}){
       setCurrentHole(data.current_hole||1);
       setActiveTeam(0);
       setDirectorCode(data.director_code||null);
+      // Go to scoring if: status is active OR any team has scores entered
+      // This prevents the setup loop bug where a corrupted status sent director back to setup
       const hasScores=(data.teams||[]).some(t=>Object.keys(t.scores||{}).length>0);
       const goToScoring=data.status==="active"||hasScores;
+      // Also fix: if we have scores, repair the DB status right now
       if(hasScores&&data.status!=="active"){
         await sb.from("team_tournaments").update({status:"active",updated_at:new Date().toISOString()}).eq("id",data.id);
       }
@@ -502,13 +505,7 @@ export default function TeamTournament({onBack, user, onDelete}){
                           // Tee Off on a setup tournament — lock it and go
                           await resumeTourney(t);
                           setCurrentHole(1);setActiveTeam(0);
-                          await sb.from("team_tournaments").update({
-                            status:"active",current_hole:1,
-                            ctp_enabled:t.ctp_enabled||false,
-                            ctp_holes:t.ctp_holes||[],
-                            ctp_leaders:t.ctp_leaders||{},
-                            updated_at:new Date().toISOString()
-                          }).eq("id",t.id);
+                          await sb.from("team_tournaments").update({status:"active",current_hole:1,updated_at:new Date().toISOString()}).eq("id",t.id);
                           setScreen("scoring");
                         }} style={{flex:1,padding:"11px",background:"transparent",color:C.green,border:"1px solid "+C.green+"44",borderRadius:10,fontSize:13,fontWeight:700,cursor:"pointer"}}>
                           ⛳ Tee Off
@@ -883,15 +880,13 @@ export default function TeamTournament({onBack, user, onDelete}){
           <div style={{height:8}}/>
           <BigBtn onClick={async()=>{
             setLoading(true);
-            // Cancel any pending autosave to avoid race condition
-            if(saveTimer.current) clearTimeout(saveTimer.current);
             let id=tourneyId;
             if(!id){
+              // First time teeing off — create the DB entry now and lock the ID
               id=await createTourney(teams);
               setTourneyId(id);
             } else {
-              // Write ALL current state to DB synchronously right now
-              // This prevents the race where autosave hasn't fired yet
+              // Already exists — just flip status to active (ID never changes)
               await sb.from("team_tournaments").update({
                 teams,course_id:courseId,birdie_bonus:birdieBonus,
                 ball_count_by_par:ballsByPar,hole_pars:holePars,
@@ -904,7 +899,7 @@ export default function TeamTournament({onBack, user, onDelete}){
             setCurrentHole(1);setActiveTeam(0);
             setScreen("scoring");
           }}>
-            {loading?"Saving...":"⛳ Tee It Up!"}
+            {loading?"Creating...":"⛳ Tee It Up!"}
           </BigBtn>
         </div>
       </div>
@@ -1285,6 +1280,57 @@ export default function TeamTournament({onBack, user, onDelete}){
                       <div style={{position:"absolute",top:4,left:bigBoyEnabled?26:4,width:20,height:20,borderRadius:"50%",background:"#fff",transition:"left 0.2s"}}/>
                     </button>
                   </div>
+                </div>
+              )}
+
+              {/* ── CTP ─────────────────────────────────────────────────── */}
+              <div style={{background:C.card,border:"1px solid "+C.border,borderRadius:12,padding:"14px 16px",marginBottom:ctpEnabled?8:12}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                  <div>
+                    <div style={{fontWeight:700,fontSize:14}}>📍 Closest to the Pin</div>
+                    <div style={{fontSize:11,color:C.muted,marginTop:2}}>{ctpEnabled?"Select CTP holes below":"Off"}</div>
+                  </div>
+                  <button onClick={async()=>{
+                    const v=!ctpEnabled;
+                    setCtpEnabled(v);
+                    if(!v){setCtpHoles([]);setCtpLeaders({});}
+                    await sb.from("team_tournaments").update({ctp_enabled:v,ctp_holes:v?ctpHoles:[],ctp_leaders:v?ctpLeaders:{},updated_at:new Date().toISOString()}).eq("id",tourneyId);
+                  }} style={{width:52,height:28,borderRadius:14,border:"none",cursor:"pointer",background:ctpEnabled?"#e8b84b":"#333",position:"relative",flexShrink:0,transition:"background 0.2s"}}>
+                    <div style={{position:"absolute",top:4,left:ctpEnabled?26:4,width:20,height:20,borderRadius:"50%",background:"#fff",transition:"left 0.2s"}}/>
+                  </button>
+                </div>
+              </div>
+              {ctpEnabled&&(
+                <div style={{background:"rgba(232,184,75,0.06)",border:"1px solid rgba(232,184,75,0.25)",borderRadius:12,padding:"14px 16px",marginBottom:12,marginLeft:8}}>
+                  <div style={{fontSize:12,color:C.gold,fontWeight:700,marginBottom:8}}>Select CTP Holes — tap to toggle</div>
+                  <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                    {course.holes.map(h=>{
+                      const effP=holePars[h.hole]??h.par;
+                      const isSel=ctpHoles.includes(h.hole);
+                      return(
+                        <button key={h.hole} onClick={async()=>{
+                          const next=isSel?ctpHoles.filter(x=>x!==h.hole):[...ctpHoles,h.hole];
+                          setCtpHoles(next);
+                          await sb.from("team_tournaments").update({ctp_holes:next,updated_at:new Date().toISOString()}).eq("id",tourneyId);
+                        }} style={{
+                          width:46,height:46,borderRadius:8,
+                          background:isSel?C.gold:"rgba(255,255,255,0.06)",
+                          color:isSel?"#0a1a0f":effP===3?C.gold:C.muted,
+                          border:"2px solid "+(isSel?C.gold:effP===3?"rgba(232,184,75,0.4)":"rgba(255,255,255,0.15)"),
+                          fontWeight:isSel?800:600,fontSize:12,cursor:"pointer",
+                          display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:1
+                        }}>
+                          <span style={{fontSize:14,fontWeight:800}}>{h.hole}</span>
+                          <span style={{fontSize:8,opacity:0.8}}>P{effP}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {ctpHoles.length>0&&(
+                    <div style={{fontSize:11,color:C.gold,marginTop:8}}>
+                      📍 CTP: holes {ctpHoles.sort((a,b)=>a-b).join(", ")} — ☐ appears next to each player on these holes
+                    </div>
+                  )}
                 </div>
               )}
 
