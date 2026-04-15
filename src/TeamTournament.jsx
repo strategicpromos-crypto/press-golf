@@ -1019,10 +1019,6 @@ export default function TeamTournament({onBack, user, onDelete}){
           )}
 
           {/* Player entries */}
-          {/* DEBUG — remove after fix */}
-          <div style={{background:"rgba(255,0,0,0.15)",border:"1px solid red",borderRadius:8,padding:"6px 10px",marginBottom:8,fontSize:11,fontFamily:"monospace",color:"#ff9999"}}>
-            DEBUG: ctpEnabled={String(ctpEnabled)} | ctpHoles=[{ctpHoles.join(",")}] | currentHole={currentHole} | isCtpHole={String(ctpEnabled&&ctpHoles.includes(currentHole))}
-          </div>
           {Array.from({length:team.size},(_,j)=>{
             const score=getPlayerScore(team,j,currentHole);
             const isBest=best2Set.has(j)&&score!==null;
@@ -1298,7 +1294,6 @@ export default function TeamTournament({onBack, user, onDelete}){
                     const v=!ctpEnabled;
                     setCtpEnabled(v);
                     if(!v){setCtpHoles([]);setCtpLeaders({});}
-                    await sb.from("team_tournaments").update({ctp_enabled:v,ctp_holes:v?ctpHoles:[],ctp_leaders:v?ctpLeaders:{},updated_at:new Date().toISOString()}).eq("id",tourneyId);
                   }} style={{width:52,height:28,borderRadius:14,border:"none",cursor:"pointer",background:ctpEnabled?"#e8b84b":"#333",position:"relative",flexShrink:0,transition:"background 0.2s"}}>
                     <div style={{position:"absolute",top:4,left:ctpEnabled?26:4,width:20,height:20,borderRadius:"50%",background:"#fff",transition:"left 0.2s"}}/>
                   </button>
@@ -1312,10 +1307,9 @@ export default function TeamTournament({onBack, user, onDelete}){
                       const effP=holePars[h.hole]??h.par;
                       const isSel=ctpHoles.includes(h.hole);
                       return(
-                        <button key={h.hole} onClick={async()=>{
+                        <button key={h.hole} onClick={()=>{
                           const next=isSel?ctpHoles.filter(x=>x!==h.hole):[...ctpHoles,h.hole];
                           setCtpHoles(next);
-                          await sb.from("team_tournaments").update({ctp_holes:next,updated_at:new Date().toISOString()}).eq("id",tourneyId);
                         }} style={{
                           width:46,height:46,borderRadius:8,
                           background:isSel?C.gold:"rgba(255,255,255,0.06)",
