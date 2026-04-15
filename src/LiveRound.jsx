@@ -202,7 +202,8 @@ function SideBlock({ side, label, sideTotal, sideEnd, oppFirst }) {
 
 function getTally(scores, course, opp, courseId) {
   const absStrokes = Math.abs(opp.strokes || 0);
-  const strokeHoles    = getStrokeHoles(courseId || "south-toledo", absStrokes);
+  const strokesPerSide = Math.round(absStrokes / 2); // opp.strokes is stored as total, getStrokeHoles needs per-side
+  const strokeHoles    = getStrokeHoles(courseId || "south-toledo", strokesPerSide);
   const myStrokeHoles  = opp.strokes < 0 ? strokeHoles : [];
   const oppStrokeHoles = opp.strokes > 0 ? strokeHoles : [];
   const myScores  = scores["me"]         || {};
@@ -473,19 +474,19 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
 
   function getStrokeHolesForOpp(opp, hole) {
     const effective = getEffectiveStrokes(opp, hole ?? 1);
-    return getStrokeHoles(courseId, Math.abs(effective));
+    return getStrokeHoles(courseId, Math.round(Math.abs(effective) / 2));
   }
 
   function oppGetsStrokeOnHole(opp, hole) {
     const effective = getEffectiveStrokes(opp, hole);
     if (!effective || effective <= 0) return false;
-    return getStrokeHoles(courseId, Math.abs(effective)).includes(hole);
+    return getStrokeHoles(courseId, Math.round(Math.abs(effective) / 2)).includes(hole);
   }
 
   function iGetStrokeOnHole(opp, hole) {
     const effective = getEffectiveStrokes(opp, hole);
     if (!effective || effective >= 0) return false;
-    return getStrokeHoles(courseId, Math.abs(effective)).includes(hole);
+    return getStrokeHoles(courseId, Math.round(Math.abs(effective) / 2)).includes(hole);
   }
 
   // -- Add opponent ----------------------------------------------------------
@@ -1446,7 +1447,7 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
     // Hole-by-hole net outcomes for a result (W/L/H or null)
     function holeOutcomes(r) {
       const abs = Math.abs(r.strokes || 0);
-      const sh  = getStrokeHoles(courseId || "south-toledo", abs);
+      const sh  = getStrokeHoles(courseId || "south-toledo", Math.round(abs / 2));
       const mySH  = r.strokes < 0 ? sh : [];
       const opSH  = r.strokes > 0 ? sh : [];
       const myS   = scores["me"]        || {};
@@ -1543,7 +1544,7 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
                                   const op=safeInt((scores[r.playerId]||{})[h.hole],-1);
                                   if(my<0||op<0)continue;
                                   const abs=Math.abs(r.strokes||0);
-                                  const sh=getStrokeHoles(courseId||"south-toledo",abs);
+                                  const sh=getStrokeHoles(courseId||"south-toledo",Math.round(abs/2));
                                   const mySH=r.strokes<0?sh:[];
                                   const opSH=r.strokes>0?sh:[];
                                   myT+=mySH.includes(h.hole)?my-1:my;
