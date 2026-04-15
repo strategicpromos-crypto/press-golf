@@ -170,11 +170,31 @@ export default function TeamTournament({onBack, user, onDelete}){
   const[spectatorTourney,setSpectatorTourney]=useState(null);
   const[lbTab,setLbTab]=useState("standings");      // leaderboard tab
   const[showSettings,setShowSettings]=useState(false); // director settings overlay
+  const[userCourses,setUserCourses]=useState([]);        // custom courses from Supabase
+  const[showAddCourse,setShowAddCourse]=useState(false); // show course entry form
+  const[newCourseName,setNewCourseName]=useState("");
+  const[newCourseCity,setNewCourseCity]=useState("");
+  const[newCoursePar,setNewCoursePar]=useState(72);
+  const[newCourseHoles,setNewCourseHoles]=useState(
+    Array.from({length:18},(_,i)=>({hole:i+1,par:4,hdcp:i+1,yards:400,side:i<9?"front":"back"}))
+  );
+  const[savingCourse,setSavingCourse]=useState(false);
   const saveTimer=useRef(null);
   const subRef=useRef(null);
-  const course=COURSES[courseId];
+  // Helper: get course object from built-in or user courses
+  function getCourse(id){
+    if(COURSES[id]) return COURSES[id];
+    return userCourses.find(c=>c.id===id)||null;
+  }
+  const course=getCourse(courseId);
 
-  useEffect(()=>{ loadSaved(); },[]);
+  useEffect(()=>{ loadSaved(); loadUserCourses(); },[]);
+
+  async function loadUserCourses(){
+    if(!user?.id) return;
+    const{data}=await sb.from("user_courses").select("*").eq("owner_id",user.id).order("name");
+    if(data) setUserCourses(data);
+  }
 
   // ── Real-time: director sees captain scores instantly ──────────────────────
   useEffect(()=>{
@@ -202,6 +222,27 @@ export default function TeamTournament({onBack, user, onDelete}){
       .order("updated_at",{ascending:false})
       .limit(10);
     if(data)setSavedTourneys(data);
+  }
+
+  async function saveUserCourse(){
+    if(!newCourseName.trim()) return;
+    setSavingCourse(true);
+    const id = "custom-" + Date.now();
+    const courseData = {
+      id,
+      owner_id: user.id,
+      name: newCourseName.trim(),
+      city: newCourseCity.trim(),
+      par: newCoursePar,
+      holes: newCourseHoles.map(h=>({...h,par:parseInt(h.par)||4,hdcp:parseInt(h.hdcp)||1,yards:parseInt(h.yards)||400})),
+    };
+    await sb.from("user_courses").insert(courseData);
+    await loadUserCourses();
+    setCourseId(id);
+    setShowAddCourse(false);
+    setNewCourseName(""); setNewCourseCity(""); setNewCoursePar(72);
+    setNewCourseHoles(Array.from({length:18},(_,i)=>({hole:i+1,par:4,hdcp:i+1,yards:400,side:i<9?"front":"back"})));
+    setSavingCourse(false);
   }
 
   // ── Auto-save whenever teams/scores/hole change ────────────────────────────
@@ -592,6 +633,106 @@ export default function TeamTournament({onBack, user, onDelete}){
     );
   }
 
+  // ADD COURSE FORM
+  if(showAddCourse){
+    const inp2={width:"100%",padding:"12px",background:C.surface,border:"1px solid "+C.border,borderRadius:8,color:C.text,fontSize:14,outline:"none",boxSizing:"border-box"};
+    return(
+      <div style={{fontFamily:"Georgia,serif",minHeight:"100vh",background:C.bg,color:C.text,paddingBottom:60}}>
+        <div style={{background:"linear-gradient(180deg,"+C.card+" 0%,transparent 100%)",padding:"50px 20px 20px"}}>
+          <button onClick={()=>setShowAddCourse(false)} style={{background:"rgba(123,180,80,0.15)",border:"1px solid "+C.green,color:C.green,fontSize:13,cursor:"pointer",padding:"8px 16px",borderRadius:20,fontWeight:700,marginBottom:16}}>‹ Back</button>
+          <div style={{fontSize:22,fontWeight:800}}>Add a Course</div>
+          <div style={{fontSize:12,color:C.muted,marginTop:4}}>Enter the scorecard details. Pull it up on 18Birdies or the club website.</div>
+        </div>
+        <div style={{padding:"0 20px"}}>
+
+          {/* Course info */}
+          <div style={{background:C.card,border:"1px solid "+C.border,borderRadius:12,padding:"16px",marginBottom:16}}>
+            <div style={{fontSize:12,color:C.muted,marginBottom:6}}>Course name</div>
+            <input value={newCourseName} onChange={e=>setNewCourseName(e.target.value)}
+              placeholder="e.g. Sylvania Country Club" style={{...inp2,marginBottom:12,fontSize:16,fontWeight:700}}/>
+            <div style={{fontSize:12,color:C.muted,marginBottom:6}}>City / State</div>
+            <input value={newCourseCity} onChange={e=>setNewCourseCity(e.target.value)}
+              placeholder="e.g. Sylvania, OH" style={{...inp2,marginBottom:12}}/>
+            <div style={{fontSize:12,color:C.muted,marginBottom:6}}>Course par</div>
+            <div style={{display:"flex",gap:8}}>
+              {[70,71,72,73].map(p=>(
+                <button key={p} onClick={()=>setNewCoursePar(p)} style={{flex:1,padding:"12px",borderRadius:8,border:"1px solid "+(newCoursePar===p?C.green:C.border),background:newCoursePar===p?C.green:"transparent",color:newCoursePar===p?"#0a1a0f":C.text,fontWeight:700,cursor:"pointer",fontSize:15}}>{p}</button>
+              ))}
+            </div>
+          </div>
+
+          {/* Hole-by-hole entry */}
+          <div style={{fontSize:13,fontWeight:700,color:C.green,letterSpacing:1,textTransform:"uppercase",marginBottom:10}}>Scorecard</div>
+
+          {/* Header */}
+          <div style={{display:"grid",gridTemplateColumns:"36px 60px 60px 60px 70px",gap:4,marginBottom:6,padding:"0 4px"}}>
+            {["Hole","Par","Hdcp","Yards","Side"].map(h=>(
+              <div key={h} style={{fontSize:10,color:C.muted,letterSpacing:1,textTransform:"uppercase",textAlign:"center"}}>{h}</div>
+            ))}
+          </div>
+
+          {/* Front 9 */}
+          <div style={{fontSize:11,color:C.gold,fontWeight:700,letterSpacing:1,marginBottom:6,marginTop:4}}>FRONT 9</div>
+          {newCourseHoles.slice(0,9).map((h,i)=>(
+            <div key={i} style={{display:"grid",gridTemplateColumns:"36px 60px 60px 60px 70px",gap:4,marginBottom:6,alignItems:"center"}}>
+              <div style={{fontWeight:800,fontSize:14,textAlign:"center",color:C.muted}}>{h.hole}</div>
+              <select value={h.par} onChange={e=>{const hs=[...newCourseHoles];hs[i]={...hs[i],par:parseInt(e.target.value)};setNewCourseHoles(hs);}}
+                style={{...inp2,padding:"8px 4px",textAlign:"center",fontSize:14}}>
+                {[3,4,5].map(p=><option key={p} value={p}>{p}</option>)}
+              </select>
+              <input type="number" value={h.hdcp} onChange={e=>{const hs=[...newCourseHoles];hs[i]={...hs[i],hdcp:e.target.value};setNewCourseHoles(hs);}}
+                style={{...inp2,padding:"8px 4px",textAlign:"center",fontSize:14}} min="1" max="18"/>
+              <input type="number" value={h.yards} onChange={e=>{const hs=[...newCourseHoles];hs[i]={...hs[i],yards:e.target.value};setNewCourseHoles(hs);}}
+                style={{...inp2,padding:"8px 4px",textAlign:"center",fontSize:14}}/>
+              <div style={{fontSize:10,color:C.muted,textAlign:"center"}}>front</div>
+            </div>
+          ))}
+
+          {/* Front totals */}
+          <div style={{display:"flex",justifyContent:"space-between",padding:"8px 4px",marginBottom:16,borderTop:"1px solid "+C.border,fontSize:12,color:C.muted}}>
+            <span>OUT</span>
+            <span>Par {newCourseHoles.slice(0,9).reduce((s,h)=>s+(parseInt(h.par)||0),0)}</span>
+            <span>{newCourseHoles.slice(0,9).reduce((s,h)=>s+(parseInt(h.yards)||0),0)} yds</span>
+          </div>
+
+          {/* Back 9 */}
+          <div style={{fontSize:11,color:C.gold,fontWeight:700,letterSpacing:1,marginBottom:6}}>BACK 9</div>
+          {newCourseHoles.slice(9,18).map((h,i)=>(
+            <div key={i+9} style={{display:"grid",gridTemplateColumns:"36px 60px 60px 60px 70px",gap:4,marginBottom:6,alignItems:"center"}}>
+              <div style={{fontWeight:800,fontSize:14,textAlign:"center",color:C.muted}}>{h.hole}</div>
+              <select value={h.par} onChange={e=>{const hs=[...newCourseHoles];hs[i+9]={...hs[i+9],par:parseInt(e.target.value)};setNewCourseHoles(hs);}}
+                style={{...inp2,padding:"8px 4px",textAlign:"center",fontSize:14}}>
+                {[3,4,5].map(p=><option key={p} value={p}>{p}</option>)}
+              </select>
+              <input type="number" value={h.hdcp} onChange={e=>{const hs=[...newCourseHoles];hs[i+9]={...hs[i+9],hdcp:e.target.value};setNewCourseHoles(hs);}}
+                style={{...inp2,padding:"8px 4px",textAlign:"center",fontSize:14}} min="1" max="18"/>
+              <input type="number" value={h.yards} onChange={e=>{const hs=[...newCourseHoles];hs[i+9]={...hs[i+9],yards:e.target.value};setNewCourseHoles(hs);}}
+                style={{...inp2,padding:"8px 4px",textAlign:"center",fontSize:14}}/>
+              <div style={{fontSize:10,color:C.muted,textAlign:"center"}}>back</div>
+            </div>
+          ))}
+
+          {/* Back + total */}
+          <div style={{display:"flex",justifyContent:"space-between",padding:"8px 4px",borderTop:"1px solid "+C.border,fontSize:12,color:C.muted,marginBottom:4}}>
+            <span>IN</span>
+            <span>Par {newCourseHoles.slice(9,18).reduce((s,h)=>s+(parseInt(h.par)||0),0)}</span>
+            <span>{newCourseHoles.slice(9,18).reduce((s,h)=>s+(parseInt(h.yards)||0),0)} yds</span>
+          </div>
+          <div style={{display:"flex",justifyContent:"space-between",padding:"8px 4px",fontSize:13,fontWeight:700,color:C.text,marginBottom:24,borderTop:"1px solid "+C.border}}>
+            <span>TOTAL</span>
+            <span style={{color:C.green}}>Par {newCourseHoles.reduce((s,h)=>s+(parseInt(h.par)||0),0)}</span>
+            <span>{newCourseHoles.reduce((s,h)=>s+(parseInt(h.yards)||0),0)} yds</span>
+          </div>
+
+          <button onClick={saveUserCourse} disabled={!newCourseName.trim()||savingCourse}
+            style={{width:"100%",padding:"18px",background:newCourseName.trim()&&!savingCourse?C.green:"#1a2a1a",color:newCourseName.trim()&&!savingCourse?"#0a1a0f":C.muted,border:"none",borderRadius:12,fontSize:17,fontWeight:800,cursor:newCourseName.trim()&&!savingCourse?"pointer":"not-allowed"}}>
+            {savingCourse?"Saving...":"⛳ Save Course"}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   // SETUP
   if(screen==="setup"){
     return(
@@ -612,10 +753,23 @@ export default function TeamTournament({onBack, user, onDelete}){
           <div style={{marginBottom:16}}>
             <Lbl>Course</Lbl>
             <select value={courseId} onChange={e=>{setCourseId(e.target.value);setHolePars({});}} style={{width:"100%",padding:"14px",background:C.surface,border:"1px solid "+C.border,borderRadius:10,color:C.text,fontSize:15,outline:"none",WebkitAppearance:"none"}}>
-              {Object.entries(COURSES).map(([id,c])=>(
-                <option key={id} value={id}>{c.name} — Par {c.par}</option>
-              ))}
+              <optgroup label="Built-in Courses">
+                {Object.entries(COURSES).map(([id,c])=>(
+                  <option key={id} value={id}>{c.name} — Par {c.par}</option>
+                ))}
+              </optgroup>
+              {userCourses.length>0&&(
+                <optgroup label="My Courses">
+                  {userCourses.map(c=>(
+                    <option key={c.id} value={c.id}>{c.name} — Par {c.par}</option>
+                  ))}
+                </optgroup>
+              )}
             </select>
+            <button onClick={()=>setShowAddCourse(true)}
+              style={{width:"100%",marginTop:8,padding:"11px",background:"transparent",border:"1px dashed rgba(123,180,80,0.4)",borderRadius:10,color:C.green,fontSize:13,fontWeight:700,cursor:"pointer"}}>
+              + Add a Course
+            </button>
           </div>
 
           {/* South Toledo hole #4 par toggle */}
