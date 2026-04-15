@@ -860,6 +860,7 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
   const [confirmDelete,setConfirmDelete]=useState(null);
   const [deleteInput,setDeleteInput]=useState("");
   const [confirmDeleteSettle,setConfirmDeleteSettle]=useState(null);
+  const [confirmReset,setConfirmReset]=useState(false);
   const [disputeItem,setDisputeItem]=useState(null);
   const [disputeAmt,setDisputeAmt]=useState("");
   const [disputeReason,setDisputeReason]=useState("");
@@ -1747,25 +1748,20 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
           <div>
             {/* ── ANNUAL W/L TALLY ─────────────────────────────────────────── */}
             {(()=>{
-              // Only count entries after the reset date (if set)
               const resetDate = player?.tally_reset_date || null;
               const afterReset = item => !resetDate || (item.date||item.archived_at||"") >= resetDate;
-
               const tallyRounds = pRounds.filter(afterReset);
               const tallyBets   = pBets.filter(afterReset);
               const tallySettle = pSettle.filter(afterReset);
-
-              const won  = [...tallyRounds,...tallyBets].reduce((s,x)=>s+Math.max(0,x.money||x.amount||0),0);
-              const lost = [...tallyRounds,...tallyBets].reduce((s,x)=>s+Math.min(0,x.money||x.amount||0),0);
-              const net  = won + lost;
+              const won     = [...tallyRounds,...tallyBets].reduce((s,x)=>s+Math.max(0,x.money||x.amount||0),0);
+              const lost    = [...tallyRounds,...tallyBets].reduce((s,x)=>s+Math.min(0,x.money||x.amount||0),0);
+              const net     = won + lost;
               const settled = tallySettle.reduce((s,x)=>s+(x.amount||0),0);
               const rounds  = tallyRounds.length + tallyBets.length;
 
-              const [confirmReset, setConfirmReset] = useState(false);
-
               async function doReset(){
                 const today2 = new Date().toISOString().slice(0,10);
-                await sb.from("players").update({tally_reset_date: today2}).eq("id", player.id);
+                await sb.from("players").update({tally_reset_date:today2}).eq("id",player.id);
                 setPlayers(prev=>prev.map(p=>p.id===player.id?{...p,tally_reset_date:today2}:p));
                 setConfirmReset(false);
                 t2("Tally reset ✓");
@@ -1773,7 +1769,6 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
 
               return(
                 <div style={{background:C.card,border:`2px solid ${net>=0?C.green+"55":C.red+"55"}`,borderRadius:16,padding:"16px",marginBottom:16}}>
-                  {/* Header */}
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
                     <div>
                       <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase"}}>
@@ -1799,26 +1794,20 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
                       </div>
                     )}
                   </div>
-
-                  {/* Net big number */}
                   <div style={{textAlign:"center",padding:"8px 0 12px"}}>
                     <div style={{fontSize:48,fontWeight:800,letterSpacing:-2,color:net>0?C.green:net<0?C.red:C.muted,lineHeight:1}}>
                       {net>=0?"+":"-"}${Math.abs(net).toFixed(2)}
                     </div>
                     <div style={{fontSize:12,color:C.muted,marginTop:2}}>Net {net>=0?"won":"lost"} vs {player?.name}</div>
                   </div>
-
-                  {/* Won / Lost / Settled row */}
-                  <div style={{display:"flex",borderTop:`1px solid ${C.border}`,paddingTop:12,gap:0}}>
+                  <div style={{display:"flex",borderTop:`1px solid ${C.border}`,paddingTop:12}}>
                     {[
-                      {label:"Won",   value:won,      color:C.green},
-                      {label:"Lost",  value:Math.abs(lost), color:C.red, neg:true},
-                      {label:"Settled",value:Math.abs(settled),color:C.muted},
+                      {label:"Won",    value:won,             color:C.green, sign:"+"},
+                      {label:"Lost",   value:Math.abs(lost),  color:C.red,   sign:"-"},
+                      {label:"Settled",value:Math.abs(settled),color:C.muted,sign:""},
                     ].map((item,i,arr)=>(
                       <div key={i} style={{flex:1,textAlign:"center",borderRight:i<arr.length-1?`1px solid ${C.border}`:"none"}}>
-                        <div style={{fontSize:16,fontWeight:800,color:item.color}}>
-                          {item.neg?"-":item.value>0?"+":""} ${item.value.toFixed(2)}
-                        </div>
+                        <div style={{fontSize:16,fontWeight:800,color:item.color}}>{item.sign}${item.value.toFixed(2)}</div>
                         <div style={{fontSize:9,color:C.dim,letterSpacing:1.5,textTransform:"uppercase",marginTop:2}}>{item.label}</div>
                       </div>
                     ))}
