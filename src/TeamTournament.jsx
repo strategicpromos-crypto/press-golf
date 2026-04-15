@@ -891,6 +891,7 @@ export default function TeamTournament({onBack, user, onDelete}){
                 teams,course_id:courseId,birdie_bonus:birdieBonus,
                 ball_count_by_par:ballsByPar,hole_pars:holePars,
                 skins_enabled:skinsEnabled,big_boy_enabled:bigBoyEnabled,
+                ctp_enabled:ctpEnabled,ctp_holes:ctpHoles,ctp_leaders:ctpLeaders,
                 status:"active",current_hole:1,updated_at:new Date().toISOString()
               }).eq("id",id);
             }
@@ -1035,8 +1036,8 @@ export default function TeamTournament({onBack, user, onDelete}){
                   </div>
                   <div style={{display:"flex",alignItems:"center",gap:8}}>
                     {diff!==null&&<div style={{fontSize:14,fontWeight:800,color:relColor(diff)}}>{relLabel(diff)}{diff<=-1?" 🐦":""}</div>}
-                    {/* CTP checkbox — only on CTP holes */}
-                    {isCtpHole&&score!==null&&(
+                    {/* CTP checkbox — shows on every player on CTP holes */}
+                    {isCtpHole&&(
                       <button
                         onClick={()=>{
                           setCtpInput(isCtpLeader?ctpLeader.distance:"");
