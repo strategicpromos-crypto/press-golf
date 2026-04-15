@@ -577,7 +577,7 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
                 </div>
                 <div style={{fontSize:12,color:C.muted,marginBottom:8}}>Enter distance (e.g. 4'6" or 12.5 ft)</div>
                 <input autoFocus value={ctpInput} onChange={e=>setCtpInput(e.target.value)}
-                  placeholder="e.g. 4'6\""
+                  placeholder={"e.g. 4'6\" or 12.5"}
                   style={{width:"100%",padding:"16px",background:C.bg,border:`2px solid ${isValid||isOwn?"rgba(232,184,75,0.6)":C.border}`,borderRadius:10,color:C.gold,fontSize:22,fontWeight:800,outline:"none",textAlign:"center",boxSizing:"border-box",fontFamily:"monospace"}}
                 />
                 {ctpInput&&!isValid&&!isOwn&&leaderDist!==null&&(
