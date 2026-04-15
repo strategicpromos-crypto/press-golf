@@ -21,7 +21,7 @@ export function calcSkins(teams, holeData, holePars, bigBoyEnabled) {
     // Collect all individual scores for this hole
     const allScores = [];
     teams.forEach((team, ti) => {
-      for (let pi = 0; pi < (team.size || 2); pi++) {
+      for (let pi = 0; pi < (team.size || 1); pi++) {
         const s = team.scores?.[pi]?.[h.hole];
         if (s !== undefined && s !== null) {
           allScores.push({
@@ -36,7 +36,7 @@ export function calcSkins(teams, holeData, holePars, bigBoyEnabled) {
       }
     });
 
-    const totalPlayers = teams.reduce((s, t) => s + (t.size || 2), 0);
+    const totalPlayers = teams.reduce((s, t) => s + (t.size || 1), 0);
     const live = allScores.length > 0 && allScores.length < totalPlayers;
 
     // ── Regular skins ──────────────────────────────────────────────────────
@@ -63,7 +63,7 @@ export function calcSkins(teams, holeData, holePars, bigBoyEnabled) {
     if (bigBoyEnabled) {
       const bbScores = allScores.filter(x => x.bigBoy);
       const bbEnrolled = teams.reduce((s, t) => {
-        for (let pi = 0; pi < (t.size || 2); pi++) if (t.bigBoy?.[pi]) s++;
+        for (let pi = 0; pi < (t.size || 1); pi++) if (t.bigBoy?.[pi]) s++;
         return s;
       }, 0);
       const bbLive = bbScores.length > 0 && bbScores.length < bbEnrolled;
@@ -119,7 +119,7 @@ export function SkinsTab({ teams, course, holePars, skinsEnabled, bigBoyEnabled 
   const regLive = skins.filter(s => s.reg.live && !s.reg.tied && !s.reg.winner).length;
   const bbWon = bigBoyEnabled ? skins.filter(s => s.bb && !s.bb.tied && !s.bb.notPlayed && s.bb.winner).length : 0;
   const bbEnrolled = bigBoyEnabled ? teams.reduce((s, t) => {
-    for (let pi = 0; pi < (t.size || 2); pi++) if (t.bigBoy?.[pi]) s++;
+    for (let pi = 0; pi < (t.size || 1); pi++) if (t.bigBoy?.[pi]) s++;
     return s;
   }, 0) : 0;
 
