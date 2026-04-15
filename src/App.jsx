@@ -858,6 +858,8 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
   const [partialAmt,setPartialAmt]=useState("");
   const [strokeSuggest,setStrokeSuggest]=useState(null);
   const [confirmDelete,setConfirmDelete]=useState(null);
+  const [deleteInput,setDeleteInput]=useState("");
+  const [confirmDeleteSettle,setConfirmDeleteSettle]=useState(null);
   const [disputeItem,setDisputeItem]=useState(null);
   const [disputeAmt,setDisputeAmt]=useState("");
   const [disputeReason,setDisputeReason]=useState("");
@@ -1042,6 +1044,7 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
   }
 
   function handleDeleteTap(item){
+    setDeleteInput("");
     if(player?.linked_user_id){requestCancel(item);}
     else{setConfirmDelete(item);}
   }
@@ -1176,6 +1179,17 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
     if(pd)setPlayers(prev=>prev.map(p=>p.id===pid?pd:p));
     setPartialAmt("");await loadAll();setSheet(null);
     t2(payAmt>0?`Collected $${Math.abs(payAmt).toFixed(2)}!`:`Paid $${Math.abs(payAmt).toFixed(2)}!`);
+  }
+
+  async function deleteSettlement(s){
+    setSaving(true);
+    await sb.from("settlements").delete().eq("id",s.id);
+    setSettlements(prev=>prev.filter(x=>x.id!==s.id));
+    setSaving(false);
+    setConfirmDeleteSettle(null);
+    setDeleteInput("");
+    t2("Settlement deleted.");
+    await loadAll();
   }
 
   async function generateInvite(){
@@ -1731,8 +1745,127 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
 
         {ptab==="history"&&(
           <div>
+            {/* ── ANNUAL W/L TALLY ─────────────────────────────────────────── */}
+            {(()=>{
+              // Only count entries after the reset date (if set)
+              const resetDate = player?.tally_reset_date || null;
+              const afterReset = item => !resetDate || (item.date||item.archived_at||"") >= resetDate;
+
+              const tallyRounds = pRounds.filter(afterReset);
+              const tallyBets   = pBets.filter(afterReset);
+              const tallySettle = pSettle.filter(afterReset);
+
+              const won  = [...tallyRounds,...tallyBets].reduce((s,x)=>s+Math.max(0,x.money||x.amount||0),0);
+              const lost = [...tallyRounds,...tallyBets].reduce((s,x)=>s+Math.min(0,x.money||x.amount||0),0);
+              const net  = won + lost;
+              const settled = tallySettle.reduce((s,x)=>s+(x.amount||0),0);
+              const rounds  = tallyRounds.length + tallyBets.length;
+
+              const [confirmReset, setConfirmReset] = useState(false);
+
+              async function doReset(){
+                const today2 = new Date().toISOString().slice(0,10);
+                await sb.from("players").update({tally_reset_date: today2}).eq("id", player.id);
+                setPlayers(prev=>prev.map(p=>p.id===player.id?{...p,tally_reset_date:today2}:p));
+                setConfirmReset(false);
+                t2("Tally reset ✓");
+              }
+
+              return(
+                <div style={{background:C.card,border:`2px solid ${net>=0?C.green+"55":C.red+"55"}`,borderRadius:16,padding:"16px",marginBottom:16}}>
+                  {/* Header */}
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+                    <div>
+                      <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase"}}>
+                        {CURRENT_SEASON} Tally{resetDate?` · since ${resetDate}`:""}
+                      </div>
+                      <div style={{fontSize:11,color:C.dim,marginTop:1}}>{rounds} round{rounds!==1?"s":""} · {tallySettle.length} settlement{tallySettle.length!==1?"s":""}</div>
+                    </div>
+                    {!confirmReset?(
+                      <button onClick={()=>setConfirmReset(true)}
+                        style={{background:"transparent",border:`1px solid ${C.border}`,color:C.muted,fontSize:11,padding:"5px 10px",borderRadius:8,cursor:"pointer"}}>
+                        Reset Tally
+                      </button>
+                    ):(
+                      <div style={{display:"flex",gap:6}}>
+                        <button onClick={doReset}
+                          style={{background:"rgba(224,80,80,0.15)",border:`1px solid ${C.red}44`,color:C.red,fontSize:11,padding:"5px 10px",borderRadius:8,cursor:"pointer",fontWeight:700}}>
+                          Confirm
+                        </button>
+                        <button onClick={()=>setConfirmReset(false)}
+                          style={{background:"transparent",border:`1px solid ${C.border}`,color:C.muted,fontSize:11,padding:"5px 10px",borderRadius:8,cursor:"pointer"}}>
+                          Cancel
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Net big number */}
+                  <div style={{textAlign:"center",padding:"8px 0 12px"}}>
+                    <div style={{fontSize:48,fontWeight:800,letterSpacing:-2,color:net>0?C.green:net<0?C.red:C.muted,lineHeight:1}}>
+                      {net>=0?"+":"-"}${Math.abs(net).toFixed(2)}
+                    </div>
+                    <div style={{fontSize:12,color:C.muted,marginTop:2}}>Net {net>=0?"won":"lost"} vs {player?.name}</div>
+                  </div>
+
+                  {/* Won / Lost / Settled row */}
+                  <div style={{display:"flex",borderTop:`1px solid ${C.border}`,paddingTop:12,gap:0}}>
+                    {[
+                      {label:"Won",   value:won,      color:C.green},
+                      {label:"Lost",  value:Math.abs(lost), color:C.red, neg:true},
+                      {label:"Settled",value:Math.abs(settled),color:C.muted},
+                    ].map((item,i,arr)=>(
+                      <div key={i} style={{flex:1,textAlign:"center",borderRight:i<arr.length-1?`1px solid ${C.border}`:"none"}}>
+                        <div style={{fontSize:16,fontWeight:800,color:item.color}}>
+                          {item.neg?"-":item.value>0?"+":""} ${item.value.toFixed(2)}
+                        </div>
+                        <div style={{fontSize:9,color:C.dim,letterSpacing:1.5,textTransform:"uppercase",marginTop:2}}>{item.label}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* ── SETTLEMENT RUNNING TALLY ─────────────────────────────────── */}
+            {pSettle.length>0&&(
+              <div style={{marginBottom:16}}>
+                <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>Settlement History</div>
+                {[...pSettle].reverse().reduce((acc,s,i,arr)=>{
+                  const running = arr.slice(0,i+1).reduce((sum,x)=>sum+(x.amount||0),0);
+                  acc.push(
+                    <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"12px 14px",background:C.card,borderRadius:10,marginBottom:6,border:`1px solid ${C.border}`}}>
+                      <div>
+                        <div style={{fontSize:13,fontWeight:700}}>🤝 {s.date}</div>
+                        <div style={{fontSize:11,color:C.dim,marginTop:2}}>
+                          Running total: <span style={{color:running>=0?C.green:C.red,fontWeight:700}}>{running>=0?"+":"-"}${Math.abs(running).toFixed(2)}</span>
+                        </div>
+                      </div>
+                      <div style={{display:"flex",alignItems:"center",gap:10}}>
+                        <div style={{textAlign:"right"}}>
+                          <div style={{fontSize:16,fontWeight:800,color:C.green}}>${Math.abs(s.amount||0).toFixed(2)}</div>
+                          <div style={{fontSize:10,color:C.dim}}>settled</div>
+                        </div>
+                        <button onClick={()=>{setConfirmDeleteSettle(s);setDeleteInput("");}}
+                          style={{background:"none",border:"none",color:C.muted,fontSize:16,cursor:"pointer",padding:"0 2px",lineHeight:1}}
+                          title="Delete settlement">✕</button>
+                      </div>
+                    </div>
+                  );
+                  return acc;
+                },[])}
+                <div style={{display:"flex",justifyContent:"flex-end",padding:"4px 4px",fontSize:12,color:C.muted}}>
+                  All-time settled: <span style={{color:C.green,fontWeight:700,marginLeft:6}}>${Math.abs(pSettle.reduce((s,x)=>s+(x.amount||0),0)).toFixed(2)}</span>
+                </div>
+              </div>
+            )}
+
+            {/* ── FULL ACTIVITY LIST ────────────────────────────────────────── */}
+            <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>All Activity</div>
             <button onClick={exportHistory} style={{width:"100%",padding:"11px",background:"transparent",border:`1px solid ${C.border}`,borderRadius:10,color:C.muted,fontSize:12,cursor:"pointer",marginBottom:12}}>📄 Export History</button>
-            {loading?<Spinner/>:pHistory.length===0?<Empty msg="No activity yet."/>:pHistory.map((item,i)=>(<ActivityItem key={i} item={item}/>))}
+            {loading?<Spinner/>:pHistory.length===0?<Empty msg="No activity yet."/>:pHistory.map((item,i)=>(
+              <ActivityItem key={i} item={item} onDelete={()=>handleDeleteTap(item)}/>
+            ))}
           </div>
         )}
 
@@ -1919,20 +2052,66 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
       {confirmDelete&&(
         <div style={{position:"fixed",inset:0,zIndex:500,background:"rgba(0,0,0,0.85)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
           <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:20,padding:24,width:"100%",maxWidth:360}}>
-            <div style={{textAlign:"center",marginBottom:20}}>
-              <div style={{fontSize:40,marginBottom:10}}>⚠️</div>
+            <div style={{textAlign:"center",marginBottom:16}}>
+              <div style={{fontSize:36,marginBottom:8}}>⚠️</div>
               <div style={{fontWeight:700,fontSize:18,marginBottom:8}}>Delete this entry?</div>
-              <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:"12px 14px",marginBottom:12}}>
+              <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:"12px 14px",marginBottom:10}}>
                 <div style={{fontSize:13,fontWeight:600,marginBottom:4}}>{confirmDelete.kind==="round"?confirmDelete.date:confirmDelete.type}</div>
                 <div style={{fontSize:12,color:C.muted}}>{confirmDelete.notes||confirmDelete.date}</div>
                 <div style={{marginTop:6}}><Money value={confirmDelete.kind==="round"?confirmDelete.money:confirmDelete.amount} size={15}/></div>
               </div>
-              <div style={{fontSize:12,color:C.red,marginBottom:6}}>Balance will adjust by <Money value={confirmDelete.kind==="round"?-confirmDelete.money:-confirmDelete.amount} size={12}/></div>
-              <div style={{fontSize:11,color:C.muted}}>Entry saved in History.</div>
+              <div style={{fontSize:12,color:C.red,marginBottom:10}}>Balance will adjust by <Money value={confirmDelete.kind==="round"?-confirmDelete.money:-confirmDelete.amount} size={12}/></div>
+              <div style={{fontSize:12,color:C.muted,marginBottom:8}}>Type <strong style={{color:C.red}}>DELETE</strong> to confirm</div>
+              <input
+                autoFocus
+                value={deleteInput}
+                onChange={e=>setDeleteInput(e.target.value)}
+                placeholder="Type DELETE"
+                autoCapitalize="characters"
+                style={{width:"100%",padding:"12px",background:C.bg,border:`2px solid ${deleteInput.toUpperCase()==="DELETE"?"rgba(224,80,80,0.6)":C.border}`,borderRadius:8,color:C.red,fontSize:16,fontWeight:800,outline:"none",textAlign:"center",letterSpacing:3,boxSizing:"border-box",fontFamily:"monospace"}}
+              />
             </div>
-            <div style={{display:"flex",gap:10}}>
-              <button onClick={()=>setConfirmDelete(null)} style={{flex:1,padding:"14px",background:"transparent",color:C.muted,border:`1px solid ${C.border}`,borderRadius:12,fontSize:14,fontWeight:600,cursor:"pointer"}}>Keep It</button>
-              <button onClick={async()=>{const item=confirmDelete;setConfirmDelete(null);await archiveAndDelete(item,true);}} style={{flex:1,padding:"14px",background:C.red,color:"#fff",border:"none",borderRadius:12,fontSize:14,fontWeight:700,cursor:"pointer"}}>Delete</button>
+            <div style={{display:"flex",gap:10,marginTop:14}}>
+              <button onClick={()=>{setConfirmDelete(null);setDeleteInput("");}} style={{flex:1,padding:"14px",background:"transparent",color:C.muted,border:`1px solid ${C.border}`,borderRadius:12,fontSize:14,fontWeight:600,cursor:"pointer"}}>Keep It</button>
+              <button
+                disabled={deleteInput.toUpperCase()!=="DELETE"}
+                onClick={async()=>{const item=confirmDelete;setConfirmDelete(null);setDeleteInput("");await archiveAndDelete(item,true);}}
+                style={{flex:1,padding:"14px",background:deleteInput.toUpperCase()==="DELETE"?C.red:"#1a1a1a",color:deleteInput.toUpperCase()==="DELETE"?"#fff":C.dim,border:"none",borderRadius:12,fontSize:14,fontWeight:700,cursor:deleteInput.toUpperCase()==="DELETE"?"pointer":"not-allowed",transition:"all 0.15s"}}>
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {confirmDeleteSettle&&(
+        <div style={{position:"fixed",inset:0,zIndex:500,background:"rgba(0,0,0,0.85)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
+          <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:20,padding:24,width:"100%",maxWidth:360}}>
+            <div style={{textAlign:"center",marginBottom:16}}>
+              <div style={{fontSize:36,marginBottom:8}}>⚠️</div>
+              <div style={{fontWeight:700,fontSize:18,marginBottom:8}}>Delete this settlement?</div>
+              <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:"12px 14px",marginBottom:10}}>
+                <div style={{fontSize:13,fontWeight:600,marginBottom:4}}>🤝 {confirmDeleteSettle.date}</div>
+                <div style={{fontSize:20,fontWeight:800,color:C.green,marginTop:4}}>${Math.abs(confirmDeleteSettle.amount||0).toFixed(2)} settled</div>
+              </div>
+              <div style={{fontSize:12,color:C.muted,marginBottom:8}}>Type <strong style={{color:C.red}}>DELETE</strong> to confirm</div>
+              <input
+                autoFocus
+                value={deleteInput}
+                onChange={e=>setDeleteInput(e.target.value)}
+                placeholder="Type DELETE"
+                autoCapitalize="characters"
+                style={{width:"100%",padding:"12px",background:C.bg,border:`2px solid ${deleteInput.toUpperCase()==="DELETE"?"rgba(224,80,80,0.6)":C.border}`,borderRadius:8,color:C.red,fontSize:16,fontWeight:800,outline:"none",textAlign:"center",letterSpacing:3,boxSizing:"border-box",fontFamily:"monospace"}}
+              />
+            </div>
+            <div style={{display:"flex",gap:10,marginTop:14}}>
+              <button onClick={()=>{setConfirmDeleteSettle(null);setDeleteInput("");}} style={{flex:1,padding:"14px",background:"transparent",color:C.muted,border:`1px solid ${C.border}`,borderRadius:12,fontSize:14,fontWeight:600,cursor:"pointer"}}>Keep It</button>
+              <button
+                disabled={deleteInput.toUpperCase()!=="DELETE"}
+                onClick={()=>deleteSettlement(confirmDeleteSettle)}
+                style={{flex:1,padding:"14px",background:deleteInput.toUpperCase()==="DELETE"?C.red:"#1a1a1a",color:deleteInput.toUpperCase()==="DELETE"?"#fff":C.dim,border:"none",borderRadius:12,fontSize:14,fontWeight:700,cursor:deleteInput.toUpperCase()==="DELETE"?"pointer":"not-allowed",transition:"all 0.15s"}}>
+                Delete
+              </button>
             </div>
           </div>
         </div>
@@ -2076,7 +2255,7 @@ function LinkStatusPanel({ player, user, isPro, saving, onGenerateInvite, onUnli
   );
 }
 
-function ActivityItem({item}){
+function ActivityItem({item, onDelete}){
   const isArchived=item.kind==="archived_round"||item.kind==="archived_bet";
   const isRound=item.kind==="round"||item.kind==="archived_round";
   const value=isRound?(item.money||0):(item.amount||0);
@@ -2091,6 +2270,11 @@ function ActivityItem({item}){
         {(item.notes||(!isRound&&item.date))&&<div style={{fontSize:11,color:C.muted,marginTop:1}}>{!isRound&&item.date?item.date:""}{item.notes?` · ${item.notes}`:""}</div>}
       </div>
       <Money value={value} size={14}/>
+      {onDelete&&!isArchived&&(
+        <button onClick={()=>onDelete(item)}
+          style={{background:"none",border:"none",color:C.muted,fontSize:16,cursor:"pointer",padding:"0 2px",flexShrink:0,lineHeight:1}}
+          title="Delete">✕</button>
+      )}
     </div>
   );
 }
