@@ -48,3 +48,81 @@ export function getStrokeHoles(courseId, strokesPerSide) {
   back.slice(0,  strokesPerSide).forEach(h => result.push(h.hole));
   return result;
 }
+
+// ── AUTO-PRESS NASSAU CALCULATOR ──────────────────────────────────────────────
+// Calculates Nassau bet results with optional auto-press and manual presses.
+// Parameters:
+//   scores      — { me: {hole: score}, opp: {hole: score} }
+//   holes       — course hole array
+//   myStrokes   — array of hole numbers where I get a stroke
+//   oppStrokes  — array of hole numbers where opponent gets a stroke
+//   betAmount   — base bet per leg ($)
+//   pressDown   — holes down to trigger auto-press (99 = never)
+//   manualPresses — [{hole: N}] array of manually-triggered presses
+//
+// Returns:
+//   { front: { bets: [{diff, amount}] }, back: { bets: [{diff, amount}] }, net: $ }
+//
+// Each "bet" in the array is one leg (original + any presses).
+// diff > 0 = you are ahead, diff < 0 = opponent ahead.
+export function calcAutoPressNassau(scores, holes, myStrokes, oppStrokes, betAmount, pressDown, manualPresses) {
+  pressDown = pressDown || 99;
+  manualPresses = manualPresses || [];
+
+  function calcSide(sideHoles) {
+    const bets = [{ startHole: sideHoles[0].hole, amount: betAmount, diffs: [] }];
+
+    for (const h of sideHoles) {
+      const my  = scores.me?.[h.hole];
+      const op  = scores.opp?.[h.hole];
+      if (my === undefined || my === null || op === undefined || op === null) continue;
+
+      const myNet  = myStrokes.includes(h.hole)  ? my  - 1 : my;
+      const oppNet = oppStrokes.includes(h.hole)  ? op  - 1 : op;
+
+      // Update all active bets
+      for (const bet of bets) {
+        if (h.hole < bet.startHole) continue;
+        if (myNet < oppNet)       bet.diffs.push(1);
+        else if (myNet > oppNet)  bet.diffs.push(-1);
+        else                      bet.diffs.push(0);
+      }
+
+      // Running diff for current (last) bet
+      const curBet = bets[bets.length - 1];
+      const runDiff = curBet.diffs.reduce((s, v) => s + v, 0);
+
+      // Auto-press trigger: down by pressDown after this hole
+      const nextHole = sideHoles[sideHoles.indexOf(h) + 1];
+      if (nextHole && runDiff <= -pressDown) {
+        bets.push({ startHole: nextHole.hole, amount: betAmount, diffs: [] });
+      }
+
+      // Manual press trigger
+      if (nextHole && manualPresses.some(p => p.hole === nextHole.hole)) {
+        // Don't double-add if auto-press already triggered
+        if (!bets.some(b => b.startHole === nextHole.hole)) {
+          bets.push({ startHole: nextHole.hole, amount: betAmount, diffs: [] });
+        }
+      }
+    }
+
+    // Calculate final diff and net for each bet
+    const processedBets = bets.map(bet => {
+      const diff = bet.diffs.reduce((s, v) => s + v, 0);
+      const net  = diff > 0 ? bet.amount : diff < 0 ? -bet.amount : 0;
+      return { diff, amount: bet.amount, net, startHole: bet.startHole };
+    });
+
+    const sideNet = processedBets.reduce((s, b) => s + b.net, 0);
+    return { bets: processedBets, net: sideNet };
+  }
+
+  const frontHoles = holes.filter(h => h.side === "front");
+  const backHoles  = holes.filter(h => h.side === "back");
+
+  const front = calcSide(frontHoles);
+  const back  = calcSide(backHoles);
+
+  return { front, back, net: front.net + back.net };
+}
