@@ -365,28 +365,22 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
   // -- Start round - saves to DB immediately ---------------------------------
   async function startRound() {
     if (opponents.length === 0) return;
-    if (!course) {
-      // course not found - still let them play, just no DB save
-      setScores({});
-      setCurrentHole(1);
-      setStep("playing");
-      return;
-    }
     setPosting(true);
-    const { data, error } = await sb.from("live_rounds").insert({
-      owner_id: user.id,
-      course_id: courseId,
-      course_name: course.name,
-      opponents,
-      scores: {},
-      current_hole: 1,
-      status: "active",
-    }).select().single();
-    setPosting(false);
-    if (data) {
-      setLiveRoundId(data.id);
+    try {
+      const { data } = await sb.from("live_rounds").insert({
+        owner_id: user.id,
+        course_id: courseId,
+        course_name: course?.name || courseId,
+        opponents,
+        scores: {},
+        current_hole: 1,
+        status: "active",
+      }).select().single();
+      if (data) setLiveRoundId(data.id);
+    } catch(e) {
+      console.warn("live_rounds insert failed:", e);
     }
-    // Always go to playing even if DB insert failed
+    setPosting(false);
     setScores({});
     setCurrentHole(1);
     setStep("playing");
@@ -1037,13 +1031,13 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
     );
   }
 
-  // Safety: playing but course or holeData missing (e.g. corrupt golf.js)
-  if (step === "playing" && (!course || !holeData)) {
+  // Safety net - never show black screen
+  if (step === "playing") {
     return (
       <div style={{fontFamily:"Georgia,serif",minHeight:"100vh",background:"#080f0a",color:"#e8f0e9",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:24,gap:16}}>
         <div style={{fontSize:40}}>⛳</div>
-        <div style={{fontSize:18,fontWeight:700}}>Course data unavailable</div>
-        <div style={{fontSize:13,color:"#6b7f6d",textAlign:"center"}}>The course "{courseId}" could not be loaded. Please go back and try again.</div>
+        <div style={{fontSize:16,fontWeight:700,color:"#e8b84b"}}>Course data missing</div>
+        <div style={{fontSize:13,color:"#6b7f6d",textAlign:"center"}}>Could not load "{courseId}". Try going back and selecting the course again.</div>
         <button onClick={()=>{setStep("setup");setCourseId("south-toledo");}}
           style={{marginTop:8,padding:"14px 28px",background:"#7bb450",border:"none",borderRadius:12,color:"#0a1a0f",fontSize:15,fontWeight:800,cursor:"pointer"}}>
           Back to Setup
