@@ -31,6 +31,36 @@ export const COURSES = {
       { hole:17, par:4, hdcp:4,  side:"back",  yards:437 },
       { hole:18, par:4, hdcp:2,  side:"back",  yards:419 },
     ]
+  },
+
+  "iron-valley": {
+    id: "iron-valley",
+    name: "Iron Valley Golf Club",
+    city: "Lebanon, PA",
+    par: 72,
+    note: "P.B. Dye design. Ranked top 10 in PA by Golf Magazine. 7,026 yards from tips.",
+    holes: [
+      // ── FRONT 9 ──────────────────────────────────────────────────────────────
+      { hole:1,  par:4, hdcp:1,  side:"front", yards:435 },
+      { hole:2,  par:4, hdcp:17, side:"front", yards:373 },
+      { hole:3,  par:5, hdcp:15, side:"front", yards:511 },
+      { hole:4,  par:4, hdcp:5,  side:"front", yards:448 },
+      { hole:5,  par:3, hdcp:11, side:"front", yards:124 },
+      { hole:6,  par:4, hdcp:3,  side:"front", yards:473 },
+      { hole:7,  par:5, hdcp:9,  side:"front", yards:535 },
+      { hole:8,  par:3, hdcp:7,  side:"front", yards:201 },
+      { hole:9,  par:4, hdcp:13, side:"front", yards:395 },
+      // ── BACK 9 ───────────────────────────────────────────────────────────────
+      { hole:10, par:4, hdcp:4,  side:"back",  yards:469 },
+      { hole:11, par:4, hdcp:14, side:"back",  yards:356 },
+      { hole:12, par:3, hdcp:16, side:"back",  yards:177 },
+      { hole:13, par:5, hdcp:10, side:"back",  yards:588 },
+      { hole:14, par:4, hdcp:8,  side:"back",  yards:383 },
+      { hole:15, par:4, hdcp:6,  side:"back",  yards:456 },
+      { hole:16, par:5, hdcp:18, side:"back",  yards:494 },
+      { hole:17, par:3, hdcp:12, side:"back",  yards:181 },
+      { hole:18, par:4, hdcp:2,  side:"back",  yards:427 },
+    ]
   }
 };
 
