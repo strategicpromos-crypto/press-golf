@@ -1019,6 +1019,10 @@ export default function TeamTournament({onBack, user, onDelete}){
           )}
 
           {/* Player entries */}
+          {/* DEBUG — remove after fix */}
+          <div style={{background:"rgba(255,0,0,0.15)",border:"1px solid red",borderRadius:8,padding:"6px 10px",marginBottom:8,fontSize:11,fontFamily:"monospace",color:"#ff9999"}}>
+            DEBUG: ctpEnabled={String(ctpEnabled)} | ctpHoles=[{ctpHoles.join(",")}] | currentHole={currentHole} | isCtpHole={String(ctpEnabled&&ctpHoles.includes(currentHole))}
+          </div>
           {Array.from({length:team.size},(_,j)=>{
             const score=getPlayerScore(team,j,currentHole);
             const isBest=best2Set.has(j)&&score!==null;
