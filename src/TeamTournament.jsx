@@ -991,22 +991,6 @@ export default function TeamTournament({onBack, user, onDelete}){
             );
           })()}
 
-          <BigBtn onClick={()=>isLastHole?setScreen("leaderboard"):setCurrentHole(h=>h+1)} color={isLastHole?C.gold:C.green}>
-            {isLastHole?"See Final Results 🏆":"Next — Hole "+(currentHole+1)}
-          </BigBtn>
-
-          {/* Mini standings */}
-          <div style={{marginTop:12,display:"flex",gap:8,flexWrap:"wrap",justifyContent:"center"}}>
-            {getLeaderboard().slice(0,5).map((t,rank)=>(
-              <div key={t.id||rank} style={{background:C.card,border:"1px solid "+t.color+"44",borderRadius:20,padding:"5px 12px",fontSize:12,display:"flex",alignItems:"center",gap:6}}>
-                <span style={{color:C.muted}}>{rank+1}.</span>
-                <span style={{fontWeight:700,color:t.color}}>{t.name}</span>
-                <span style={{fontWeight:800,color:relColor(t.sc.totalDiff)}}>{t.sc.total?relLabel(t.sc.totalDiff):"—"}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
           {/* CTP button — only on par 3 holes */}
           {effPar===3&&(()=>{
             const leader=ctpLeaders[currentHole];
