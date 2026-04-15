@@ -365,8 +365,15 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
   // -- Start round - saves to DB immediately ---------------------------------
   async function startRound() {
     if (opponents.length === 0) return;
+    if (!course) {
+      // course not found - still let them play, just no DB save
+      setScores({});
+      setCurrentHole(1);
+      setStep("playing");
+      return;
+    }
     setPosting(true);
-    const { data } = await sb.from("live_rounds").insert({
+    const { data, error } = await sb.from("live_rounds").insert({
       owner_id: user.id,
       course_id: courseId,
       course_name: course.name,
@@ -378,10 +385,11 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
     setPosting(false);
     if (data) {
       setLiveRoundId(data.id);
-      setScores({});
-      setCurrentHole(1);
-      setStep("playing");
     }
+    // Always go to playing even if DB insert failed
+    setScores({});
+    setCurrentHole(1);
+    setStep("playing");
   }
 
   // -- Score setter - always uses safe integers ------------------------------
