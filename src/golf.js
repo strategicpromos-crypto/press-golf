@@ -1,42 +1,206 @@
-// COURSE DATA
-// All hole data verified against official scorecards (18Birdies)
+// ── PRESS GOLF — COURSE DATABASE ──────────────────────────────────────────────
+// All courses verified from 18Birdies / official scorecards
+// Hdcp = hole handicap index (1-18 across all holes)
+// Stroke logic: front gets odd hdcp holes, back gets even hdcp holes
 
 export const COURSES = {
 
+  // ── SOUTH TOLEDO GOLF CLUB ─────────────────────────────────────────────────
   "south-toledo": {
-    id: "south-toledo",
     name: "South Toledo Golf Club",
     city: "Toledo, OH",
     par: 70,
-    note: "Hole #4 plays as par 3 (248 yds). Some groups play it as par 4 - use the override in settings.",
     holes: [
-      { hole:1,  par:4, hdcp:7,  side:"front", yards:386 },
-      { hole:2,  par:4, hdcp:5,  side:"front", yards:408 },
-      { hole:3,  par:4, hdcp:1,  side:"front", yards:414 },
-      { hole:4,  par:3, hdcp:15, side:"front", yards:248 },
-      { hole:5,  par:4, hdcp:11, side:"front", yards:352 },
-      { hole:6,  par:4, hdcp:13, side:"front", yards:350 },
-      { hole:7,  par:3, hdcp:17, side:"front", yards:140 },
-      { hole:8,  par:5, hdcp:9,  side:"front", yards:483 },
-      { hole:9,  par:4, hdcp:3,  side:"front", yards:401 },
-      { hole:10, par:4, hdcp:12, side:"back",  yards:392 },
-      { hole:11, par:4, hdcp:14, side:"back",  yards:314 },
-      { hole:12, par:3, hdcp:18, side:"back",  yards:161 },
-      { hole:13, par:4, hdcp:8,  side:"back",  yards:453 },
-      { hole:14, par:4, hdcp:6,  side:"back",  yards:419 },
-      { hole:15, par:5, hdcp:10, side:"back",  yards:517 },
-      { hole:16, par:3, hdcp:16, side:"back",  yards:214 },
-      { hole:17, par:4, hdcp:4,  side:"back",  yards:437 },
-      { hole:18, par:4, hdcp:2,  side:"back",  yards:419 },
+      { hole:1,  par:4, hdcp:7,  side:"front" },
+      { hole:2,  par:4, hdcp:5,  side:"front" },
+      { hole:3,  par:4, hdcp:1,  side:"front" },
+      { hole:4,  par:3, hdcp:15, side:"front" },
+      { hole:5,  par:4, hdcp:11, side:"front" },
+      { hole:6,  par:4, hdcp:13, side:"front" },
+      { hole:7,  par:3, hdcp:17, side:"front" },
+      { hole:8,  par:5, hdcp:9,  side:"front" },
+      { hole:9,  par:4, hdcp:3,  side:"front" },
+      { hole:10, par:4, hdcp:12, side:"back" },
+      { hole:11, par:4, hdcp:14, side:"back" },
+      { hole:12, par:3, hdcp:18, side:"back" },
+      { hole:13, par:4, hdcp:8,  side:"back" },
+      { hole:14, par:4, hdcp:6,  side:"back" },
+      { hole:15, par:5, hdcp:10, side:"back" },
+      { hole:16, par:3, hdcp:16, side:"back" },
+      { hole:17, par:4, hdcp:4,  side:"back" },
+      { hole:18, par:4, hdcp:2,  side:"back" },
     ]
   },
 
+  // ── WHITE PINES GOLF COURSE — Swanton, OH ──────────────────────────────────
+  "white-pines": {
+    name: "White Pines Golf Course",
+    city: "Swanton, OH",
+    par: 72,
+    holes: [
+      { hole:1,  par:4, hdcp:3,  side:"front" },
+      { hole:2,  par:4, hdcp:17, side:"front" },
+      { hole:3,  par:3, hdcp:13, side:"front" },
+      { hole:4,  par:5, hdcp:9,  side:"front" },
+      { hole:5,  par:4, hdcp:5,  side:"front" },
+      { hole:6,  par:4, hdcp:7,  side:"front" },
+      { hole:7,  par:5, hdcp:11, side:"front" },
+      { hole:8,  par:3, hdcp:15, side:"front" },
+      { hole:9,  par:4, hdcp:1,  side:"front" },
+      { hole:10, par:4, hdcp:4,  side:"back" },
+      { hole:11, par:5, hdcp:6,  side:"back" },
+      { hole:12, par:4, hdcp:10, side:"back" },
+      { hole:13, par:3, hdcp:18, side:"back" },
+      { hole:14, par:4, hdcp:2,  side:"back" },
+      { hole:15, par:5, hdcp:14, side:"back" },
+      { hole:16, par:4, hdcp:12, side:"back" },
+      { hole:17, par:3, hdcp:16, side:"back" },
+      { hole:18, par:4, hdcp:8,  side:"back" },
+    ]
+  },
+
+  // ── MAUMEE BAY STATE PARK GOLF COURSE — Oregon, OH ────────────────────────
+  "maumee-bay": {
+    name: "Maumee Bay Golf Course",
+    city: "Oregon, OH",
+    par: 72,
+    holes: [
+      { hole:1,  par:4, hdcp:9,  side:"front" },
+      { hole:2,  par:4, hdcp:13, side:"front" },
+      { hole:3,  par:4, hdcp:7,  side:"front" },
+      { hole:4,  par:3, hdcp:17, side:"front" },
+      { hole:5,  par:5, hdcp:1,  side:"front" },
+      { hole:6,  par:4, hdcp:11, side:"front" },
+      { hole:7,  par:5, hdcp:5,  side:"front" },
+      { hole:8,  par:3, hdcp:15, side:"front" },
+      { hole:9,  par:4, hdcp:3,  side:"front" },
+      { hole:10, par:4, hdcp:12, side:"back" },
+      { hole:11, par:3, hdcp:18, side:"back" },
+      { hole:12, par:4, hdcp:4,  side:"back" },
+      { hole:13, par:4, hdcp:16, side:"back" },
+      { hole:14, par:5, hdcp:2,  side:"back" },
+      { hole:15, par:3, hdcp:14, side:"back" },
+      { hole:16, par:4, hdcp:6,  side:"back" },
+      { hole:17, par:4, hdcp:10, side:"back" },
+      { hole:18, par:5, hdcp:8,  side:"back" },
+    ]
+  },
+
+  // ── EAGLE'S LANDING — Berlin, MD (Ocean City) ─────────────────────────────
+  "eagles-landing": {
+    name: "Eagle's Landing Golf Course",
+    city: "Berlin, MD",
+    par: 72,
+    holes: [
+      { hole:1,  par:4, hdcp:14, side:"front" },
+      { hole:2,  par:4, hdcp:12, side:"front" },
+      { hole:3,  par:3, hdcp:16, side:"front" },
+      { hole:4,  par:5, hdcp:6,  side:"front" },
+      { hole:5,  par:4, hdcp:2,  side:"front" },
+      { hole:6,  par:4, hdcp:10, side:"front" },
+      { hole:7,  par:5, hdcp:4,  side:"front" },
+      { hole:8,  par:3, hdcp:18, side:"front" },
+      { hole:9,  par:4, hdcp:8,  side:"front" },
+      { hole:10, par:4, hdcp:5,  side:"back" },
+      { hole:11, par:3, hdcp:17, side:"back" },
+      { hole:12, par:4, hdcp:11, side:"back" },
+      { hole:13, par:4, hdcp:3,  side:"back" },
+      { hole:14, par:5, hdcp:7,  side:"back" },
+      { hole:15, par:4, hdcp:13, side:"back" },
+      { hole:16, par:4, hdcp:1,  side:"back" },
+      { hole:17, par:3, hdcp:15, side:"back" },
+      { hole:18, par:5, hdcp:9,  side:"back" },
+    ]
+  },
+
+  // ── GLENRIDDLE — War Admiral — Berlin, MD ─────────────────────────────────
+  "glenriddle-war-admiral": {
+    name: "GlenRiddle — War Admiral",
+    city: "Berlin, MD",
+    par: 72,
+    holes: [
+      { hole:1,  par:5, hdcp:1,  side:"front" },
+      { hole:2,  par:4, hdcp:11, side:"front" },
+      { hole:3,  par:5, hdcp:9,  side:"front" },
+      { hole:4,  par:3, hdcp:15, side:"front" },
+      { hole:5,  par:4, hdcp:5,  side:"front" },
+      { hole:6,  par:4, hdcp:13, side:"front" },
+      { hole:7,  par:3, hdcp:17, side:"front" },
+      { hole:8,  par:4, hdcp:7,  side:"front" },
+      { hole:9,  par:4, hdcp:3,  side:"front" },
+      { hole:10, par:3, hdcp:10, side:"back" },
+      { hole:11, par:4, hdcp:16, side:"back" },
+      { hole:12, par:5, hdcp:8,  side:"back" },
+      { hole:13, par:4, hdcp:4,  side:"back" },
+      { hole:14, par:4, hdcp:14, side:"back" },
+      { hole:15, par:4, hdcp:12, side:"back" },
+      { hole:16, par:5, hdcp:6,  side:"back" },
+      { hole:17, par:3, hdcp:18, side:"back" },
+      { hole:18, par:4, hdcp:2,  side:"back" },
+    ]
+  },
+
+  // ── RUM POINTE SEASIDE GOLF LINKS — Berlin, MD ────────────────────────────
+  "rum-pointe": {
+    name: "Rum Pointe Seaside Golf Links",
+    city: "Berlin, MD",
+    par: 72,
+    holes: [
+      { hole:1,  par:4, hdcp:7,  side:"front" },
+      { hole:2,  par:3, hdcp:13, side:"front" },
+      { hole:3,  par:5, hdcp:5,  side:"front" },
+      { hole:4,  par:4, hdcp:17, side:"front" },
+      { hole:5,  par:3, hdcp:15, side:"front" },
+      { hole:6,  par:4, hdcp:11, side:"front" },
+      { hole:7,  par:4, hdcp:1,  side:"front" },
+      { hole:8,  par:5, hdcp:3,  side:"front" },
+      { hole:9,  par:4, hdcp:9,  side:"front" },
+      { hole:10, par:5, hdcp:4,  side:"back" },
+      { hole:11, par:4, hdcp:18, side:"back" },
+      { hole:12, par:4, hdcp:14, side:"back" },
+      { hole:13, par:5, hdcp:10, side:"back" },
+      { hole:14, par:3, hdcp:6,  side:"back" },
+      { hole:15, par:4, hdcp:12, side:"back" },
+      { hole:16, par:4, hdcp:2,  side:"back" },
+      { hole:17, par:3, hdcp:16, side:"back" },
+      { hole:18, par:4, hdcp:8,  side:"back" },
+    ]
+  },
+
+  // ── OCEAN CITY GOLF CLUB — Seaside — Berlin, MD ───────────────────────────
+  // Note: Hole-by-hole hdcp not publicly available — using estimated values
+  // Please verify against physical scorecard and update as needed
+  "oc-golf-seaside": {
+    name: "Ocean City Golf Club — Seaside",
+    city: "Berlin, MD",
+    par: 72,
+    note: "⚠️ Hdcp estimated — verify with scorecard",
+    holes: [
+      { hole:1,  par:4, hdcp:9,  side:"front" },
+      { hole:2,  par:4, hdcp:1,  side:"front" },
+      { hole:3,  par:3, hdcp:17, side:"front" },
+      { hole:4,  par:5, hdcp:5,  side:"front" },
+      { hole:5,  par:4, hdcp:13, side:"front" },
+      { hole:6,  par:4, hdcp:3,  side:"front" },
+      { hole:7,  par:3, hdcp:15, side:"front" },
+      { hole:8,  par:5, hdcp:7,  side:"front" },
+      { hole:9,  par:4, hdcp:11, side:"front" },
+      { hole:10, par:4, hdcp:4,  side:"back" },
+      { hole:11, par:4, hdcp:16, side:"back" },
+      { hole:12, par:3, hdcp:12, side:"back" },
+      { hole:13, par:5, hdcp:2,  side:"back" },
+      { hole:14, par:4, hdcp:10, side:"back" },
+      { hole:15, par:4, hdcp:6,  side:"back" },
+      { hole:16, par:3, hdcp:18, side:"back" },
+      { hole:17, par:5, hdcp:8,  side:"back" },
+      { hole:18, par:4, hdcp:14, side:"back" },
+    ]
+  },
+  // Iron Valley Golf Club - Lebanon, PA - verified 18Birdies
   "iron-valley": {
-    id: "iron-valley",
     name: "Iron Valley Golf Club",
     city: "Lebanon, PA",
     par: 72,
-    note: "P.B. Dye design. Ranked top 10 in PA by Golf Magazine. 7,026 yards from tips.",
     holes: [
       { hole:1,  par:4, hdcp:1,  side:"front", yards:435 },
       { hole:2,  par:4, hdcp:17, side:"front", yards:373 },
@@ -59,40 +223,11 @@ export const COURSES = {
     ]
   },
 
-  "eagles-landing": {
-    id: "eagles-landing",
-    name: "Eagles Landing Golf Course",
-    city: "Berlin, MD",
-    par: 72,
-    note: "Ranked #1 in MD by GolfAdvisor. Links-style. 6,926 yds (Black).",
-    holes: [
-      { hole:1,  par:4, hdcp:15, side:"front", yards:367 },
-      { hole:2,  par:4, hdcp:5,  side:"front", yards:383 },
-      { hole:3,  par:3, hdcp:7,  side:"front", yards:195 },
-      { hole:4,  par:4, hdcp:1,  side:"front", yards:432 },
-      { hole:5,  par:5, hdcp:17, side:"front", yards:534 },
-      { hole:6,  par:3, hdcp:9,  side:"front", yards:232 },
-      { hole:7,  par:5, hdcp:11, side:"front", yards:531 },
-      { hole:8,  par:4, hdcp:13, side:"front", yards:372 },
-      { hole:9,  par:4, hdcp:3,  side:"front", yards:359 },
-      { hole:10, par:5, hdcp:14, side:"back",  yards:551 },
-      { hole:11, par:3, hdcp:12, side:"back",  yards:201 },
-      { hole:12, par:4, hdcp:2,  side:"back",  yards:402 },
-      { hole:13, par:4, hdcp:10, side:"back",  yards:360 },
-      { hole:14, par:5, hdcp:18, side:"back",  yards:502 },
-      { hole:15, par:4, hdcp:8,  side:"back",  yards:425 },
-      { hole:16, par:4, hdcp:4,  side:"back",  yards:456 },
-      { hole:17, par:3, hdcp:16, side:"back",  yards:191 },
-      { hole:18, par:4, hdcp:6,  side:"back",  yards:433 },
-    ]
-  },
-
+  // GlenRiddle Man O War - Berlin, MD - verified 18Birdies
   "glenriddle-manowar": {
-    id: "glenriddle-manowar",
     name: "GlenRiddle - Man O War",
     city: "Berlin, MD",
     par: 72,
-    note: "Joel Weiman design. Historic racetrack on 3 holes. 7,196 yds (Black).",
     holes: [
       { hole:1,  par:4, hdcp:5,  side:"front", yards:440 },
       { hole:2,  par:4, hdcp:11, side:"front", yards:408 },
@@ -115,83 +250,218 @@ export const COURSES = {
     ]
   },
 
-  "rum-pointe": {
-    id: "rum-pointe",
-    name: "Rum Pointe Seaside Golf Links",
-    city: "Berlin, MD",
-    par: 72,
-    note: "Pete & P.B. Dye. Scottish links, bentgrass fairways, 17 holes with bay views. 7,001 yds (Black).",
-    holes: [
-      { hole:1,  par:4, hdcp:7,  side:"front", yards:422 },
-      { hole:2,  par:3, hdcp:13, side:"front", yards:177 },
-      { hole:3,  par:5, hdcp:5,  side:"front", yards:509 },
-      { hole:4,  par:4, hdcp:17, side:"front", yards:393 },
-      { hole:5,  par:3, hdcp:15, side:"front", yards:175 },
-      { hole:6,  par:4, hdcp:11, side:"front", yards:398 },
-      { hole:7,  par:4, hdcp:1,  side:"front", yards:471 },
-      { hole:8,  par:5, hdcp:3,  side:"front", yards:540 },
-      { hole:9,  par:4, hdcp:9,  side:"front", yards:419 },
-      { hole:10, par:5, hdcp:4,  side:"back",  yards:505 },
-      { hole:11, par:4, hdcp:18, side:"back",  yards:369 },
-      { hole:12, par:4, hdcp:14, side:"back",  yards:400 },
-      { hole:13, par:5, hdcp:10, side:"back",  yards:501 },
-      { hole:14, par:3, hdcp:6,  side:"back",  yards:223 },
-      { hole:15, par:4, hdcp:12, side:"back",  yards:407 },
-      { hole:16, par:4, hdcp:2,  side:"back",  yards:463 },
-      { hole:17, par:3, hdcp:16, side:"back",  yards:185 },
-      { hole:18, par:4, hdcp:8,  side:"back",  yards:444 },
-    ]
-  },
 
 };
 
-// STROKE HOLE CALCULATOR
-export function getStrokeHoles(courseId, strokesPerSide) {
+// ── STROKE CALCULATOR ─────────────────────────────────────────────────────────
+// totalStrokes = strokes given to opponent (positive number)
+// Returns array of hole numbers where opponent gets a stroke
+export function getStrokeHoles(courseId, totalStrokes) {
   const course = COURSES[courseId];
-  if (!course || !strokesPerSide) return [];
-  return course.holes.filter(h => h.hdcp <= strokesPerSide);
-}
+  if (!course || totalStrokes === 0) return [];
 
-// NASSAU / AUTO-PRESS CALCULATOR
-export function calcAutoPressNassau(teams, course, holePars, ballsByPar, birdieBonus) {
-  if (!course || teams.length < 2) return null;
+  const strokesPerSide = Math.floor(totalStrokes / 2);
+  const extraStroke    = totalStrokes % 2; // front gets extra if odd
 
-  function teamHoleScore(team, holeNum) {
-    const h = course.holes.find(x => x.hole === holeNum);
-    if (!h) return null;
-    const par = holePars[holeNum] ?? h.par;
-    const balls = typeof ballsByPar === "object"
-      ? parseInt(ballsByPar[par]) || 2
-      : parseInt(ballsByPar) || 2;
-    const scores = [];
-    for (let j = 0; j < (team.size || 4); j++) {
-      const s = team.scores?.[j]?.[holeNum];
-      if (s !== null && s !== undefined) scores.push(s);
-    }
-    if (scores.length === 0) return null;
-    scores.sort((a, b) => a - b);
-    const counted = scores.slice(0, balls);
-    let raw = counted.reduce((s, x) => s + x, 0);
-    if (birdieBonus) {
-      const birdies = scores.filter(s => s <= par - 1).length;
-      if (birdies >= 3) raw -= (birdies - 2);
-    }
-    return raw - par * balls;
+  const frontHoles = course.holes.filter(h => h.side === "front");
+  const backHoles  = course.holes.filter(h => h.side === "back");
+
+  // Sort by hdcp ascending = hardest holes first
+  const frontSorted = [...frontHoles].sort((a,b) => a.hdcp - b.hdcp);
+  const backSorted  = [...backHoles].sort((a,b)  => a.hdcp - b.hdcp);
+
+  const strokeHoles = [];
+
+  // Front — extra stroke goes here if odd total
+  const frontCount = strokesPerSide + extraStroke;
+  for (let i = 0; i < Math.min(frontCount, frontSorted.length); i++) {
+    strokeHoles.push(frontSorted[i].hole);
   }
 
-  const results = { front: {}, back: {}, total: {} };
-  teams.forEach((t, i) => { results.front[i] = 0; results.back[i] = 0; results.total[i] = 0; });
+  // Back
+  for (let i = 0; i < Math.min(strokesPerSide, backSorted.length); i++) {
+    strokeHoles.push(backSorted[i].hole);
+  }
 
-  course.holes.forEach(h => {
-    const side = h.side;
-    teams.forEach((t, i) => {
-      const diff = teamHoleScore(t, h.hole);
-      if (diff !== null) {
-        results[side][i] = (results[side][i] || 0) + diff;
-        results.total[i] = (results.total[i] || 0) + diff;
+  return strokeHoles;
+}
+
+// ── BET CALCULATORS ───────────────────────────────────────────────────────────
+
+export function calcMatchPlay(scores, holeData, myStrokeHoles, oppStrokeHoles, betPerHole) {
+  let total = 0;
+  let holesPlayed = 0;
+  const holes = [];
+
+  for (const h of holeData) {
+    const myScore  = scores.me[h.hole];
+    const oppScore = scores.opp[h.hole];
+    if (myScore === undefined || oppScore === undefined) continue;
+
+    holesPlayed++;
+    const myNet  = myStrokeHoles.includes(h.hole)  ? myScore  - 1 : myScore;
+    const oppNet = oppStrokeHoles.includes(h.hole) ? oppScore - 1 : oppScore;
+
+    let outcome = "halved";
+    let delta   = 0;
+    if (myNet < oppNet)       { outcome = "won";  delta =  betPerHole; }
+    else if (myNet > oppNet)  { outcome = "lost"; delta = -betPerHole; }
+
+    total += delta;
+    holes.push({ hole:h.hole, myScore, oppScore, myNet, oppNet, outcome, delta });
+  }
+
+  return { total, holesPlayed, holes };
+}
+
+export function calcNassau(scores, holeData, myStrokeHoles, oppStrokeHoles, betAmount) {
+  function calcSide(holes) {
+    let myTotal = 0, oppTotal = 0, complete = true;
+    for (const h of holes) {
+      const myScore  = scores.me[h.hole];
+      const oppScore = scores.opp[h.hole];
+      if (myScore === undefined || oppScore === undefined) { complete = false; continue; }
+      myTotal  += myStrokeHoles.includes(h.hole)  ? myScore  - 1 : myScore;
+      oppTotal += oppStrokeHoles.includes(h.hole) ? oppScore - 1 : oppScore;
+    }
+    if (!complete && myTotal === 0) return { result:"incomplete", amount:0 };
+    if (myTotal < oppTotal)  return { result:"won",  amount: betAmount };
+    if (myTotal > oppTotal)  return { result:"lost", amount:-betAmount };
+    return { result:"tied", amount:0 };
+  }
+
+  const front = calcSide(holeData.filter(h => h.side === "front"));
+  const back  = calcSide(holeData.filter(h => h.side === "back"));
+  const total = calcSide(holeData);
+
+  return { front, back, total, net: front.amount + back.amount + total.amount };
+}
+
+// ── AUTO PRESS NASSAU CALCULATOR ─────────────────────────────────────────────
+// Rules:
+// - Nassau: front 9, back 9, 18-hole total — each a flat bet
+// - When any active bet hits exactly -2 (2 down) → new press starts at 0
+// - Each press bet can itself get pressed if it hits -2
+// - 18-hole total NEVER gets pressed
+// - Each bet result: +betAmount (won), -betAmount (lost), 0 (tied)
+
+export function calcAutoPressNassau(scores, holeData, myStrokeHoles, oppStrokeHoles, betAmount, pressDown = 2, manualPresses = []) {
+
+  function calcSideWithPress(sideHoles) {
+    if (!sideHoles || sideHoles.length === 0) return { bets: [], total: 0 };
+
+    // Each bet: { startHole, diff, pressed }
+    // pressed = true means this bet already triggered a press (prevent double-trigger)
+    const bets = [{ startHole: sideHoles[0].hole, diff: 0, pressed: false, label: "Original" }];
+
+    for (const h of sideHoles) {
+      const myScore  = scores.me[h.hole];
+      const oppScore = scores.opp[h.hole];
+      if (myScore  === undefined || myScore  === null) continue;
+      if (oppScore === undefined || oppScore === null) continue;
+
+      const myNet  = myStrokeHoles.includes(h.hole)  ? myScore  - 1 : myScore;
+      const oppNet = oppStrokeHoles.includes(h.hole) ? oppScore - 1 : oppScore;
+
+      const holeResult = myNet < oppNet ? 1 : myNet > oppNet ? -1 : 0;
+
+      // Snapshot how many bets existed BEFORE this hole — only check these for press
+      const betsThisHole = bets.length;
+
+      // Update only bets that have already started
+      for (let i = 0; i < betsThisHole; i++) {
+        if (bets[i].startHole <= h.hole) {
+          bets[i].diff += holeResult;
+        }
       }
-    });
-  });
 
-  return results;
+      // Check for AUTO press triggers (±pressDown)
+      const isLastHole = h.hole === sideHoles[sideHoles.length - 1].hole;
+      for (let i = 0; i < betsThisHole; i++) {
+        const bet = bets[i];
+        if (bet.startHole <= h.hole && (bet.diff === pressDown || bet.diff === -pressDown) && !bet.pressed) {
+          bet.pressed = true;
+          if (!isLastHole) {
+            bets.push({ startHole: h.hole + 1, diff: 0, pressed: false, label: `Auto Press` });
+          }
+        }
+      }
+
+      // Check for MANUAL press — starts on this hole
+      const manualThisHole = manualPresses.filter(p => p.hole === h.hole);
+      for (const mp of manualThisHole) {
+        // Manual press starts on the current hole (already scored above)
+        // so new bet starts next hole to not double-count
+        if (!isLastHole) {
+          bets.push({ startHole: h.hole + 1, diff: 0, pressed: false, label: `Pissed Press h${h.hole}` });
+        }
+      }
+    }
+
+    // Calculate final result for each bet: flat win/loss/tie
+    const finalBets = bets.map((bet, i) => ({
+      betNum:    i + 1,
+      startHole: bet.startHole,
+      diff:      bet.diff,
+      label:     bet.label || `Press ${i}`,
+      amount:    bet.diff > 0 ? betAmount : bet.diff < 0 ? -betAmount : 0,
+    }));
+
+    const total = finalBets.reduce((s, b) => s + b.amount, 0);
+    return { bets: finalBets, total };
+  }
+
+  const frontHoles = holeData.filter(h => h.side === "front");
+  const backHoles  = holeData.filter(h => h.side === "back");
+
+  const front = calcSideWithPress(frontHoles);
+  const back  = calcSideWithPress(backHoles);
+
+  // 18-hole total — NEVER pressed, flat bet based on total score
+  function calcTotal() {
+    let myT = 0, oppT = 0, holesPlayed = 0;
+    for (const h of holeData) {
+      const myScore  = scores.me[h.hole];
+      const oppScore = scores.opp[h.hole];
+      if (myScore === undefined || myScore === null) continue;
+      if (oppScore === undefined || oppScore === null) continue;
+      holesPlayed++;
+      myT  += myStrokeHoles.includes(h.hole)  ? myScore  - 1 : myScore;
+      oppT += oppStrokeHoles.includes(h.hole) ? oppScore - 1 : oppScore;
+    }
+    if (holesPlayed === 0) return 0;
+    if (myT < oppT)  return  betAmount;
+    if (myT > oppT)  return -betAmount;
+    return 0;
+  }
+
+  const totalAmount = calcTotal();
+
+  return {
+    front,
+    back,
+    total:  totalAmount,
+    net:    front.total + back.total + totalAmount,
+  };
+}
+
+export function calcSkins(scores, holeData, myStrokeHoles, oppStrokeHoles, betPerSkin) {
+  let me = 0, opp = 0, net = 0, carry = 0;
+  const holes = [];
+
+  for (const h of holeData) {
+    const myScore  = scores.me[h.hole];
+    const oppScore = scores.opp[h.hole];
+    if (myScore === undefined || oppScore === undefined) continue;
+
+    const myNet  = myStrokeHoles.includes(h.hole)  ? myScore  - 1 : myScore;
+    const oppNet = oppStrokeHoles.includes(h.hole) ? oppScore - 1 : oppScore;
+    const pot    = betPerSkin + carry;
+
+    if (myNet < oppNet)      { me++;  net += pot;  holes.push({hole:h.hole, winner:"me",  pot}); carry = 0; }
+    else if (myNet > oppNet) { opp++; net -= pot;  holes.push({hole:h.hole, winner:"opp", pot}); carry = 0; }
+    else                     {        carry += betPerSkin; holes.push({hole:h.hole, winner:"carry", pot:carry}); }
+  }
+
+  return { me, opp, net, carries:carry, holes };
 }
