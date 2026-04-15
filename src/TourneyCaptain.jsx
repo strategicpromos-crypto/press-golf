@@ -465,7 +465,7 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
                 </div>
                 <div style={{display:"flex",alignItems:"center",gap:8}}>
                   {diff!==null&&<div style={{ fontSize:14, fontWeight:800, color:relColor(diff) }}>{relLabel(diff)}{diff<=-1?" 🐦":""}</div>}
-                  {isCtpHole&&score!==null&&(
+                  {isCtpHole&&(
                     <button
                       onClick={()=>{
                         setCtpInput(isCtpLeader?ctpLeader.distance:"");
