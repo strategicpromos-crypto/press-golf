@@ -171,7 +171,7 @@ export default function TourneySpectator({ tourney: initialTourney, onBack }) {
           const medals=["🥇","🥈","🥉"];
           const players=[];
           (tourney.teams||[]).forEach((team,ti)=>{
-            for(let pi=0;pi<(team.size||2);pi++){
+            for(let pi=0;pi<(team.size||1);pi++){
               const name=team.players?.[pi]?.trim()?team.players[pi].trim():`Player ${pi+1}`;
               const teamName=team.name||`Team ${ti+1}`;
               const teamColor=team.color||TEAM_COLORS[ti%TEAM_COLORS.length];
