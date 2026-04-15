@@ -150,10 +150,12 @@ export default function TeamTournament({onBack, user, onDelete}){
   const[ballsByPar,setBallsByPar]=useState({3:2,4:2,5:2}); // balls counted per hole by par
   const[skinsEnabled,setSkinsEnabled]=useState(false);
   const[bigBoyEnabled,setBigBoyEnabled]=useState(false);
-  const[ctpLeaders,setCtpLeaders]=useState({});    // {holeNum:{name,distance}}
-  const[ctpPopup,setCtpPopup]=useState(null);        // hole number of open CTP popup
-  const[ctpName,setCtpName]=useState('');
-  const[ctpDist,setCtpDist]=useState('');
+  const[teammatesTie,setTeammatesTie]=useState(false); // false=teammates don't cancel skin, true=stricter
+  const[ctpEnabled,setCtpEnabled]=useState(false);
+  const[ctpHoles,setCtpHoles]=useState([]);          // hole numbers designated as CTP
+  const[ctpLeaders,setCtpLeaders]=useState({});      // {holeNum: {name,teamName,distance,teamIdx,playerIdx}}
+  const[ctpPopup,setCtpPopup]=useState(null);        // {holeNum,teamIdx,playerIdx,playerName} — active entry popup
+  const[ctpInput,setCtpInput]=useState("");           // distance input string
   const[holePars,setHolePars]=useState({});        // override pars: {4:4} = hole 4 → par 4
   const[numTeams,setNumTeams]=useState(8);
   const[activeTeam,setActiveTeam]=useState(0);
@@ -170,31 +172,11 @@ export default function TeamTournament({onBack, user, onDelete}){
   const[spectatorTourney,setSpectatorTourney]=useState(null);
   const[lbTab,setLbTab]=useState("standings");      // leaderboard tab
   const[showSettings,setShowSettings]=useState(false); // director settings overlay
-  const[userCourses,setUserCourses]=useState([]);        // custom courses from Supabase
-  const[showAddCourse,setShowAddCourse]=useState(false); // show course entry form
-  const[newCourseName,setNewCourseName]=useState("");
-  const[newCourseCity,setNewCourseCity]=useState("");
-  const[newCoursePar,setNewCoursePar]=useState(72);
-  const[newCourseHoles,setNewCourseHoles]=useState(
-    Array.from({length:18},(_,i)=>({hole:i+1,par:4,hdcp:i+1,yards:400,side:i<9?"front":"back"}))
-  );
-  const[savingCourse,setSavingCourse]=useState(false);
   const saveTimer=useRef(null);
   const subRef=useRef(null);
-  // Helper: get course object from built-in or user courses
-  function getCourse(id){
-    if(COURSES[id]) return COURSES[id];
-    return userCourses.find(c=>c.id===id)||null;
-  }
-  const course=getCourse(courseId);
+  const course=COURSES[courseId];
 
-  useEffect(()=>{ loadSaved(); loadUserCourses(); },[]);
-
-  async function loadUserCourses(){
-    if(!user?.id) return;
-    const{data}=await sb.from("user_courses").select("*").eq("owner_id",user.id).order("name");
-    if(data) setUserCourses(data);
-  }
+  useEffect(()=>{ loadSaved(); },[]);
 
   // ── Real-time: director sees captain scores instantly ──────────────────────
   useEffect(()=>{
@@ -224,27 +206,6 @@ export default function TeamTournament({onBack, user, onDelete}){
     if(data)setSavedTourneys(data);
   }
 
-  async function saveUserCourse(){
-    if(!newCourseName.trim()) return;
-    setSavingCourse(true);
-    const id = "custom-" + Date.now();
-    const courseData = {
-      id,
-      owner_id: user.id,
-      name: newCourseName.trim(),
-      city: newCourseCity.trim(),
-      par: newCoursePar,
-      holes: newCourseHoles.map(h=>({...h,par:parseInt(h.par)||4,hdcp:parseInt(h.hdcp)||1,yards:parseInt(h.yards)||400})),
-    };
-    await sb.from("user_courses").insert(courseData);
-    await loadUserCourses();
-    setCourseId(id);
-    setShowAddCourse(false);
-    setNewCourseName(""); setNewCourseCity(""); setNewCoursePar(72);
-    setNewCourseHoles(Array.from({length:18},(_,i)=>({hole:i+1,par:4,hdcp:i+1,yards:400,side:i<9?"front":"back"})));
-    setSavingCourse(false);
-  }
-
   // ── Auto-save whenever teams/scores/hole change ────────────────────────────
   useEffect(()=>{
     if(!tourneyId||screen==="home"||screen==="saved"||screen==="join")return;
@@ -262,6 +223,9 @@ export default function TeamTournament({onBack, user, onDelete}){
         hole_pars:holePars,
         skins_enabled:skinsEnabled,
         big_boy_enabled:bigBoyEnabled,
+        teammates_tie:teammatesTie,
+        ctp_enabled:ctpEnabled,
+        ctp_holes:ctpHoles,
         ctp_leaders:ctpLeaders,
         current_hole:currentHole,
         status:newStatus,
@@ -272,7 +236,7 @@ export default function TeamTournament({onBack, user, onDelete}){
       loadSaved();
     },800);
     return()=>clearTimeout(saveTimer.current);
-  },[teams,currentHole,courseId,birdieBonus,holePars,ballsByPar,skinsEnabled,bigBoyEnabled,ctpLeaders,tourneyId]);
+  },[teams,currentHole,courseId,birdieBonus,holePars,ballsByPar,skinsEnabled,bigBoyEnabled,teammatesTie,ctpEnabled,ctpHoles,ctpLeaders,tourneyId]);
 
   // ── Create new tournament in DB ────────────────────────────────────────────
   async function createTourney(builtTeams){
@@ -303,6 +267,9 @@ export default function TeamTournament({onBack, user, onDelete}){
       hole_pars:holePars,
       skins_enabled:skinsEnabled,
       big_boy_enabled:bigBoyEnabled,
+      teammates_tie:teammatesTie,
+      ctp_enabled:ctpEnabled,
+      ctp_holes:ctpHoles,
       ctp_leaders:{},
       teams:teamsWithPins,
       current_hole:1,
@@ -330,6 +297,9 @@ export default function TeamTournament({onBack, user, onDelete}){
       setHolePars(data.hole_pars||{});
       setSkinsEnabled(data.skins_enabled===true);
       setBigBoyEnabled(data.big_boy_enabled===true);
+      setTeammatesTie(data.teammates_tie===true);
+      setCtpEnabled(data.ctp_enabled===true);
+      setCtpHoles(data.ctp_holes||[]);
       setCtpLeaders(data.ctp_leaders||{});
       setTeams(data.teams||[]);
       setNumTeams((data.teams||[]).length);
@@ -566,6 +536,8 @@ export default function TeamTournament({onBack, user, onDelete}){
             setHolePars({});
             setSkinsEnabled(false);
             setBigBoyEnabled(false);
+            setCtpEnabled(false);
+            setCtpHoles([]);
             setCtpLeaders({});
             setScreen("setup");
           }}>+ New Tournament Setup</BigBtn>
@@ -633,106 +605,6 @@ export default function TeamTournament({onBack, user, onDelete}){
     );
   }
 
-  // ADD COURSE FORM
-  if(showAddCourse){
-    const inp2={width:"100%",padding:"12px",background:C.surface,border:"1px solid "+C.border,borderRadius:8,color:C.text,fontSize:14,outline:"none",boxSizing:"border-box"};
-    return(
-      <div style={{fontFamily:"Georgia,serif",minHeight:"100vh",background:C.bg,color:C.text,paddingBottom:60}}>
-        <div style={{background:"linear-gradient(180deg,"+C.card+" 0%,transparent 100%)",padding:"50px 20px 20px"}}>
-          <button onClick={()=>setShowAddCourse(false)} style={{background:"rgba(123,180,80,0.15)",border:"1px solid "+C.green,color:C.green,fontSize:13,cursor:"pointer",padding:"8px 16px",borderRadius:20,fontWeight:700,marginBottom:16}}>‹ Back</button>
-          <div style={{fontSize:22,fontWeight:800}}>Add a Course</div>
-          <div style={{fontSize:12,color:C.muted,marginTop:4}}>Enter the scorecard details. Pull it up on 18Birdies or the club website.</div>
-        </div>
-        <div style={{padding:"0 20px"}}>
-
-          {/* Course info */}
-          <div style={{background:C.card,border:"1px solid "+C.border,borderRadius:12,padding:"16px",marginBottom:16}}>
-            <div style={{fontSize:12,color:C.muted,marginBottom:6}}>Course name</div>
-            <input value={newCourseName} onChange={e=>setNewCourseName(e.target.value)}
-              placeholder="e.g. Sylvania Country Club" style={{...inp2,marginBottom:12,fontSize:16,fontWeight:700}}/>
-            <div style={{fontSize:12,color:C.muted,marginBottom:6}}>City / State</div>
-            <input value={newCourseCity} onChange={e=>setNewCourseCity(e.target.value)}
-              placeholder="e.g. Sylvania, OH" style={{...inp2,marginBottom:12}}/>
-            <div style={{fontSize:12,color:C.muted,marginBottom:6}}>Course par</div>
-            <div style={{display:"flex",gap:8}}>
-              {[70,71,72,73].map(p=>(
-                <button key={p} onClick={()=>setNewCoursePar(p)} style={{flex:1,padding:"12px",borderRadius:8,border:"1px solid "+(newCoursePar===p?C.green:C.border),background:newCoursePar===p?C.green:"transparent",color:newCoursePar===p?"#0a1a0f":C.text,fontWeight:700,cursor:"pointer",fontSize:15}}>{p}</button>
-              ))}
-            </div>
-          </div>
-
-          {/* Hole-by-hole entry */}
-          <div style={{fontSize:13,fontWeight:700,color:C.green,letterSpacing:1,textTransform:"uppercase",marginBottom:10}}>Scorecard</div>
-
-          {/* Header */}
-          <div style={{display:"grid",gridTemplateColumns:"36px 60px 60px 60px 70px",gap:4,marginBottom:6,padding:"0 4px"}}>
-            {["Hole","Par","Hdcp","Yards","Side"].map(h=>(
-              <div key={h} style={{fontSize:10,color:C.muted,letterSpacing:1,textTransform:"uppercase",textAlign:"center"}}>{h}</div>
-            ))}
-          </div>
-
-          {/* Front 9 */}
-          <div style={{fontSize:11,color:C.gold,fontWeight:700,letterSpacing:1,marginBottom:6,marginTop:4}}>FRONT 9</div>
-          {newCourseHoles.slice(0,9).map((h,i)=>(
-            <div key={i} style={{display:"grid",gridTemplateColumns:"36px 60px 60px 60px 70px",gap:4,marginBottom:6,alignItems:"center"}}>
-              <div style={{fontWeight:800,fontSize:14,textAlign:"center",color:C.muted}}>{h.hole}</div>
-              <select value={h.par} onChange={e=>{const hs=[...newCourseHoles];hs[i]={...hs[i],par:parseInt(e.target.value)};setNewCourseHoles(hs);}}
-                style={{...inp2,padding:"8px 4px",textAlign:"center",fontSize:14}}>
-                {[3,4,5].map(p=><option key={p} value={p}>{p}</option>)}
-              </select>
-              <input type="number" value={h.hdcp} onChange={e=>{const hs=[...newCourseHoles];hs[i]={...hs[i],hdcp:e.target.value};setNewCourseHoles(hs);}}
-                style={{...inp2,padding:"8px 4px",textAlign:"center",fontSize:14}} min="1" max="18"/>
-              <input type="number" value={h.yards} onChange={e=>{const hs=[...newCourseHoles];hs[i]={...hs[i],yards:e.target.value};setNewCourseHoles(hs);}}
-                style={{...inp2,padding:"8px 4px",textAlign:"center",fontSize:14}}/>
-              <div style={{fontSize:10,color:C.muted,textAlign:"center"}}>front</div>
-            </div>
-          ))}
-
-          {/* Front totals */}
-          <div style={{display:"flex",justifyContent:"space-between",padding:"8px 4px",marginBottom:16,borderTop:"1px solid "+C.border,fontSize:12,color:C.muted}}>
-            <span>OUT</span>
-            <span>Par {newCourseHoles.slice(0,9).reduce((s,h)=>s+(parseInt(h.par)||0),0)}</span>
-            <span>{newCourseHoles.slice(0,9).reduce((s,h)=>s+(parseInt(h.yards)||0),0)} yds</span>
-          </div>
-
-          {/* Back 9 */}
-          <div style={{fontSize:11,color:C.gold,fontWeight:700,letterSpacing:1,marginBottom:6}}>BACK 9</div>
-          {newCourseHoles.slice(9,18).map((h,i)=>(
-            <div key={i+9} style={{display:"grid",gridTemplateColumns:"36px 60px 60px 60px 70px",gap:4,marginBottom:6,alignItems:"center"}}>
-              <div style={{fontWeight:800,fontSize:14,textAlign:"center",color:C.muted}}>{h.hole}</div>
-              <select value={h.par} onChange={e=>{const hs=[...newCourseHoles];hs[i+9]={...hs[i+9],par:parseInt(e.target.value)};setNewCourseHoles(hs);}}
-                style={{...inp2,padding:"8px 4px",textAlign:"center",fontSize:14}}>
-                {[3,4,5].map(p=><option key={p} value={p}>{p}</option>)}
-              </select>
-              <input type="number" value={h.hdcp} onChange={e=>{const hs=[...newCourseHoles];hs[i+9]={...hs[i+9],hdcp:e.target.value};setNewCourseHoles(hs);}}
-                style={{...inp2,padding:"8px 4px",textAlign:"center",fontSize:14}} min="1" max="18"/>
-              <input type="number" value={h.yards} onChange={e=>{const hs=[...newCourseHoles];hs[i+9]={...hs[i+9],yards:e.target.value};setNewCourseHoles(hs);}}
-                style={{...inp2,padding:"8px 4px",textAlign:"center",fontSize:14}}/>
-              <div style={{fontSize:10,color:C.muted,textAlign:"center"}}>back</div>
-            </div>
-          ))}
-
-          {/* Back + total */}
-          <div style={{display:"flex",justifyContent:"space-between",padding:"8px 4px",borderTop:"1px solid "+C.border,fontSize:12,color:C.muted,marginBottom:4}}>
-            <span>IN</span>
-            <span>Par {newCourseHoles.slice(9,18).reduce((s,h)=>s+(parseInt(h.par)||0),0)}</span>
-            <span>{newCourseHoles.slice(9,18).reduce((s,h)=>s+(parseInt(h.yards)||0),0)} yds</span>
-          </div>
-          <div style={{display:"flex",justifyContent:"space-between",padding:"8px 4px",fontSize:13,fontWeight:700,color:C.text,marginBottom:24,borderTop:"1px solid "+C.border}}>
-            <span>TOTAL</span>
-            <span style={{color:C.green}}>Par {newCourseHoles.reduce((s,h)=>s+(parseInt(h.par)||0),0)}</span>
-            <span>{newCourseHoles.reduce((s,h)=>s+(parseInt(h.yards)||0),0)} yds</span>
-          </div>
-
-          <button onClick={saveUserCourse} disabled={!newCourseName.trim()||savingCourse}
-            style={{width:"100%",padding:"18px",background:newCourseName.trim()&&!savingCourse?C.green:"#1a2a1a",color:newCourseName.trim()&&!savingCourse?"#0a1a0f":C.muted,border:"none",borderRadius:12,fontSize:17,fontWeight:800,cursor:newCourseName.trim()&&!savingCourse?"pointer":"not-allowed"}}>
-            {savingCourse?"Saving...":"⛳ Save Course"}
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   // SETUP
   if(screen==="setup"){
     return(
@@ -753,23 +625,10 @@ export default function TeamTournament({onBack, user, onDelete}){
           <div style={{marginBottom:16}}>
             <Lbl>Course</Lbl>
             <select value={courseId} onChange={e=>{setCourseId(e.target.value);setHolePars({});}} style={{width:"100%",padding:"14px",background:C.surface,border:"1px solid "+C.border,borderRadius:10,color:C.text,fontSize:15,outline:"none",WebkitAppearance:"none"}}>
-              <optgroup label="Built-in Courses">
-                {Object.entries(COURSES).map(([id,c])=>(
-                  <option key={id} value={id}>{c.name} — Par {c.par}</option>
-                ))}
-              </optgroup>
-              {userCourses.length>0&&(
-                <optgroup label="My Courses">
-                  {userCourses.map(c=>(
-                    <option key={c.id} value={c.id}>{c.name} — Par {c.par}</option>
-                  ))}
-                </optgroup>
-              )}
+              {Object.entries(COURSES).map(([id,c])=>(
+                <option key={id} value={id}>{c.name} — Par {c.par}</option>
+              ))}
             </select>
-            <button onClick={()=>setShowAddCourse(true)}
-              style={{width:"100%",marginTop:8,padding:"11px",background:"transparent",border:"1px dashed rgba(123,180,80,0.4)",borderRadius:10,color:C.green,fontSize:13,fontWeight:700,cursor:"pointer"}}>
-              + Add a Course
-            </button>
           </div>
 
           {/* South Toledo hole #4 par toggle */}
@@ -841,6 +700,67 @@ export default function TeamTournament({onBack, user, onDelete}){
             </div>
           )}
 
+          {/* Teammate tie rule — only shows when skins on */}
+          {skinsEnabled&&(
+            <div style={{background:"rgba(224,80,80,0.06)",border:"1px solid rgba(224,80,80,0.2)",borderRadius:12,padding:"14px 16px",marginBottom:16,marginLeft:8}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <div>
+                  <div style={{fontWeight:700,fontSize:14,color:C.text}}>Teammate Ties Cancel Skin</div>
+                  <div style={{fontSize:11,color:C.muted,marginTop:2}}>{teammatesTie?"Stricter — teammates tie = skin carries":"Default — teammates don't cancel, team wins"}</div>
+                </div>
+                <button onClick={()=>setTeammatesTie(b=>!b)} style={{width:52,height:28,borderRadius:14,border:"none",cursor:"pointer",background:teammatesTie?C.red:"#333",position:"relative",transition:"background 0.2s",flexShrink:0}}>
+                  <div style={{position:"absolute",top:4,left:teammatesTie?26:4,width:20,height:20,borderRadius:"50%",background:"#fff",transition:"left 0.2s"}}/>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* CTP — Closest to the Pin */}
+          <div style={{background:C.card,border:"1px solid "+C.border,borderRadius:12,padding:"14px 16px",marginBottom:ctpEnabled?8:16}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <div>
+                <div style={{fontWeight:700,fontSize:15}}>📍 Closest to the Pin</div>
+                <div style={{fontSize:11,color:C.muted,marginTop:3}}>{ctpEnabled?"Select which holes are CTP below":"Off for this tournament"}</div>
+              </div>
+              <button onClick={()=>{setCtpEnabled(b=>!b);if(ctpEnabled)setCtpHoles([]);}} style={{width:52,height:28,borderRadius:14,border:"none",cursor:"pointer",background:ctpEnabled?"#e8b84b":"#333",position:"relative",transition:"background 0.2s",flexShrink:0}}>
+                <div style={{position:"absolute",top:4,left:ctpEnabled?26:4,width:20,height:20,borderRadius:"50%",background:"#fff",transition:"left 0.2s"}}/>
+              </button>
+            </div>
+          </div>
+
+          {/* CTP hole selector — shows when CTP enabled */}
+          {ctpEnabled&&(
+            <div style={{background:"rgba(232,184,75,0.06)",border:"1px solid rgba(232,184,75,0.25)",borderRadius:12,padding:"14px 16px",marginBottom:16,marginLeft:8}}>
+              <div style={{fontWeight:700,fontSize:13,color:C.gold,marginBottom:4}}>📍 Select CTP Holes</div>
+              <div style={{fontSize:11,color:C.muted,marginBottom:12}}>Tap to mark a hole as Closest to the Pin. Par 3s recommended — use your Press Golf tape measure!</div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+                {course.holes.map(h=>{
+                  const effPar=holePars[h.hole]??h.par;
+                  const isSelected=ctpHoles.includes(h.hole);
+                  const isPar3=effPar===3;
+                  return(
+                    <button key={h.hole} onClick={()=>setCtpHoles(prev=>isSelected?prev.filter(x=>x!==h.hole):[...prev,h.hole])}
+                      style={{
+                        width:52,height:52,borderRadius:10,
+                        background:isSelected?C.gold:"rgba(255,255,255,0.06)",
+                        color:isSelected?"#0a1a0f":isPar3?C.gold:C.muted,
+                        border:"2px solid "+(isSelected?C.gold:isPar3?"rgba(232,184,75,0.4)":"rgba(255,255,255,0.15)"),
+                        fontWeight:isSelected?800:600,fontSize:13,cursor:"pointer",
+                        display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:1
+                      }}>
+                      <span style={{fontSize:15,fontWeight:800}}>{h.hole}</span>
+                      <span style={{fontSize:8,opacity:0.8}}>P{effPar}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              {ctpHoles.length>0&&(
+                <div style={{marginTop:12,fontSize:12,color:C.gold}}>
+                  📍 CTP on holes: {ctpHoles.sort((a,b)=>a-b).join(", ")} · Captains enter distance on scoring screen
+                </div>
+              )}
+            </div>
+          )}
           <div style={{background:C.card,border:"1px solid "+C.border,borderRadius:12,padding:"14px 16px",marginBottom:16}}>
             <div style={{fontWeight:700,fontSize:15,marginBottom:2}}>Scores That Count Per Hole</div>
             <div style={{fontSize:11,color:C.muted,marginBottom:12}}>Set per par value. Tap a number to change. Quick-set all at once with the bottom row.</div>
@@ -990,7 +910,7 @@ export default function TeamTournament({onBack, user, onDelete}){
                 teams,course_id:courseId,birdie_bonus:birdieBonus,
                 ball_count_by_par:ballsByPar,hole_pars:holePars,
                 skins_enabled:skinsEnabled,big_boy_enabled:bigBoyEnabled,
-                ctp_leaders:ctpLeaders,
+                ctp_enabled:ctpEnabled,ctp_holes:ctpHoles,ctp_leaders:ctpLeaders,
                 status:"active",current_hole:1,updated_at:new Date().toISOString()
               }).eq("id",id);
             }
@@ -1062,6 +982,27 @@ export default function TeamTournament({onBack, user, onDelete}){
           })}
         </div>
 
+        {/* CTP banner — shows current leader when on a CTP hole */}
+        {ctpEnabled&&ctpHoles.includes(currentHole)&&(()=>{
+          const leader=ctpLeaders[currentHole];
+          return(
+            <div style={{margin:"0 12px 8px",background:"rgba(232,184,75,0.1)",border:"1px solid rgba(232,184,75,0.35)",borderRadius:12,padding:"10px 14px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <div>
+                <div style={{fontSize:10,color:C.gold,letterSpacing:2,textTransform:"uppercase",fontWeight:600}}>📍 CTP Hole {currentHole}</div>
+                {leader?(
+                  <div style={{fontSize:13,fontWeight:700,color:C.text,marginTop:2}}>
+                    {leader.name} · <span style={{color:C.gold}}>{leader.distance}</span>
+                    <span style={{fontSize:11,color:C.muted,marginLeft:6}}>{leader.teamName}</span>
+                  </div>
+                ):(
+                  <div style={{fontSize:12,color:C.muted,marginTop:2}}>No leader yet — tap ☐ next to a player to claim</div>
+                )}
+              </div>
+              {leader&&<div style={{fontSize:22}}>📍</div>}
+            </div>
+          );
+        })()}
+
         {/* Team tabs */}
         <div style={{display:"flex",overflowX:"auto",padding:"8px 12px",gap:8,borderBottom:"1px solid "+C.border}}>
           {teams.map((t,i)=>(
@@ -1101,14 +1042,38 @@ export default function TeamTournament({onBack, user, onDelete}){
             const score=getPlayerScore(team,j,currentHole);
             const isBest=best2Set.has(j)&&score!==null;
             const diff=score!==null?score-effPar:null;
+            const isCtpHole=ctpEnabled&&ctpHoles.includes(currentHole);
+            const ctpLeader=ctpLeaders[currentHole];
+            const isCtpLeader=ctpLeader&&ctpLeader.teamIdx===activeTeam&&ctpLeader.playerIdx===j;
             return(
-              <div key={j} style={{background:isBest?"rgba(123,180,80,0.08)":C.card,border:"1px solid "+(isBest?C.green:C.border),borderRadius:14,padding:"12px 14px",marginBottom:10}}>
+              <div key={j} style={{background:isBest?"rgba(123,180,80,0.08)":C.card,border:"1px solid "+(isCtpLeader?"rgba(232,184,75,0.6)":isBest?C.green:C.border),borderRadius:14,padding:"12px 14px",marginBottom:10}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
                   <div>
                     <span style={{fontWeight:700,fontSize:15}}>{team.players[j]||"Player "+(j+1)}</span>
                     {isBest&&<span style={{fontSize:10,color:C.green,fontWeight:700,marginLeft:8}}>✓ COUNTS</span>}
+                    {isCtpLeader&&<span style={{fontSize:10,color:C.gold,fontWeight:700,marginLeft:8}}>📍 CTP LEADER {ctpLeader.distance}</span>}
                   </div>
-                  {diff!==null&&<div style={{fontSize:14,fontWeight:800,color:relColor(diff)}}>{relLabel(diff)}{diff<=-1?" 🐦":""}</div>}
+                  <div style={{display:"flex",alignItems:"center",gap:8}}>
+                    {diff!==null&&<div style={{fontSize:14,fontWeight:800,color:relColor(diff)}}>{relLabel(diff)}{diff<=-1?" 🐦":""}</div>}
+                    {/* CTP checkbox — shows on every player on CTP holes */}
+                    {isCtpHole&&(
+                      <button
+                        onClick={()=>{
+                          setCtpInput(isCtpLeader?ctpLeader.distance:"");
+                          setCtpPopup({holeNum:currentHole,teamIdx:activeTeam,playerIdx:j,playerName:team.players[j]||"Player "+(j+1),teamName:team.name});
+                        }}
+                        style={{
+                          width:36,height:36,borderRadius:8,
+                          background:isCtpLeader?C.gold:"rgba(232,184,75,0.15)",
+                          border:"2px solid "+(isCtpLeader?C.gold:"rgba(232,184,75,0.4)"),
+                          color:isCtpLeader?"#0a1a0f":C.gold,
+                          fontSize:isCtpLeader?16:14,cursor:"pointer",fontWeight:800,
+                          display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0
+                        }}>
+                        {isCtpLeader?"📍":"☐"}
+                      </button>
+                    )}
+                  </div>
                 </div>
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
                   <button onClick={()=>setPlayerScore(activeTeam,j,currentHole,score!==null?Math.max(1,score-1):effPar-1)}
@@ -1145,30 +1110,6 @@ export default function TeamTournament({onBack, user, onDelete}){
             );
           })()}
 
-          {/* CTP button — only on par 3 holes */}
-          {effPar===3&&(()=>{
-            const leader=ctpLeaders[currentHole];
-            return(
-              <button onClick={()=>{setCtpName("");setCtpDist("");setCtpPopup(currentHole);}}
-                style={{width:"100%",padding:"14px",marginBottom:12,
-                  background:leader?"rgba(232,184,75,0.15)":"rgba(232,184,75,0.08)",
-                  border:`2px solid ${leader?C.gold:"rgba(232,184,75,0.35)"}`,
-                  borderRadius:14,cursor:"pointer",textAlign:"left",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                <div>
-                  <div style={{fontSize:13,fontWeight:800,color:C.gold}}>📍 Closest to the Pin</div>
-                  {leader?(
-                    <div style={{fontSize:12,color:C.text,marginTop:2}}>
-                      {leader.name} · <span style={{color:C.gold,fontWeight:700}}>{leader.distance}</span>
-                    </div>
-                  ):(
-                    <div style={{fontSize:11,color:C.muted,marginTop:2}}>Tap to enter CTP result</div>
-                  )}
-                </div>
-                <div style={{fontSize:20}}>{leader?"📍":"☐"}</div>
-              </button>
-            );
-          })()}
-
           <BigBtn onClick={()=>isLastHole?setScreen("leaderboard"):setCurrentHole(h=>h+1)} color={isLastHole?C.gold:C.green}>
             {isLastHole?"See Final Results 🏆":"Next — Hole "+(currentHole+1)}
           </BigBtn>
@@ -1185,56 +1126,78 @@ export default function TeamTournament({onBack, user, onDelete}){
           </div>
         </div>
 
-        {/* CTP POPUP - simple name + distance */}
+        {/* ── CTP POPUP MODAL ──────────────────────────────────────────── */}
         {ctpPopup&&(()=>{
-          const leader=ctpLeaders[ctpPopup];
-          async function saveCtp(){
-            if(!ctpName.trim()||!ctpDist.trim())return;
-            const newLeaders={...ctpLeaders,[ctpPopup]:{name:ctpName.trim(),distance:ctpDist.trim(),hole:ctpPopup}};
+          const leader=ctpLeaders[ctpPopup.holeNum];
+          const inputVal=parseFloat(ctpInput);
+          const leaderDist=leader?parseFloat(leader.distance):null;
+          const isValid=!isNaN(inputVal)&&inputVal>0&&(leaderDist===null||inputVal<leaderDist);
+          const isOwn=leader&&leader.teamIdx===ctpPopup.teamIdx&&leader.playerIdx===ctpPopup.playerIdx;
+
+          async function submitCtp(){
+            if(!isValid&&!isOwn)return;
+            const newLeaders={...ctpLeaders,[ctpPopup.holeNum]:{
+              name:ctpPopup.playerName,
+              teamName:ctpPopup.teamName,
+              teamIdx:ctpPopup.teamIdx,
+              playerIdx:ctpPopup.playerIdx,
+              distance:ctpInput.trim(),
+              hole:ctpPopup.holeNum,
+            }};
             setCtpLeaders(newLeaders);
-            await sb.from("team_tournaments").update({ctp_leaders:newLeaders,updated_at:new Date().toISOString()}).eq("id",tourneyId);
-            setCtpPopup(null);setCtpName("");setCtpDist("");
+            // Write directly to DB so all groups see it immediately
+            await sb.from("team_tournaments").update({
+              ctp_leaders:newLeaders,
+              updated_at:new Date().toISOString()
+            }).eq("id",tourneyId);
+            setCtpPopup(null);
+            setCtpInput("");
           }
+
           return(
-            <div style={{position:"fixed",inset:0,zIndex:600,background:"rgba(0,0,0,0.92)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
+            <div style={{position:"fixed",inset:0,zIndex:600,background:"rgba(0,0,0,0.9)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
               <div style={{background:C.surface,border:"2px solid "+C.gold,borderRadius:20,padding:24,width:"100%",maxWidth:340}}>
-                <div style={{textAlign:"center",marginBottom:20}}>
-                  <div style={{fontSize:32,marginBottom:6}}>📍</div>
-                  <div style={{fontSize:20,fontWeight:800,color:C.gold}}>Closest to the Pin</div>
-                  <div style={{fontSize:12,color:C.muted,marginTop:4}}>Hole {ctpPopup} · Par 3</div>
-                </div>
+                <div style={{textAlign:"center",marginBottom:16}}>
+                  <div style={{fontSize:36,marginBottom:6}}>📍</div>
+                  <div style={{fontSize:20,fontWeight:800,color:C.gold,marginBottom:4}}>Closest to the Pin</div>
+                  <div style={{fontSize:13,color:C.muted,marginBottom:4}}>Hole {ctpPopup.holeNum} · {ctpPopup.playerName}</div>
 
-                {leader&&(
-                  <div style={{background:C.card,border:"1px solid rgba(232,184,75,0.3)",borderRadius:12,padding:"10px 14px",marginBottom:16,textAlign:"center"}}>
-                    <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:4}}>Current Leader</div>
-                    <div style={{fontSize:20,fontWeight:800,color:C.gold}}>{leader.distance}</div>
-                    <div style={{fontSize:12,color:C.muted,marginTop:2}}>{leader.name}</div>
+                  {/* Current leader box */}
+                  <div style={{background:C.card,border:"1px solid rgba(232,184,75,0.3)",borderRadius:12,padding:"12px 14px",marginBottom:16,marginTop:8}}>
+                    {leader&&!isOwn?(
+                      <>
+                        <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:4}}>Current Leader</div>
+                        <div style={{fontSize:18,fontWeight:800,color:C.gold}}>{leader.distance}</div>
+                        <div style={{fontSize:12,color:C.muted,marginTop:2}}>{leader.name} · {leader.teamName}</div>
+                        <div style={{fontSize:11,color:C.red,marginTop:6}}>Must be closer than {leader.distance} to claim</div>
+                      </>
+                    ):(
+                      <div style={{fontSize:13,color:C.muted}}>{isOwn?"You currently hold CTP — update your distance below":"No leader yet — first entry wins!"}</div>
+                    )}
                   </div>
-                )}
 
-                <div style={{display:"flex",flexDirection:"column",gap:12,marginBottom:20}}>
-                  <div>
-                    <div style={{fontSize:12,color:C.muted,marginBottom:6}}>Player name</div>
-                    <input autoFocus value={ctpName} onChange={e=>setCtpName(e.target.value)}
-                      placeholder="e.g. Nick"
-                      style={{width:"100%",padding:"14px",background:C.bg,border:"1px solid "+C.border,borderRadius:10,color:C.text,fontSize:16,fontWeight:700,outline:"none",boxSizing:"border-box"}}/>
-                  </div>
-                  <div>
-                    <div style={{fontSize:12,color:C.muted,marginBottom:6}}>Distance from pin</div>
-                    <input value={ctpDist} onChange={e=>setCtpDist(e.target.value)}
-                      placeholder={"e.g. 4'6\""}
-                      style={{width:"100%",padding:"14px",background:C.bg,border:"1px solid "+C.border,borderRadius:10,color:C.gold,fontSize:20,fontWeight:800,outline:"none",textAlign:"center",boxSizing:"border-box",fontFamily:"monospace"}}/>
-                  </div>
+                  {/* Distance input */}
+                  <div style={{fontSize:12,color:C.muted,marginBottom:8}}>Enter distance (feet · inches, e.g. 4'6")</div>
+                  <input
+                    autoFocus
+                    value={ctpInput}
+                    onChange={e=>setCtpInput(e.target.value)}
+                    placeholder={`e.g. 4'6" or 12.5`}
+                    style={{width:"100%",padding:"16px",background:C.bg,border:`2px solid ${isValid||isOwn?"rgba(232,184,75,0.6)":C.border}`,borderRadius:10,color:C.gold,fontSize:22,fontWeight:800,outline:"none",textAlign:"center",boxSizing:"border-box",fontFamily:"monospace"}}
+                  />
+                  {ctpInput&&!isValid&&!isOwn&&leaderDist!==null&&(
+                    <div style={{fontSize:11,color:C.red,marginTop:6}}>Must be closer than current leader ({leader.distance})</div>
+                  )}
                 </div>
 
                 <div style={{display:"flex",gap:10}}>
-                  <button onClick={()=>{setCtpPopup(null);setCtpName("");setCtpDist("");}}
+                  <button onClick={()=>{setCtpPopup(null);setCtpInput("");}}
                     style={{flex:1,padding:"14px",background:"transparent",color:C.muted,border:"1px solid "+C.border,borderRadius:12,fontSize:14,fontWeight:600,cursor:"pointer"}}>
                     Cancel
                   </button>
-                  <button onClick={saveCtp} disabled={!ctpName.trim()||!ctpDist.trim()}
-                    style={{flex:2,padding:"14px",background:ctpName.trim()&&ctpDist.trim()?C.gold:"#1a1a1a",color:ctpName.trim()&&ctpDist.trim()?"#0a1a0f":C.dim,border:"none",borderRadius:12,fontSize:15,fontWeight:800,cursor:ctpName.trim()&&ctpDist.trim()?"pointer":"not-allowed"}}>
-                    📍 Save CTP
+                  <button onClick={submitCtp} disabled={!isValid&&!isOwn}
+                    style={{flex:2,padding:"14px",background:isValid||isOwn?C.gold:"#1a1a1a",color:isValid||isOwn?"#0a1a0f":C.dim,border:"none",borderRadius:12,fontSize:14,fontWeight:800,cursor:isValid||isOwn?"pointer":"not-allowed",transition:"all 0.15s"}}>
+                    📍 Claim CTP
                   </button>
                 </div>
               </div>
@@ -1334,6 +1297,19 @@ export default function TeamTournament({onBack, user, onDelete}){
                     </div>
                     <button onClick={async()=>{const v=!bigBoyEnabled;setBigBoyEnabled(v);await sb.from("team_tournaments").update({big_boy_enabled:v,updated_at:new Date().toISOString()}).eq("id",tourneyId);}} style={{width:52,height:28,borderRadius:14,border:"none",cursor:"pointer",background:bigBoyEnabled?C.gold:"#333",position:"relative",flexShrink:0,transition:"background 0.2s"}}>
                       <div style={{position:"absolute",top:4,left:bigBoyEnabled?26:4,width:20,height:20,borderRadius:"50%",background:"#fff",transition:"left 0.2s"}}/>
+                    </button>
+                  </div>
+                </div>
+              )}
+              {skinsEnabled&&(
+                <div style={{background:"rgba(224,80,80,0.06)",border:"1px solid rgba(224,80,80,0.2)",borderRadius:12,padding:"14px 16px",marginBottom:20,marginLeft:8}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                    <div>
+                      <div style={{fontWeight:700,fontSize:13,color:C.text}}>Teammate Ties Cancel Skin</div>
+                      <div style={{fontSize:11,color:C.muted,marginTop:2}}>{teammatesTie?"Stricter — teammates tie = carries":"Default — team wins if no other team ties"}</div>
+                    </div>
+                    <button onClick={async()=>{const v=!teammatesTie;setTeammatesTie(v);await sb.from("team_tournaments").update({teammates_tie:v,updated_at:new Date().toISOString()}).eq("id",tourneyId);}} style={{width:52,height:28,borderRadius:14,border:"none",cursor:"pointer",background:teammatesTie?C.red:"#333",position:"relative",flexShrink:0,transition:"background 0.2s"}}>
+                      <div style={{position:"absolute",top:4,left:teammatesTie?26:4,width:20,height:20,borderRadius:"50%",background:"#fff",transition:"left 0.2s"}}/>
                     </button>
                   </div>
                 </div>
@@ -1490,7 +1466,7 @@ export default function TeamTournament({onBack, user, onDelete}){
 
         {/* Tabs */}
         <div style={{display:"flex",borderBottom:"1px solid "+C.border,background:"rgba(0,0,0,0.2)",overflowX:"auto"}}>
-          {[["standings","🏆 Standings"],["scorecard","📋 Scorecard"],["top10","⭐ Top 10"],["skins","💰 Skins"],["ctp","📍 CTP"]]
+          {[["standings","🏆 Standings"],["scorecard","📋 Scorecard"],["top10","⭐ Top 10"],["skins","💰 Skins"],...(ctpEnabled&&ctpHoles.length>0?[["ctp","📍 CTP"]]:[])]
             .map(([id,lbl])=>(
             <button key={id} onClick={()=>setLbTab(id)} style={{flex:1,padding:"10px 2px",fontSize:11,fontWeight:lbTab===id?700:500,background:"transparent",color:lbTab===id?(id==="ctp"?C.gold:C.green):C.muted,border:"none",borderBottom:lbTab===id?"2px solid "+(id==="ctp"?C.gold:C.green):"2px solid transparent",cursor:"pointer",whiteSpace:"nowrap",flexShrink:0}}>{lbl}</button>
           ))}
@@ -1562,38 +1538,44 @@ export default function TeamTournament({onBack, user, onDelete}){
 
           {lbTab==="top10"&&<Top10Tab teams={teams} course={course}/>}
 
-          {lbTab==="skins"&&<SkinsTab teams={teams} course={course} holePars={holePars} skinsEnabled={skinsEnabled} bigBoyEnabled={bigBoyEnabled}/>}
+          {lbTab==="skins"&&<SkinsTab teams={teams} course={course} holePars={holePars} skinsEnabled={skinsEnabled} bigBoyEnabled={bigBoyEnabled} teammatesTie={teammatesTie}/>}
 
           {lbTab==="ctp"&&(
             <div>
-              <div style={{fontSize:11,color:C.gold,letterSpacing:1.5,textTransform:"uppercase",marginBottom:14,fontWeight:600}}>📍 Closest to the Pin</div>
-              {course.holes.filter(h=>(holePars[h.hole]??h.par)===3).map(h=>{
-                const leader=ctpLeaders[h.hole];
+              <div style={{fontSize:11,color:C.gold,letterSpacing:1.5,textTransform:"uppercase",marginBottom:14,fontWeight:600}}>📍 Closest to the Pin Results</div>
+              {ctpHoles.sort((a,b)=>a-b).map(holeNum=>{
+                const leader=ctpLeaders[holeNum];
+                const h=course.holes.find(x=>x.hole===holeNum);
+                const effPar=holePars[holeNum]??h?.par??3;
                 return(
-                  <div key={h.hole} style={{background:leader?"rgba(232,184,75,0.08)":C.card,border:"1px solid "+(leader?"rgba(232,184,75,0.4)":C.border),borderRadius:14,padding:"16px",marginBottom:12}}>
-                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                  <div key={holeNum} style={{background:leader?"rgba(232,184,75,0.08)":C.card,border:"1px solid "+(leader?"rgba(232,184,75,0.4)":C.border),borderRadius:14,padding:"16px",marginBottom:12}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:leader?10:0}}>
                       <div>
-                        <div style={{fontWeight:800,fontSize:16}}>Hole {h.hole}</div>
-                        <div style={{fontSize:11,color:C.muted}}>Par 3 · Hdcp {h.hdcp} · {h.yards} yds</div>
+                        <div style={{fontWeight:800,fontSize:16}}>Hole {holeNum}</div>
+                        <div style={{fontSize:11,color:C.muted}}>Par {effPar} · Hdcp {h?.hdcp}</div>
                       </div>
                       {leader?(
                         <div style={{textAlign:"right"}}>
-                          <div style={{fontSize:26,fontWeight:800,color:C.gold}}>{leader.distance}</div>
-                          <div style={{fontSize:10,color:C.muted}}>from pin</div>
+                          <div style={{fontSize:24,fontWeight:800,color:C.gold}}>{leader.distance}</div>
+                          <div style={{fontSize:10,color:C.muted}}>from the pin</div>
                         </div>
                       ):(
                         <div style={{fontSize:12,color:C.dim}}>No entry yet</div>
                       )}
                     </div>
                     {leader&&(
-                      <div style={{background:"rgba(232,184,75,0.12)",borderRadius:10,padding:"10px 12px",marginTop:10,display:"flex",alignItems:"center",gap:10}}>
-                        <div style={{fontSize:22}}>🏆</div>
-                        <div style={{fontWeight:800,fontSize:15,color:C.gold}}>{leader.name}</div>
+                      <div style={{background:"rgba(232,184,75,0.12)",borderRadius:10,padding:"10px 12px",display:"flex",alignItems:"center",gap:10}}>
+                        <div style={{fontSize:24}}>🏆</div>
+                        <div>
+                          <div style={{fontWeight:800,fontSize:15,color:C.gold}}>{leader.name}</div>
+                          <div style={{fontSize:12,color:C.muted}}>{leader.teamName}</div>
+                        </div>
                       </div>
                     )}
                   </div>
                 );
               })}
+              {ctpHoles.length===0&&<div style={{textAlign:"center",color:C.dim,padding:"30px 0"}}>No CTP holes configured</div>}
             </div>
           )}
         </div>
