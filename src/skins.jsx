@@ -10,10 +10,10 @@ function safeInt(v,f=0){const n=parseInt(v,10);return isNaN(n)?f:n;}
 
 // ── SKINS CALCULATOR ──────────────────────────────────────────────────────────
 // Returns per-hole results for regular skins and (optionally) Big Boy skins.
-// Regular rule: lowest score in field wins. Tied by non-teammate = dead.
-//   Teammate exception: if ALL tied low scorers are on same team → each wins.
+// teammatesTie=true  → teammates CAN tie each other, skin carries (stricter)
+// teammatesTie=false → teammates DON'T tie, team wins skin if no OTHER team ties (default)
 // Big Boy rule: only BB-enrolled players compete. No teammate exception in BB.
-export function calcSkins(teams, holeData, holePars, bigBoyEnabled) {
+export function calcSkins(teams, holeData, holePars, bigBoyEnabled, teammatesTie = false) {
   const results = [];
   for (const h of holeData) {
     const hpar = holePars?.[h.hole] ?? h.par;
@@ -45,14 +45,21 @@ export function calcSkins(teams, holeData, holePars, bigBoyEnabled) {
       const minScore = Math.min(...allScores.map(x => x.score));
       const lowPlayers = allScores.filter(x => x.score === minScore);
       if (lowPlayers.length === 1) {
+        // Solo low score — always wins
         regResult = { winner: lowPlayers[0], tied: false, live, score: minScore, hpar };
       } else {
         const teamsWithLow = [...new Set(lowPlayers.map(x => x.teamIdx))];
         if (teamsWithLow.length === 1) {
-          // All tied on same team → each teammate wins
-          regResult = { winner: lowPlayers, tied: false, live, score: minScore, hpar, teammateWin: true };
+          // All tied players are on same team
+          if (teammatesTie) {
+            // Stricter: teammates tie = skin carries (dead)
+            regResult = { winner: null, tied: true, live, score: minScore, hpar, tiers: lowPlayers, teammateCarry: true };
+          } else {
+            // Default: teammates don't cancel — team wins the skin
+            regResult = { winner: lowPlayers, tied: false, live, score: minScore, hpar, teammateWin: true };
+          }
         } else {
-          // Two or more teams tied → dead
+          // Two or more different teams tied → always dead
           regResult = { winner: null, tied: true, live, score: minScore, hpar, tiers: lowPlayers };
         }
       }
@@ -87,7 +94,7 @@ export function calcSkins(teams, holeData, holePars, bigBoyEnabled) {
 }
 
 // ── SKINS TAB COMPONENT ───────────────────────────────────────────────────────
-export function SkinsTab({ teams, course, holePars, skinsEnabled, bigBoyEnabled }) {
+export function SkinsTab({ teams, course, holePars, skinsEnabled, bigBoyEnabled, teammatesTie }) {
   if (!skinsEnabled) return (
     <div style={{ textAlign: "center", padding: "40px 20px", color: C.muted }}>
       <div style={{ fontSize: 32, marginBottom: 12 }}>$</div>
@@ -96,7 +103,7 @@ export function SkinsTab({ teams, course, holePars, skinsEnabled, bigBoyEnabled 
     </div>
   );
 
-  const skins = calcSkins(teams, course.holes, holePars, bigBoyEnabled);
+  const skins = calcSkins(teams, course.holes, holePars, bigBoyEnabled, teammatesTie);
 
   // Build tally of winners
   const tally = {};
@@ -126,7 +133,10 @@ export function SkinsTab({ teams, course, holePars, skinsEnabled, bigBoyEnabled 
   const wLabel = (res, isBB) => {
     if (!res || res.notPlayed) return { text: "—", sub: "not played", color: C.dim };
     if (res.live && !res.tied && !res.winner) return { text: "—", sub: "waiting…", color: C.muted };
-    if (res.tied) return { text: "Tied — dead", sub: (res.tiers || []).map(p => p.name).join(" & "), color: C.red };
+    if (res.tied) {
+      if (res.teammateCarry) return { text: "Tied — dead", sub: "Teammates tied · carries", color: C.red };
+      return { text: "Tied — dead", sub: (res.tiers || []).map(p => p.name).join(" & "), color: C.red };
+    }
     if (!res.winner) return { text: "—", sub: "—", color: C.dim };
     if (res.teammateWin && Array.isArray(res.winner)) {
       return { text: "Teammates win", sub: res.winner.map(p => p.name).join(" & "), color: C.green };
