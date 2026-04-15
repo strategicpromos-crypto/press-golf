@@ -26,7 +26,7 @@ function relColor(d){if(d===null||d===undefined)return C.muted;if(d<0)return C.g
 function calcIndividualLeaderboard(teams, holeData){
   const players = [];
   teams.forEach((team, teamIdx) => {
-    for(let pi = 0; pi < (team.size||2); pi++){
+    for(let pi = 0; pi < (team.size||1); pi++){
       const name = team.players?.[pi]?.trim()
         ? team.players[pi].trim()
         : `Player ${pi+1}`;
@@ -92,7 +92,7 @@ function calcTeamScore(teamScores,teamSize,holeData,birdieBonus,ballsByPar,holeP
     if(typeof ballsByPar==="object"&&ballsByPar!==null&&!Array.isArray(ballsByPar)){
       return parseInt(ballsByPar[par])||parseInt(ballsByPar[4])||2;
     }
-    return parseInt(ballsByPar)||Math.min(teamSize,2);
+    return parseInt(ballsByPar)||Math.min(teamSize,Math.max(teamSize,1));
   };
   const byHole={};
   let front=0,back=0,total=0;
@@ -326,7 +326,7 @@ export default function TeamTournament({onBack, user, onDelete}){
   function buildTeams(n,existing=[]){
     return Array.from({length:n},(_,i)=>existing[i]||{
       id:i,name:"Team "+(i+1),color:TEAM_COLORS[i%TEAM_COLORS.length],
-      size:4,players:["","","",""],strokesPerSide:0,scores:{}
+      size:2,players:["",""],strokesPerSide:0,scores:{}
     });
   }
 
@@ -731,10 +731,11 @@ export default function TeamTournament({onBack, user, onDelete}){
                   style={{flex:1,padding:"10px",background:C.surface,border:"1px solid "+C.border,borderRadius:8,color:C.text,fontSize:15,outline:"none",fontWeight:700}}/>
               </div>
               <div style={{marginBottom:10}}>
-                <NumStepper label="Players on team" value={team.size} min={2} max={6} onChange={size=>{
+                <NumStepper label={team.size===1?"Players on team (Individual)":"Players on team"} value={team.size} min={1} max={6} onChange={size=>{
                   const players=Array.from({length:size},(_,j)=>team.players[j]||"");
                   updateTeam(i,{size,players});
                 }}/>
+                {team.size===1&&<div style={{fontSize:11,color:C.gold,marginTop:4,paddingLeft:4}}>⭐ Individual mode — use for skins games or 1v1 matchups</div>}
               </div>
               <div style={{marginBottom:12}}>
                 <NumStepper label="Strokes received per side" value={team.strokesPerSide} min={0} max={9} onChange={v=>updateTeam(i,{strokesPerSide:v})}/>
@@ -866,10 +867,12 @@ export default function TeamTournament({onBack, user, onDelete}){
               {saveStatus&&<div style={{fontSize:10,color:saveStatus==="saving"?C.gold:C.green,marginTop:2}}>{saveStatus==="saving"?"💾 Saving...":"✓ Saved"}</div>}
             </div>
             <div style={{display:"flex",flexDirection:"column",gap:6,alignItems:"flex-end"}}>
+              <button onClick={()=>setScreen("home")}
+                style={{background:"rgba(123,180,80,0.15)",border:"1px solid "+C.green,color:C.green,fontSize:11,cursor:"pointer",padding:"5px 10px",borderRadius:12,fontWeight:700}}>🏠 Home</button>
               <button onClick={()=>{setLbTab("standings");setScreen("leaderboard");}}
-                style={{background:"rgba(232,184,75,0.15)",border:"1px solid "+C.gold,color:C.gold,fontSize:13,cursor:"pointer",padding:"8px 16px",borderRadius:12,fontWeight:700}}>📊 Leaderboard</button>
+                style={{background:"rgba(232,184,75,0.15)",border:"1px solid "+C.gold,color:C.gold,fontSize:11,cursor:"pointer",padding:"5px 10px",borderRadius:12,fontWeight:700}}>📊 Leaderboard</button>
               <button onClick={()=>setShowSettings(true)}
-                style={{background:"rgba(123,180,80,0.15)",border:"1px solid "+C.green,color:C.green,fontSize:15,cursor:"pointer",padding:"12px 20px",borderRadius:12,fontWeight:700}}>⚙️ Settings</button>
+                style={{background:"rgba(123,180,80,0.15)",border:"1px solid "+C.green,color:C.green,fontSize:13,cursor:"pointer",padding:"8px 14px",borderRadius:12,fontWeight:700}}>⚙️ Settings</button>
             </div>
           </div>
           <div style={{display:"flex",gap:2}}>
@@ -998,7 +1001,7 @@ export default function TeamTournament({onBack, user, onDelete}){
           // guard — check any team has fewer players than max balls being counted
           const maxBalls = Math.max(ballsByPar[3]||2, ballsByPar[4]||2, ballsByPar[5]||2);
           const cbWarnings = teams
-            .filter(t=>(t.size||2) < maxBalls)
+            .filter(t=>(t.size||1) < maxBalls)
             .map(t=>t.name||"A team");
 
           return(
@@ -1117,11 +1120,13 @@ export default function TeamTournament({onBack, user, onDelete}){
               {/* ── TEAMS ───────────────────────────────────────────────── */}
               <div style={{fontSize:11,color:C.green,letterSpacing:1.5,textTransform:"uppercase",marginBottom:10,fontWeight:600}}>Teams</div>
               {teams.map((team,i)=>{
-                const size = team.size||2;
+                const size = team.size||1;
                 const spd  = team.strokesPerSide||0;
-                const sizeWarning = size < Math.max(ballsByPar[3]||2,ballsByPar[4]||2,ballsByPar[5]||2);
+                const maxBalls = Math.max(ballsByPar[3]||2,ballsByPar[4]||2,ballsByPar[5]||2);
+                const sizeWarning = size < maxBalls && size > 1; // only warn if >1 player but still under ball count
+                const individualMode = size === 1;
                 return(
-                  <div key={i} style={{background:C.card,border:"1px solid "+(sizeWarning?C.red+"44":C.border),borderRadius:14,padding:"14px",marginBottom:12}}>
+                  <div key={i} style={{background:C.card,border:"1px solid "+(sizeWarning?C.red+"44":individualMode?C.gold+"33":C.border),borderRadius:14,padding:"14px",marginBottom:12}}>
 
                     {/* Team name */}
                     <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
