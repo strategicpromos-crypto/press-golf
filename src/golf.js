@@ -1,6 +1,6 @@
-// ── COURSE DATA ───────────────────────────────────────────────────────────────
+// -- COURSE DATA ---------------------------------------------------------------
 // All hole data verified against official scorecards
-// South Toledo Golf Club — verified April 2026 via 18Birdies/official scorecard
+// South Toledo Golf Club - verified April 2026 via 18Birdies/official scorecard
 
 export const COURSES = {
   "south-toledo": {
@@ -8,9 +8,9 @@ export const COURSES = {
     name: "South Toledo Golf Club",
     city: "Toledo, OH",
     par: 70,
-    note: "Hole #4 plays as par 3 (248 yds). Some groups play it as par 4 — use the override in settings.",
+    note: "Hole #4 plays as par 3 (248 yds). Some groups play it as par 4 - use the override in settings.",
     holes: [
-      // ── FRONT 9 ──────────────────────────────────────────────────────────────
+      // -- FRONT 9 --------------------------------------------------------------
       { hole:1,  par:4, hdcp:7,  side:"front", yards:386 },
       { hole:2,  par:4, hdcp:5,  side:"front", yards:408 },
       { hole:3,  par:4, hdcp:1,  side:"front", yards:414 },
@@ -20,7 +20,7 @@ export const COURSES = {
       { hole:7,  par:3, hdcp:17, side:"front", yards:140 },
       { hole:8,  par:5, hdcp:9,  side:"front", yards:483 },
       { hole:9,  par:4, hdcp:3,  side:"front", yards:401 },
-      // ── BACK 9 ───────────────────────────────────────────────────────────────
+      // -- BACK 9 ---------------------------------------------------------------
       { hole:10, par:4, hdcp:12, side:"back",  yards:392 },
       { hole:11, par:4, hdcp:14, side:"back",  yards:314 },
       { hole:12, par:3, hdcp:18, side:"back",  yards:161 },
@@ -40,7 +40,7 @@ export const COURSES = {
     par: 72,
     note: "Pete & P.B. Dye links design on Sinepuxent Bay. 17 of 18 holes have bay views. Par 72, 7,001 yards.",
     holes: [
-      // ── FRONT 9 ──────────────────────────────────────────────────────────────
+      // -- FRONT 9 --------------------------------------------------------------
       { hole:1,  par:4, hdcp:7,  side:"front", yards:422 },
       { hole:2,  par:3, hdcp:13, side:"front", yards:177 },
       { hole:3,  par:5, hdcp:5,  side:"front", yards:509 },
@@ -50,7 +50,7 @@ export const COURSES = {
       { hole:7,  par:4, hdcp:1,  side:"front", yards:471 },
       { hole:8,  par:5, hdcp:3,  side:"front", yards:540 },
       { hole:9,  par:4, hdcp:9,  side:"front", yards:419 },
-      // ── BACK 9 ───────────────────────────────────────────────────────────────
+      // -- BACK 9 ---------------------------------------------------------------
       { hole:10, par:5, hdcp:4,  side:"back",  yards:505 },
       { hole:11, par:4, hdcp:18, side:"back",  yards:369 },
       { hole:12, par:4, hdcp:14, side:"back",  yards:400 },
@@ -68,7 +68,7 @@ export const COURSES = {
     par: 72,
     note: "P.B. Dye design. Ranked top 10 in PA by Golf Magazine. 7,026 yards from tips.",
     holes: [
-      // ── FRONT 9 ──────────────────────────────────────────────────────────────
+      // -- FRONT 9 --------------------------------------------------------------
       { hole:1,  par:4, hdcp:1,  side:"front", yards:435 },
       { hole:2,  par:4, hdcp:17, side:"front", yards:373 },
       { hole:3,  par:5, hdcp:15, side:"front", yards:511 },
@@ -78,7 +78,7 @@ export const COURSES = {
       { hole:7,  par:5, hdcp:9,  side:"front", yards:535 },
       { hole:8,  par:3, hdcp:7,  side:"front", yards:201 },
       { hole:9,  par:4, hdcp:13, side:"front", yards:395 },
-      // ── BACK 9 ───────────────────────────────────────────────────────────────
+      // -- BACK 9 ---------------------------------------------------------------
       { hole:10, par:4, hdcp:4,  side:"back",  yards:469 },
       { hole:11, par:4, hdcp:14, side:"back",  yards:356 },
       { hole:12, par:3, hdcp:16, side:"back",  yards:177 },
@@ -91,7 +91,7 @@ export const COURSES = {
     ]
   },
 
-  // ── OCEAN CITY, MD ────────────────────────────────────────────────────────────
+  // -- OCEAN CITY, MD ------------------------------------------------------------
 
   "eagles-landing": {
     id: "eagles-landing",
@@ -123,7 +123,7 @@ export const COURSES = {
 
   "glenriddle-manowar": {
     id: "glenriddle-manowar",
-    name: "GlenRiddle — Man O' War",
+    name: "GlenRiddle - Man O' War",
     city: "Berlin, MD",
     par: 72,
     note: "Joel Weiman links design. Historic racetrack on 3 holes. 7,196 yds (Black).",
@@ -179,7 +179,7 @@ export const COURSES = {
 
   "ocean-city-seaside": {
     id: "ocean-city-seaside",
-    name: "Ocean City Golf Club — Seaside",
+    name: "Ocean City Golf Club - Seaside",
     city: "Berlin, MD",
     par: 72,
     note: "Classic 1959 Lester George layout. Wide fairways, tightly guarded greens. 6,701 yds (Black).",
@@ -206,7 +206,7 @@ export const COURSES = {
   },
 };
 
-// ── STROKE HOLE CALCULATOR ────────────────────────────────────────────────────
+// -- STROKE HOLE CALCULATOR ----------------------------------------------------
 // Returns which holes a player receives strokes on given their handicap per side.
 // Strokes are allocated by hole handicap (hdcp), lowest hdcp = first stroke.
 // With N strokes per side: holes with hdcp <= N on front, hdcp <= N on back.
@@ -221,16 +221,16 @@ export function getStrokeHoles(courseId, strokesPerSide) {
   return result;
 }
 
-// ── AUTO-PRESS NASSAU CALCULATOR ──────────────────────────────────────────────
+// -- AUTO-PRESS NASSAU CALCULATOR ----------------------------------------------
 // Calculates Nassau bet results with optional auto-press and manual presses.
 // Parameters:
-//   scores      — { me: {hole: score}, opp: {hole: score} }
-//   holes       — course hole array
-//   myStrokes   — array of hole numbers where I get a stroke
-//   oppStrokes  — array of hole numbers where opponent gets a stroke
-//   betAmount   — base bet per leg ($)
-//   pressDown   — holes down to trigger auto-press (99 = never)
-//   manualPresses — [{hole: N}] array of manually-triggered presses
+//   scores      - { me: {hole: score}, opp: {hole: score} }
+//   holes       - course hole array
+//   myStrokes   - array of hole numbers where I get a stroke
+//   oppStrokes  - array of hole numbers where opponent gets a stroke
+//   betAmount   - base bet per leg ($)
+//   pressDown   - holes down to trigger auto-press (99 = never)
+//   manualPresses - [{hole: N}] array of manually-triggered presses
 //
 // Returns:
 //   { front: { bets: [{diff, amount}] }, back: { bets: [{diff, amount}] }, net: $ }
