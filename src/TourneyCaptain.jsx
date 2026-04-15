@@ -193,9 +193,9 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
               <div style={{ fontSize:13, color:C.muted }}>Players on team</div>
               <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-                <button onClick={()=>updateTeamSize(Math.max(2,(team.size||4)-1))} style={{ width:34,height:34,borderRadius:"50%",background:C.dim,border:`1px solid ${C.border}`,color:C.text,fontSize:20,fontWeight:700,cursor:"pointer" }}>−</button>
+                <button onClick={()=>updateTeamSize(Math.max(1,(team.size||1)-1))} style={{ width:34,height:34,borderRadius:"50%",background:C.dim,border:`1px solid ${C.border}`,color:C.text,fontSize:20,fontWeight:700,cursor:"pointer" }}>−</button>
                 <div style={{ width:28,textAlign:"center",fontSize:18,fontWeight:800,color:C.text }}>{team.size||4}</div>
-                <button onClick={()=>updateTeamSize(Math.min(6,(team.size||4)+1))} style={{ width:34,height:34,borderRadius:"50%",background:C.dim,border:`1px solid ${C.border}`,color:C.text,fontSize:20,fontWeight:700,cursor:"pointer" }}>+</button>
+                <button onClick={()=>updateTeamSize(Math.min(6,(team.size||1)+1))} style={{ width:34,height:34,borderRadius:"50%",background:C.dim,border:`1px solid ${C.border}`,color:C.text,fontSize:20,fontWeight:700,cursor:"pointer" }}>+</button>
               </div>
             </div>
           </div>
@@ -299,7 +299,7 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
                 {bTab==="top10"&&(()=>{
                   const players=[];
                   (tourney.teams||[]).forEach((t,ti)=>{
-                    for(let pi=0;pi<(t.size||2);pi++){
+                    for(let pi=0;pi<(t.size||1);pi++){
                       const name=t.players?.[pi]?.trim()?t.players[pi].trim():`Player ${pi+1}`;
                       let total=0,holesPlayed=0;
                       for(const h of course.holes){
@@ -551,7 +551,7 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
                       onChange={e=>{
                         const updatedTeams=(tourney.teams||[]).map((t,ti)=>{
                           if(ti!==teamIdx)return t;
-                          const p=[...(t.players||Array(t.size||2).fill(""))];
+                          const p=[...(t.players||Array(t.size||1).fill(""))];
                           p[j]=e.target.value;
                           return{...t,players:p};
                         });
@@ -564,7 +564,7 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
                       <button onClick={()=>{
                         const updatedTeams=(tourney.teams||[]).map((t,ti)=>{
                           if(ti!==teamIdx)return t;
-                          const bb=[...(t.bigBoy||Array(t.size||2).fill(false))];
+                          const bb=[...(t.bigBoy||Array(t.size||1).fill(false))];
                           bb[j]=!bb[j];
                           return{...t,bigBoy:bb};
                         });
