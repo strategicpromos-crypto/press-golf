@@ -94,9 +94,11 @@ export default function TourneySpectator({ tourney: initialTourney, onBack }) {
       </div>
 
       {/* Tabs */}
-      <div style={{ display:"flex", borderBottom:`1px solid ${C.border}`, background:"rgba(0,0,0,0.2)" }}>
-        {[["board","🏆 Standings"],["scorecard","📋 Scorecard"],["top10","⭐ Top 10"],["skins","💰 Skins"]].map(([id,lbl])=>(
-          <button key={id} onClick={()=>setTab(id)} style={{ flex:1, padding:"10px 2px", fontSize:11, fontWeight:tab===id?700:500, background:"transparent", color:tab===id?C.green:C.muted, border:"none", borderBottom:tab===id?`2px solid ${C.green}`:"2px solid transparent", cursor:"pointer" }}>{lbl}</button>
+      <div style={{ display:"flex", borderBottom:`1px solid ${C.border}`, background:"rgba(0,0,0,0.2)", overflowX:"auto" }}>
+        {[["board","🏆 Standings"],["scorecard","📋 Scorecard"],["top10","⭐ Top 10"],["skins","💰 Skins"],
+          ...(tourney.ctp_enabled&&(tourney.ctp_holes||[]).length>0?[["ctp","📍 CTP"]]:[])]
+          .map(([id,lbl])=>(
+          <button key={id} onClick={()=>setTab(id)} style={{ flex:1, padding:"10px 2px", fontSize:11, fontWeight:tab===id?700:500, background:"transparent", color:tab===id?(id==="ctp"?C.gold:C.green):C.muted, border:"none", borderBottom:tab===id?`2px solid ${id==="ctp"?C.gold:C.green}`:"2px solid transparent", cursor:"pointer", whiteSpace:"nowrap", flexShrink:0 }}>{lbl}</button>
         ))}
       </div>
 
@@ -215,6 +217,52 @@ export default function TourneySpectator({ tourney: initialTourney, onBack }) {
           );
         })()}
         {tab==="skins"&&<SkinsTab teams={tourney.teams||[]} course={course} holePars={tourney.hole_pars||{}} skinsEnabled={tourney.skins_enabled===true} bigBoyEnabled={tourney.big_boy_enabled===true}/>}
+
+        {tab==="ctp"&&(()=>{
+          const ctpHoles=(tourney.ctp_holes||[]).sort((a,b)=>a-b);
+          const ctpLeaders=tourney.ctp_leaders||{};
+          return(
+            <div>
+              <div style={{fontSize:11,color:C.gold,letterSpacing:1.5,textTransform:"uppercase",marginBottom:14,fontWeight:600}}>📍 Closest to the Pin — Live</div>
+              {ctpHoles.map(holeNum=>{
+                const leader=ctpLeaders[holeNum];
+                const h=course.holes.find(x=>x.hole===holeNum);
+                const effPar=(tourney.hole_pars||{})[holeNum]??h?.par??3;
+                return(
+                  <div key={holeNum} style={{background:leader?"rgba(232,184,75,0.08)":C.card,border:"2px solid "+(leader?"rgba(232,184,75,0.5)":C.border),borderRadius:16,padding:"16px",marginBottom:12}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:leader?12:0}}>
+                      <div>
+                        <div style={{fontWeight:800,fontSize:18}}>Hole {holeNum}</div>
+                        <div style={{fontSize:11,color:C.muted,marginTop:2}}>Par {effPar} · Hdcp {h?.hdcp} · Use Press Golf tape measure 📏</div>
+                      </div>
+                      {leader?(
+                        <div style={{textAlign:"right"}}>
+                          <div style={{fontSize:28,fontWeight:800,color:C.gold,lineHeight:1}}>{leader.distance}</div>
+                          <div style={{fontSize:10,color:C.muted,marginTop:2}}>from the pin</div>
+                        </div>
+                      ):(
+                        <div style={{fontSize:12,color:C.dim,marginTop:4}}>Waiting...</div>
+                      )}
+                    </div>
+                    {leader&&(
+                      <div style={{background:"rgba(232,184,75,0.12)",borderRadius:12,padding:"12px 14px",display:"flex",alignItems:"center",gap:12}}>
+                        <div style={{fontSize:28}}>🏆</div>
+                        <div>
+                          <div style={{fontWeight:800,fontSize:17,color:C.gold}}>{leader.name}</div>
+                          <div style={{fontSize:13,color:C.muted}}>{leader.teamName}</div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+              <div style={{textAlign:"center",fontSize:11,color:C.dim,marginTop:16,lineHeight:1.6}}>
+                📏 Measure with your Press Golf tape measure<br/>
+                Leaders update live as groups finish each hole
+              </div>
+            </div>
+          );
+        })()}
       </div>
     </div>
   );
