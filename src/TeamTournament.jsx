@@ -302,11 +302,8 @@ export default function TeamTournament({onBack, user, onDelete}){
       setCurrentHole(data.current_hole||1);
       setActiveTeam(0);
       setDirectorCode(data.director_code||null);
-      // Go to scoring if: status is active OR any team has scores entered
-      // This prevents the setup loop bug where a corrupted status sent director back to setup
       const hasScores=(data.teams||[]).some(t=>Object.keys(t.scores||{}).length>0);
       const goToScoring=data.status==="active"||hasScores;
-      // Also fix: if we have scores, repair the DB status right now
       if(hasScores&&data.status!=="active"){
         await sb.from("team_tournaments").update({status:"active",updated_at:new Date().toISOString()}).eq("id",data.id);
       }
@@ -505,7 +502,13 @@ export default function TeamTournament({onBack, user, onDelete}){
                           // Tee Off on a setup tournament — lock it and go
                           await resumeTourney(t);
                           setCurrentHole(1);setActiveTeam(0);
-                          await sb.from("team_tournaments").update({status:"active",current_hole:1,updated_at:new Date().toISOString()}).eq("id",t.id);
+                          await sb.from("team_tournaments").update({
+                            status:"active",current_hole:1,
+                            ctp_enabled:t.ctp_enabled||false,
+                            ctp_holes:t.ctp_holes||[],
+                            ctp_leaders:t.ctp_leaders||{},
+                            updated_at:new Date().toISOString()
+                          }).eq("id",t.id);
                           setScreen("scoring");
                         }} style={{flex:1,padding:"11px",background:"transparent",color:C.green,border:"1px solid "+C.green+"44",borderRadius:10,fontSize:13,fontWeight:700,cursor:"pointer"}}>
                           ⛳ Tee Off
@@ -880,13 +883,15 @@ export default function TeamTournament({onBack, user, onDelete}){
           <div style={{height:8}}/>
           <BigBtn onClick={async()=>{
             setLoading(true);
+            // Cancel any pending autosave to avoid race condition
+            if(saveTimer.current) clearTimeout(saveTimer.current);
             let id=tourneyId;
             if(!id){
-              // First time teeing off — create the DB entry now and lock the ID
               id=await createTourney(teams);
               setTourneyId(id);
             } else {
-              // Already exists — just flip status to active (ID never changes)
+              // Write ALL current state to DB synchronously right now
+              // This prevents the race where autosave hasn't fired yet
               await sb.from("team_tournaments").update({
                 teams,course_id:courseId,birdie_bonus:birdieBonus,
                 ball_count_by_par:ballsByPar,hole_pars:holePars,
@@ -899,7 +904,7 @@ export default function TeamTournament({onBack, user, onDelete}){
             setCurrentHole(1);setActiveTeam(0);
             setScreen("scoring");
           }}>
-            {loading?"Creating...":"⛳ Tee It Up!"}
+            {loading?"Saving...":"⛳ Tee It Up!"}
           </BigBtn>
         </div>
       </div>
