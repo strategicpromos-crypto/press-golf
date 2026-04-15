@@ -1,8 +1,8 @@
-// -- COURSE DATA ---------------------------------------------------------------
-// All hole data verified against official scorecards
-// South Toledo Golf Club - verified April 2026 via 18Birdies/official scorecard
+// COURSE DATA
+// All hole data verified against official scorecards (18Birdies)
 
 export const COURSES = {
+
   "south-toledo": {
     id: "south-toledo",
     name: "South Toledo Golf Club",
@@ -10,7 +10,6 @@ export const COURSES = {
     par: 70,
     note: "Hole #4 plays as par 3 (248 yds). Some groups play it as par 4 - use the override in settings.",
     holes: [
-      // -- FRONT 9 --------------------------------------------------------------
       { hole:1,  par:4, hdcp:7,  side:"front", yards:386 },
       { hole:2,  par:4, hdcp:5,  side:"front", yards:408 },
       { hole:3,  par:4, hdcp:1,  side:"front", yards:414 },
@@ -20,7 +19,6 @@ export const COURSES = {
       { hole:7,  par:3, hdcp:17, side:"front", yards:140 },
       { hole:8,  par:5, hdcp:9,  side:"front", yards:483 },
       { hole:9,  par:4, hdcp:3,  side:"front", yards:401 },
-      // -- BACK 9 ---------------------------------------------------------------
       { hole:10, par:4, hdcp:12, side:"back",  yards:392 },
       { hole:11, par:4, hdcp:14, side:"back",  yards:314 },
       { hole:12, par:3, hdcp:18, side:"back",  yards:161 },
@@ -33,42 +31,13 @@ export const COURSES = {
     ]
   },
 
-  "rum-pointe": {
-    id: "rum-pointe",
-    name: "Rum Pointe Seaside Golf Links",
-    city: "Berlin, MD",
-    par: 72,
-    note: "Pete & P.B. Dye links design on Sinepuxent Bay. 17 of 18 holes have bay views. Par 72, 7,001 yards.",
-    holes: [
-      // -- FRONT 9 --------------------------------------------------------------
-      { hole:1,  par:4, hdcp:7,  side:"front", yards:422 },
-      { hole:2,  par:3, hdcp:13, side:"front", yards:177 },
-      { hole:3,  par:5, hdcp:5,  side:"front", yards:509 },
-      { hole:4,  par:4, hdcp:17, side:"front", yards:393 },
-      { hole:5,  par:3, hdcp:15, side:"front", yards:175 },
-      { hole:6,  par:4, hdcp:11, side:"front", yards:398 },
-      { hole:7,  par:4, hdcp:1,  side:"front", yards:471 },
-      { hole:8,  par:5, hdcp:3,  side:"front", yards:540 },
-      { hole:9,  par:4, hdcp:9,  side:"front", yards:419 },
-      // -- BACK 9 ---------------------------------------------------------------
-      { hole:10, par:5, hdcp:4,  side:"back",  yards:505 },
-      { hole:11, par:4, hdcp:18, side:"back",  yards:369 },
-      { hole:12, par:4, hdcp:14, side:"back",  yards:400 },
-      { hole:13, par:5, hdcp:10, side:"back",  yards:501 },
-      { hole:14, par:3, hdcp:6,  side:"back",  yards:223 },
-      { hole:15, par:4, hdcp:12, side:"back",  yards:407 },
-      { hole:16, par:4, hdcp:2,  side:"back",  yards:463 },
-      { hole:17, par:3, hdcp:16, side:"back",  yards:185 },
-      { hole:18, par:4, hdcp:8,  side:"back",  yards:444 },
-    ]
-  },
+  "iron-valley": {
     id: "iron-valley",
     name: "Iron Valley Golf Club",
     city: "Lebanon, PA",
     par: 72,
     note: "P.B. Dye design. Ranked top 10 in PA by Golf Magazine. 7,026 yards from tips.",
     holes: [
-      // -- FRONT 9 --------------------------------------------------------------
       { hole:1,  par:4, hdcp:1,  side:"front", yards:435 },
       { hole:2,  par:4, hdcp:17, side:"front", yards:373 },
       { hole:3,  par:5, hdcp:15, side:"front", yards:511 },
@@ -78,7 +47,6 @@ export const COURSES = {
       { hole:7,  par:5, hdcp:9,  side:"front", yards:535 },
       { hole:8,  par:3, hdcp:7,  side:"front", yards:201 },
       { hole:9,  par:4, hdcp:13, side:"front", yards:395 },
-      // -- BACK 9 ---------------------------------------------------------------
       { hole:10, par:4, hdcp:4,  side:"back",  yards:469 },
       { hole:11, par:4, hdcp:14, side:"back",  yards:356 },
       { hole:12, par:3, hdcp:16, side:"back",  yards:177 },
@@ -91,14 +59,12 @@ export const COURSES = {
     ]
   },
 
-  // -- OCEAN CITY, MD ------------------------------------------------------------
-
   "eagles-landing": {
     id: "eagles-landing",
     name: "Eagles Landing Golf Course",
     city: "Berlin, MD",
     par: 72,
-    note: "Ranked #1 in MD by GolfAdvisor. Links-style on Sinepuxent Bay. 6,926 yds (Black).",
+    note: "Ranked #1 in MD by GolfAdvisor. Links-style. 6,926 yds (Black).",
     holes: [
       { hole:1,  par:4, hdcp:15, side:"front", yards:367 },
       { hole:2,  par:4, hdcp:5,  side:"front", yards:383 },
@@ -123,29 +89,29 @@ export const COURSES = {
 
   "glenriddle-manowar": {
     id: "glenriddle-manowar",
-    name: "GlenRiddle - Man O' War",
+    name: "GlenRiddle - Man O War",
     city: "Berlin, MD",
     par: 72,
-    note: "Joel Weiman links design. Historic racetrack on 3 holes. 7,196 yds (Black).",
+    note: "Joel Weiman design. Historic racetrack on 3 holes. 7,196 yds (Black).",
     holes: [
-      { hole:1,  par:4, hdcp:9,  side:"front", yards:416 },
-      { hole:2,  par:3, hdcp:17, side:"front", yards:172 },
-      { hole:3,  par:4, hdcp:7,  side:"front", yards:415 },
-      { hole:4,  par:5, hdcp:3,  side:"front", yards:529 },
-      { hole:5,  par:4, hdcp:5,  side:"front", yards:436 },
-      { hole:6,  par:4, hdcp:11, side:"front", yards:406 },
-      { hole:7,  par:5, hdcp:1,  side:"front", yards:595 },
-      { hole:8,  par:4, hdcp:15, side:"front", yards:376 },
-      { hole:9,  par:3, hdcp:13, side:"front", yards:228 },
-      { hole:10, par:4, hdcp:10, side:"back",  yards:427 },
-      { hole:11, par:4, hdcp:4,  side:"back",  yards:468 },
-      { hole:12, par:4, hdcp:12, side:"back",  yards:409 },
-      { hole:13, par:3, hdcp:14, side:"back",  yards:197 },
-      { hole:14, par:5, hdcp:2,  side:"back",  yards:633 },
-      { hole:15, par:3, hdcp:18, side:"back",  yards:168 },
-      { hole:16, par:5, hdcp:6,  side:"back",  yards:551 },
-      { hole:17, par:4, hdcp:16, side:"back",  yards:321 },
-      { hole:18, par:4, hdcp:8,  side:"back",  yards:449 },
+      { hole:1,  par:4, hdcp:5,  side:"front", yards:440 },
+      { hole:2,  par:4, hdcp:11, side:"front", yards:408 },
+      { hole:3,  par:3, hdcp:17, side:"front", yards:156 },
+      { hole:4,  par:5, hdcp:1,  side:"front", yards:570 },
+      { hole:5,  par:4, hdcp:7,  side:"front", yards:445 },
+      { hole:6,  par:3, hdcp:13, side:"front", yards:190 },
+      { hole:7,  par:5, hdcp:3,  side:"front", yards:573 },
+      { hole:8,  par:4, hdcp:9,  side:"front", yards:418 },
+      { hole:9,  par:4, hdcp:15, side:"front", yards:365 },
+      { hole:10, par:4, hdcp:2,  side:"back",  yards:450 },
+      { hole:11, par:4, hdcp:12, side:"back",  yards:395 },
+      { hole:12, par:5, hdcp:8,  side:"back",  yards:535 },
+      { hole:13, par:3, hdcp:18, side:"back",  yards:170 },
+      { hole:14, par:4, hdcp:4,  side:"back",  yards:387 },
+      { hole:15, par:3, hdcp:16, side:"back",  yards:156 },
+      { hole:16, par:5, hdcp:6,  side:"back",  yards:536 },
+      { hole:17, par:4, hdcp:14, side:"back",  yards:431 },
+      { hole:18, par:4, hdcp:10, side:"back",  yards:386 },
     ]
   },
 
@@ -177,124 +143,55 @@ export const COURSES = {
     ]
   },
 
-  "ocean-city-seaside": {
-    id: "ocean-city-seaside",
-    name: "Ocean City Golf Club - Seaside",
-    city: "Berlin, MD",
-    par: 72,
-    note: "Classic 1959 Lester George layout. Wide fairways, tightly guarded greens. 6,701 yds (Black).",
-    holes: [
-      { hole:1,  par:4, hdcp:13, side:"front", yards:355 },
-      { hole:2,  par:3, hdcp:15, side:"front", yards:212 },
-      { hole:3,  par:4, hdcp:5,  side:"front", yards:495 },
-      { hole:4,  par:4, hdcp:9,  side:"front", yards:402 },
-      { hole:5,  par:4, hdcp:3,  side:"front", yards:496 },
-      { hole:6,  par:5, hdcp:7,  side:"front", yards:433 },
-      { hole:7,  par:3, hdcp:1,  side:"front", yards:475 },
-      { hole:8,  par:4, hdcp:17, side:"front", yards:166 },
-      { hole:9,  par:5, hdcp:11, side:"front", yards:390 },
-      { hole:10, par:4, hdcp:14, side:"back",  yards:345 },
-      { hole:11, par:4, hdcp:12, side:"back",  yards:367 },
-      { hole:12, par:3, hdcp:18, side:"back",  yards:191 },
-      { hole:13, par:5, hdcp:2,  side:"back",  yards:478 },
-      { hole:14, par:4, hdcp:8,  side:"back",  yards:387 },
-      { hole:15, par:3, hdcp:16, side:"back",  yards:156 },
-      { hole:16, par:5, hdcp:4,  side:"back",  yards:536 },
-      { hole:17, par:4, hdcp:6,  side:"back",  yards:431 },
-      { hole:18, par:4, hdcp:10, side:"back",  yards:386 },
-    ]
-  },
 };
 
-// -- STROKE HOLE CALCULATOR ----------------------------------------------------
-// Returns which holes a player receives strokes on given their handicap per side.
-// Strokes are allocated by hole handicap (hdcp), lowest hdcp = first stroke.
-// With N strokes per side: holes with hdcp <= N on front, hdcp <= N on back.
+// STROKE HOLE CALCULATOR
 export function getStrokeHoles(courseId, strokesPerSide) {
   const course = COURSES[courseId];
   if (!course || !strokesPerSide) return [];
-  const result = [];
-  const front = course.holes.filter(h => h.side === "front").sort((a,b) => a.hdcp - b.hdcp);
-  const back  = course.holes.filter(h => h.side === "back").sort((a,b) => a.hdcp - b.hdcp);
-  front.slice(0, strokesPerSide).forEach(h => result.push(h.hole));
-  back.slice(0,  strokesPerSide).forEach(h => result.push(h.hole));
-  return result;
+  return course.holes.filter(h => h.hdcp <= strokesPerSide);
 }
 
-// -- AUTO-PRESS NASSAU CALCULATOR ----------------------------------------------
-// Calculates Nassau bet results with optional auto-press and manual presses.
-// Parameters:
-//   scores      - { me: {hole: score}, opp: {hole: score} }
-//   holes       - course hole array
-//   myStrokes   - array of hole numbers where I get a stroke
-//   oppStrokes  - array of hole numbers where opponent gets a stroke
-//   betAmount   - base bet per leg ($)
-//   pressDown   - holes down to trigger auto-press (99 = never)
-//   manualPresses - [{hole: N}] array of manually-triggered presses
-//
-// Returns:
-//   { front: { bets: [{diff, amount}] }, back: { bets: [{diff, amount}] }, net: $ }
-//
-// Each "bet" in the array is one leg (original + any presses).
-// diff > 0 = you are ahead, diff < 0 = opponent ahead.
-export function calcAutoPressNassau(scores, holes, myStrokes, oppStrokes, betAmount, pressDown, manualPresses) {
-  pressDown = pressDown || 99;
-  manualPresses = manualPresses || [];
+// NASSAU / AUTO-PRESS CALCULATOR
+export function calcAutoPressNassau(teams, course, holePars, ballsByPar, birdieBonus) {
+  if (!course || teams.length < 2) return null;
 
-  function calcSide(sideHoles) {
-    const bets = [{ startHole: sideHoles[0].hole, amount: betAmount, diffs: [] }];
-
-    for (const h of sideHoles) {
-      const my  = scores.me?.[h.hole];
-      const op  = scores.opp?.[h.hole];
-      if (my === undefined || my === null || op === undefined || op === null) continue;
-
-      const myNet  = myStrokes.includes(h.hole)  ? my  - 1 : my;
-      const oppNet = oppStrokes.includes(h.hole)  ? op  - 1 : op;
-
-      // Update all active bets
-      for (const bet of bets) {
-        if (h.hole < bet.startHole) continue;
-        if (myNet < oppNet)       bet.diffs.push(1);
-        else if (myNet > oppNet)  bet.diffs.push(-1);
-        else                      bet.diffs.push(0);
-      }
-
-      // Running diff for current (last) bet
-      const curBet = bets[bets.length - 1];
-      const runDiff = curBet.diffs.reduce((s, v) => s + v, 0);
-
-      // Auto-press trigger: down by pressDown after this hole
-      const nextHole = sideHoles[sideHoles.indexOf(h) + 1];
-      if (nextHole && runDiff <= -pressDown) {
-        bets.push({ startHole: nextHole.hole, amount: betAmount, diffs: [] });
-      }
-
-      // Manual press trigger
-      if (nextHole && manualPresses.some(p => p.hole === nextHole.hole)) {
-        // Don't double-add if auto-press already triggered
-        if (!bets.some(b => b.startHole === nextHole.hole)) {
-          bets.push({ startHole: nextHole.hole, amount: betAmount, diffs: [] });
-        }
-      }
+  function teamHoleScore(team, holeNum) {
+    const h = course.holes.find(x => x.hole === holeNum);
+    if (!h) return null;
+    const par = holePars[holeNum] ?? h.par;
+    const balls = typeof ballsByPar === "object"
+      ? parseInt(ballsByPar[par]) || 2
+      : parseInt(ballsByPar) || 2;
+    const scores = [];
+    for (let j = 0; j < (team.size || 4); j++) {
+      const s = team.scores?.[j]?.[holeNum];
+      if (s !== null && s !== undefined) scores.push(s);
     }
-
-    // Calculate final diff and net for each bet
-    const processedBets = bets.map(bet => {
-      const diff = bet.diffs.reduce((s, v) => s + v, 0);
-      const net  = diff > 0 ? bet.amount : diff < 0 ? -bet.amount : 0;
-      return { diff, amount: bet.amount, net, startHole: bet.startHole };
-    });
-
-    const sideNet = processedBets.reduce((s, b) => s + b.net, 0);
-    return { bets: processedBets, net: sideNet };
+    if (scores.length === 0) return null;
+    scores.sort((a, b) => a - b);
+    const counted = scores.slice(0, balls);
+    let raw = counted.reduce((s, x) => s + x, 0);
+    if (birdieBonus) {
+      const birdies = scores.filter(s => s <= par - 1).length;
+      if (birdies >= 3) raw -= (birdies - 2);
+    }
+    return raw - par * balls;
   }
 
-  const frontHoles = holes.filter(h => h.side === "front");
-  const backHoles  = holes.filter(h => h.side === "back");
+  const results = { front: {}, back: {}, total: {} };
+  teams.forEach((t, i) => { results.front[i] = 0; results.back[i] = 0; results.total[i] = 0; });
 
-  const front = calcSide(frontHoles);
-  const back  = calcSide(backHoles);
+  course.holes.forEach(h => {
+    const side = h.side;
+    teams.forEach((t, i) => {
+      const diff = teamHoleScore(t, h.hole);
+      if (diff !== null) {
+        results[side][i] = (results[side][i] || 0) + diff;
+        results.total[i] = (results.total[i] || 0) + diff;
+      }
+    });
+  });
 
-  return { front, back, net: front.net + back.net };
+  return results;
 }
