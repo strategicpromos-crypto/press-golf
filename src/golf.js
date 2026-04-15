@@ -33,7 +33,35 @@ export const COURSES = {
     ]
   },
 
-  "iron-valley": {
+  "rum-pointe": {
+    id: "rum-pointe",
+    name: "Rum Pointe Seaside Golf Links",
+    city: "Berlin, MD",
+    par: 72,
+    note: "Pete & P.B. Dye links design on Sinepuxent Bay. 17 of 18 holes have bay views. Par 72, 7,001 yards.",
+    holes: [
+      // ── FRONT 9 ──────────────────────────────────────────────────────────────
+      { hole:1,  par:4, hdcp:7,  side:"front", yards:422 },
+      { hole:2,  par:3, hdcp:13, side:"front", yards:177 },
+      { hole:3,  par:5, hdcp:5,  side:"front", yards:509 },
+      { hole:4,  par:4, hdcp:17, side:"front", yards:393 },
+      { hole:5,  par:3, hdcp:15, side:"front", yards:175 },
+      { hole:6,  par:4, hdcp:11, side:"front", yards:398 },
+      { hole:7,  par:4, hdcp:1,  side:"front", yards:471 },
+      { hole:8,  par:5, hdcp:3,  side:"front", yards:540 },
+      { hole:9,  par:4, hdcp:9,  side:"front", yards:419 },
+      // ── BACK 9 ───────────────────────────────────────────────────────────────
+      { hole:10, par:5, hdcp:4,  side:"back",  yards:505 },
+      { hole:11, par:4, hdcp:18, side:"back",  yards:369 },
+      { hole:12, par:4, hdcp:14, side:"back",  yards:400 },
+      { hole:13, par:5, hdcp:10, side:"back",  yards:501 },
+      { hole:14, par:3, hdcp:6,  side:"back",  yards:223 },
+      { hole:15, par:4, hdcp:12, side:"back",  yards:407 },
+      { hole:16, par:4, hdcp:2,  side:"back",  yards:463 },
+      { hole:17, par:3, hdcp:16, side:"back",  yards:185 },
+      { hole:18, par:4, hdcp:8,  side:"back",  yards:444 },
+    ]
+  },
     id: "iron-valley",
     name: "Iron Valley Golf Club",
     city: "Lebanon, PA",
@@ -61,7 +89,121 @@ export const COURSES = {
       { hole:17, par:3, hdcp:12, side:"back",  yards:181 },
       { hole:18, par:4, hdcp:2,  side:"back",  yards:427 },
     ]
-  }
+  },
+
+  // ── OCEAN CITY, MD ────────────────────────────────────────────────────────────
+
+  "eagles-landing": {
+    id: "eagles-landing",
+    name: "Eagles Landing Golf Course",
+    city: "Berlin, MD",
+    par: 72,
+    note: "Ranked #1 in MD by GolfAdvisor. Links-style on Sinepuxent Bay. 6,926 yds (Black).",
+    holes: [
+      { hole:1,  par:4, hdcp:15, side:"front", yards:367 },
+      { hole:2,  par:4, hdcp:5,  side:"front", yards:383 },
+      { hole:3,  par:3, hdcp:7,  side:"front", yards:195 },
+      { hole:4,  par:4, hdcp:1,  side:"front", yards:432 },
+      { hole:5,  par:5, hdcp:17, side:"front", yards:534 },
+      { hole:6,  par:3, hdcp:9,  side:"front", yards:232 },
+      { hole:7,  par:5, hdcp:11, side:"front", yards:531 },
+      { hole:8,  par:4, hdcp:13, side:"front", yards:372 },
+      { hole:9,  par:4, hdcp:3,  side:"front", yards:359 },
+      { hole:10, par:5, hdcp:14, side:"back",  yards:551 },
+      { hole:11, par:3, hdcp:12, side:"back",  yards:201 },
+      { hole:12, par:4, hdcp:2,  side:"back",  yards:402 },
+      { hole:13, par:4, hdcp:10, side:"back",  yards:360 },
+      { hole:14, par:5, hdcp:18, side:"back",  yards:502 },
+      { hole:15, par:4, hdcp:8,  side:"back",  yards:425 },
+      { hole:16, par:4, hdcp:4,  side:"back",  yards:456 },
+      { hole:17, par:3, hdcp:16, side:"back",  yards:191 },
+      { hole:18, par:4, hdcp:6,  side:"back",  yards:433 },
+    ]
+  },
+
+  "glenriddle-manowar": {
+    id: "glenriddle-manowar",
+    name: "GlenRiddle — Man O' War",
+    city: "Berlin, MD",
+    par: 72,
+    note: "Joel Weiman links design. Historic racetrack on 3 holes. 7,196 yds (Black).",
+    holes: [
+      { hole:1,  par:4, hdcp:9,  side:"front", yards:416 },
+      { hole:2,  par:3, hdcp:17, side:"front", yards:172 },
+      { hole:3,  par:4, hdcp:7,  side:"front", yards:415 },
+      { hole:4,  par:5, hdcp:3,  side:"front", yards:529 },
+      { hole:5,  par:4, hdcp:5,  side:"front", yards:436 },
+      { hole:6,  par:4, hdcp:11, side:"front", yards:406 },
+      { hole:7,  par:5, hdcp:1,  side:"front", yards:595 },
+      { hole:8,  par:4, hdcp:15, side:"front", yards:376 },
+      { hole:9,  par:3, hdcp:13, side:"front", yards:228 },
+      { hole:10, par:4, hdcp:10, side:"back",  yards:427 },
+      { hole:11, par:4, hdcp:4,  side:"back",  yards:468 },
+      { hole:12, par:4, hdcp:12, side:"back",  yards:409 },
+      { hole:13, par:3, hdcp:14, side:"back",  yards:197 },
+      { hole:14, par:5, hdcp:2,  side:"back",  yards:633 },
+      { hole:15, par:3, hdcp:18, side:"back",  yards:168 },
+      { hole:16, par:5, hdcp:6,  side:"back",  yards:551 },
+      { hole:17, par:4, hdcp:16, side:"back",  yards:321 },
+      { hole:18, par:4, hdcp:8,  side:"back",  yards:449 },
+    ]
+  },
+
+  "rum-pointe": {
+    id: "rum-pointe",
+    name: "Rum Pointe Seaside Golf Links",
+    city: "Berlin, MD",
+    par: 72,
+    note: "Pete & P.B. Dye. Scottish links, bentgrass fairways, 17 holes with bay views. 7,001 yds (Black).",
+    holes: [
+      { hole:1,  par:4, hdcp:7,  side:"front", yards:422 },
+      { hole:2,  par:3, hdcp:13, side:"front", yards:177 },
+      { hole:3,  par:5, hdcp:5,  side:"front", yards:509 },
+      { hole:4,  par:4, hdcp:17, side:"front", yards:393 },
+      { hole:5,  par:3, hdcp:15, side:"front", yards:175 },
+      { hole:6,  par:4, hdcp:11, side:"front", yards:398 },
+      { hole:7,  par:4, hdcp:1,  side:"front", yards:471 },
+      { hole:8,  par:5, hdcp:3,  side:"front", yards:540 },
+      { hole:9,  par:4, hdcp:9,  side:"front", yards:419 },
+      { hole:10, par:5, hdcp:4,  side:"back",  yards:505 },
+      { hole:11, par:4, hdcp:18, side:"back",  yards:369 },
+      { hole:12, par:4, hdcp:14, side:"back",  yards:400 },
+      { hole:13, par:5, hdcp:10, side:"back",  yards:501 },
+      { hole:14, par:3, hdcp:6,  side:"back",  yards:223 },
+      { hole:15, par:4, hdcp:12, side:"back",  yards:407 },
+      { hole:16, par:4, hdcp:2,  side:"back",  yards:463 },
+      { hole:17, par:3, hdcp:16, side:"back",  yards:185 },
+      { hole:18, par:4, hdcp:8,  side:"back",  yards:444 },
+    ]
+  },
+
+  "ocean-city-seaside": {
+    id: "ocean-city-seaside",
+    name: "Ocean City Golf Club — Seaside",
+    city: "Berlin, MD",
+    par: 72,
+    note: "Classic 1959 Lester George layout. Wide fairways, tightly guarded greens. 6,701 yds (Black).",
+    holes: [
+      { hole:1,  par:4, hdcp:13, side:"front", yards:355 },
+      { hole:2,  par:3, hdcp:15, side:"front", yards:212 },
+      { hole:3,  par:4, hdcp:5,  side:"front", yards:495 },
+      { hole:4,  par:4, hdcp:9,  side:"front", yards:402 },
+      { hole:5,  par:4, hdcp:3,  side:"front", yards:496 },
+      { hole:6,  par:5, hdcp:7,  side:"front", yards:433 },
+      { hole:7,  par:3, hdcp:1,  side:"front", yards:475 },
+      { hole:8,  par:4, hdcp:17, side:"front", yards:166 },
+      { hole:9,  par:5, hdcp:11, side:"front", yards:390 },
+      { hole:10, par:4, hdcp:14, side:"back",  yards:345 },
+      { hole:11, par:4, hdcp:12, side:"back",  yards:367 },
+      { hole:12, par:3, hdcp:18, side:"back",  yards:191 },
+      { hole:13, par:5, hdcp:2,  side:"back",  yards:478 },
+      { hole:14, par:4, hdcp:8,  side:"back",  yards:387 },
+      { hole:15, par:3, hdcp:16, side:"back",  yards:156 },
+      { hole:16, par:5, hdcp:4,  side:"back",  yards:536 },
+      { hole:17, par:4, hdcp:6,  side:"back",  yards:431 },
+      { hole:18, par:4, hdcp:10, side:"back",  yards:386 },
+    ]
+  },
 };
 
 // ── STROKE HOLE CALCULATOR ────────────────────────────────────────────────────
