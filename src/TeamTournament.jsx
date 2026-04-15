@@ -1047,7 +1047,7 @@ export default function TeamTournament({onBack, user, onDelete}){
           </div>
         </div>
 
-        {/* ── CTP POPUP — simple name + distance ───────────────────────── */}
+        {/* CTP POPUP - simple name + distance */}
         {ctpPopup&&(()=>{
           const leader=ctpLeaders[ctpPopup];
           async function saveCtp(){
