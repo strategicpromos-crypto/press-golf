@@ -1011,53 +1011,84 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
             </div>
           ))}
 
-          {/* Scorecard */}
-          <div style={{background:C.card,border:"1px solid "+C.border,borderRadius:14,padding:"14px",marginBottom:16,overflowX:"auto"}}>
-            <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>Scorecard</div>
-            <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
-              <thead>
-                <tr>
-                  <th style={{textAlign:"left",padding:"4px 6px",color:C.muted}}>Hole</th>
-                  <th style={{padding:"4px 4px",color:C.muted}}>Par</th>
-                  <th style={{padding:"4px 4px",color:C.green}}>You</th>
-                  {opponents.map(o=><th key={o.playerId} style={{padding:"4px 4px",color:C.gold}}>{o.name.split(" ")[0]}</th>)}
-                </tr>
-              </thead>
-              <tbody>
-                {course.holes.map(h=>{
-                  const my = getScore("me", h.hole);
-                  return (
-                    <tr key={h.hole} style={{borderTop:"1px solid "+C.dim}}>
-                      <td style={{padding:"4px 6px",color:C.muted,fontSize:11}}>{h.hole}{h.side==="back"&&h.hole===10?" <-":""}</td>
-                      <td style={{padding:"4px 4px",textAlign:"center",color:C.muted}}>{h.par}</td>
-                      <td style={{padding:"4px 4px",textAlign:"center",fontWeight:700,color:my!==null?scoreColor(my,h.par):C.dim}}>
-                        {my !== null ? my : "-"}
-                      </td>
-                      {opponents.map(opp=>{
-                        const s = getScore(opp.playerId, h.hole);
-                        const sh = getStrokeHolesForOpp(opp).includes(h.hole);
-                        return <td key={opp.playerId} style={{padding:"4px 4px",textAlign:"center",color:C.text}}>
-                          {s !== null ? s : "-"}{sh?"⭐":""}
-                        </td>;
-                      })}
-                    </tr>
-                  );
-                })}
-                {/* Totals */}
-                <tr style={{borderTop:"2px solid "+C.green,background:"rgba(123,180,80,0.05)"}}>
-                  <td style={{padding:"6px",color:C.green,fontWeight:800,fontSize:12}}>TOT</td>
-                  <td style={{padding:"6px",textAlign:"center",color:C.muted,fontWeight:700}}>{course.par}</td>
-                  <td style={{padding:"6px",textAlign:"center",color:C.green,fontWeight:800}}>
-                    {Object.values(scores["me"]||{}).reduce((s,v)=>s+safeInt(v,0),0)||"-"}
-                  </td>
-                  {opponents.map(opp=>(
-                    <td key={opp.playerId} style={{padding:"6px",textAlign:"center",color:C.gold,fontWeight:800}}>
-                      {Object.values(scores[opp.playerId]||{}).reduce((s,v)=>s+safeInt(v,0),0)||"-"}
+          {/* Scorecard — tournament style */}
+          <div style={{background:C.card,border:"1px solid "+C.border,borderRadius:14,padding:"14px",marginBottom:16}}>
+            <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:12}}>Scorecard</div>
+
+            {/* Hole bubble row — matches tournament captain view */}
+            <div style={{display:"flex",overflowX:"auto",gap:6,marginBottom:14,paddingBottom:4}}>
+              {course.holes.map(h=>{
+                const myScored = getScore("me", h.hole) !== null;
+                return (
+                  <div key={h.hole} style={{
+                    flexShrink:0,width:32,height:32,borderRadius:"50%",
+                    display:"flex",alignItems:"center",justifyContent:"center",
+                    fontSize:11,fontWeight:700,
+                    background:myScored?"rgba(123,180,80,0.2)":C.dim,
+                    color:myScored?C.green:C.muted,
+                    border:"1px solid "+(myScored?C.green:C.border),
+                  }}>{h.hole}</div>
+                );
+              })}
+            </div>
+
+            {/* Score grid */}
+            <div style={{overflowX:"auto"}}>
+              <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,minWidth:280}}>
+                <thead>
+                  <tr style={{background:"rgba(0,0,0,0.25)"}}>
+                    <th style={{textAlign:"left",padding:"5px 8px",color:C.muted,fontWeight:600,fontSize:11}}>Hole</th>
+                    <th style={{padding:"5px 4px",textAlign:"center",color:C.muted,fontWeight:600,fontSize:11}}>Par</th>
+                    <th style={{padding:"5px 4px",textAlign:"center",color:C.green,fontWeight:700,fontSize:11}}>You</th>
+                    {opponents.map(o=>(
+                      <th key={o.playerId} style={{padding:"5px 4px",textAlign:"center",color:C.gold,fontWeight:700,fontSize:11}}>
+                        {o.name.split(" ")[0]}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {course.holes.map(h=>{
+                    const my = getScore("me", h.hole);
+                    const isBack = h.side==="back" && h.hole===10;
+                    return (
+                      <tr key={h.hole} style={{borderTop:"1px solid "+(isBack?C.green:C.dim),background:isBack?"rgba(123,180,80,0.04)":"transparent"}}>
+                        <td style={{padding:"5px 8px",color:C.muted,fontSize:11,fontWeight:isBack?700:400}}>
+                          {h.hole}{isBack?" | B9":""}
+                        </td>
+                        <td style={{padding:"5px 4px",textAlign:"center",color:C.muted}}>{h.par}</td>
+                        <td style={{padding:"5px 4px",textAlign:"center",fontWeight:700,
+                          color:my!==null?scoreColor(my,h.par):C.dim}}>
+                          {my!==null?my:"—"}
+                        </td>
+                        {opponents.map(opp=>{
+                          const s = getScore(opp.playerId, h.hole);
+                          const sh = getStrokeHolesForOpp(opp).includes(h.hole);
+                          return (
+                            <td key={opp.playerId} style={{padding:"5px 4px",textAlign:"center",
+                              color:s!==null?scoreColor(s,h.par):C.dim}}>
+                              {s!==null?s:"—"}{sh?"·":""}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    );
+                  })}
+                  <tr style={{borderTop:"2px solid "+C.green,background:"rgba(123,180,80,0.07)"}}>
+                    <td style={{padding:"6px 8px",color:C.green,fontWeight:800,fontSize:11,letterSpacing:1}}>TOT</td>
+                    <td style={{padding:"6px 4px",textAlign:"center",color:C.muted,fontWeight:700}}>{course.par}</td>
+                    <td style={{padding:"6px 4px",textAlign:"center",color:C.green,fontWeight:800}}>
+                      {Object.values(scores["me"]||{}).reduce((s,v)=>s+safeInt(v,0),0)||"—"}
                     </td>
-                  ))}
-                </tr>
-              </tbody>
-            </table>
+                    {opponents.map(opp=>(
+                      <td key={opp.playerId} style={{padding:"6px 4px",textAlign:"center",color:C.gold,fontWeight:800}}>
+                        {Object.values(scores[opp.playerId]||{}).reduce((s,v)=>s+safeInt(v,0),0)||"—"}
+                      </td>
+                    ))}
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
 
           <BigBtn onClick={postToLedger} disabled={posting} color={C.gold} textColor="#0a1a0f">
