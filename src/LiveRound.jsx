@@ -327,22 +327,25 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
   // -- Check for existing active round on mount ------------------------------
   useEffect(() => {
     async function checkExisting() {
+      // maybeSingle() returns null (no throw) when no active round exists
       const { data } = await sb.from("live_rounds")
         .select("*")
         .eq("owner_id", user.id)
         .eq("status", "active")
         .order("updated_at", { ascending: false })
         .limit(1)
-        .single();
+        .maybeSingle();
 
       if (data) {
-        setResuming(true);
-        // Show resume prompt
+        // Guard: if saved course_id no longer exists in COURSES, fall back gracefully
+        const validCourseId = COURSES[data.course_id] ? data.course_id : "south-toledo";
+        // Set all state BEFORE setResuming so resume screen renders with correct data
         setLiveRoundId(data.id);
-        setCourseId(data.course_id);
+        setCourseId(validCourseId);
         setOpponents(data.opponents || []);
         setScores(data.scores || {});
         setCurrentHole(data.current_hole || 1);
+        setResuming(true);
       }
     }
     checkExisting();
@@ -872,8 +875,44 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
           </BigBtn>
 
           <div style={{textAlign:"center",fontSize:11,color:C.dim,marginTop:8}}>
-            Auto-saving - Round is safe if you close the app
+            Auto-saving · Round is safe if you close the app
           </div>
+
+          {/* Share links — one per opponent with a linked account */}
+          {liveRoundId && opponents.some(o => o.linkedUserId) && (
+            <div style={{marginTop:14,background:C.card,border:"1px solid "+C.border,borderRadius:14,padding:"14px"}}>
+              <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>
+                Share Score Entry Links
+              </div>
+              {opponents.filter(o => o.linkedUserId).map(opp => {
+                const link = "https://press-golf.vercel.app?round=" + liveRoundId + "&player=" + opp.playerId;
+                return (
+                  <div key={opp.playerId} style={{marginBottom:10,background:C.surface,borderRadius:10,padding:"10px 12px"}}>
+                    <div style={{fontWeight:700,fontSize:13,marginBottom:6}}>{opp.name}</div>
+                    <div style={{display:"flex",gap:8}}>
+                      <button
+                        onClick={() => {
+                          const msg = encodeURIComponent("Hey " + opp.name + "! Enter your scores here: " + link);
+                          window.open("sms:?&body=" + msg);
+                        }}
+                        style={{flex:1,padding:"9px 6px",background:C.green,border:"none",borderRadius:8,color:"#0a1a0f",fontSize:12,fontWeight:700,cursor:"pointer"}}
+                      >
+                        📱 Text Link
+                      </button>
+                      <button
+                        onClick={() => {
+                          try { navigator.clipboard.writeText(link); } catch(e) {}
+                        }}
+                        style={{flex:1,padding:"9px 6px",background:C.dim,border:"1px solid "+C.border,borderRadius:8,color:C.text,fontSize:12,fontWeight:600,cursor:"pointer"}}
+                      >
+                        📋 Copy
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
     );
