@@ -890,7 +890,7 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
               </div>
               <div style={{display:"flex",alignItems:"center",gap:10}}>
                 {/* Running totals summary */}
-                <div style={{display:"flex",gap:12"}}>
+                <div style={{display:"flex",gap:12}}>
                   <span style={{fontSize:11,color:C.green,fontWeight:700}}>
                     You: {Object.values(scores["me"]||{}).reduce((s,v)=>s+safeInt(v,0),0)||"—"}
                   </span>
