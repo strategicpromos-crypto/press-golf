@@ -327,7 +327,7 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
   // -- Check for existing active round on mount ------------------------------
   useEffect(() => {
     async function checkExisting() {
-      // maybeSingle() returns null (no throw) when no active round exists
+      // maybeSingle() returns null cleanly — .single() throws when no row found
       const { data } = await sb.from("live_rounds")
         .select("*")
         .eq("owner_id", user.id)
@@ -337,9 +337,7 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
         .maybeSingle();
 
       if (data) {
-        // Guard: if saved course_id no longer exists in COURSES, fall back gracefully
         const validCourseId = COURSES[data.course_id] ? data.course_id : "south-toledo";
-        // Set all state BEFORE setResuming so resume screen renders with correct data
         setLiveRoundId(data.id);
         setCourseId(validCourseId);
         setOpponents(data.opponents || []);
@@ -746,6 +744,21 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
           </div>
         </div>
 
+        {/* Hole bubble selector — tap any hole to jump there */}
+        <div style={{display:"flex",overflowX:"auto",gap:6,padding:"10px 14px 6px",borderBottom:"1px solid "+C.border}}>
+          {course.holes.map(h=>{
+            const myScored = getScore("me", h.hole) !== null;
+            return (
+              <button key={h.hole} onClick={()=>setCurrentHole(h.hole)} style={{
+                flexShrink:0,width:36,height:36,borderRadius:"50%",fontSize:12,fontWeight:700,cursor:"pointer",
+                background:h.hole===currentHole?C.gold:myScored?"rgba(123,180,80,0.15)":C.dim,
+                color:h.hole===currentHole?"#0a1a0f":myScored?C.green:C.muted,
+                border:"1px solid "+(h.hole===currentHole?C.gold:myScored?C.green:C.border),
+              }}>{h.hole}</button>
+            );
+          })}
+        </div>
+
         <div style={{padding:"14px 18px"}}>
 
           {/* -- MY SCORE -- */}
@@ -875,44 +888,8 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
           </BigBtn>
 
           <div style={{textAlign:"center",fontSize:11,color:C.dim,marginTop:8}}>
-            Auto-saving · Round is safe if you close the app
+            Auto-saving - Round is safe if you close the app
           </div>
-
-          {/* Share links — one per opponent with a linked account */}
-          {liveRoundId && opponents.some(o => o.linkedUserId) && (
-            <div style={{marginTop:14,background:C.card,border:"1px solid "+C.border,borderRadius:14,padding:"14px"}}>
-              <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>
-                Share Score Entry Links
-              </div>
-              {opponents.filter(o => o.linkedUserId).map(opp => {
-                const link = "https://press-golf.vercel.app?round=" + liveRoundId + "&player=" + opp.playerId;
-                return (
-                  <div key={opp.playerId} style={{marginBottom:10,background:C.surface,borderRadius:10,padding:"10px 12px"}}>
-                    <div style={{fontWeight:700,fontSize:13,marginBottom:6}}>{opp.name}</div>
-                    <div style={{display:"flex",gap:8}}>
-                      <button
-                        onClick={() => {
-                          const msg = encodeURIComponent("Hey " + opp.name + "! Enter your scores here: " + link);
-                          window.open("sms:?&body=" + msg);
-                        }}
-                        style={{flex:1,padding:"9px 6px",background:C.green,border:"none",borderRadius:8,color:"#0a1a0f",fontSize:12,fontWeight:700,cursor:"pointer"}}
-                      >
-                        📱 Text Link
-                      </button>
-                      <button
-                        onClick={() => {
-                          try { navigator.clipboard.writeText(link); } catch(e) {}
-                        }}
-                        style={{flex:1,padding:"9px 6px",background:C.dim,border:"1px solid "+C.border,borderRadius:8,color:C.text,fontSize:12,fontWeight:600,cursor:"pointer"}}
-                      >
-                        📋 Copy
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
         </div>
       </div>
     );
@@ -1015,18 +992,18 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
           <div style={{background:C.card,border:"1px solid "+C.border,borderRadius:14,padding:"14px",marginBottom:16}}>
             <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:12}}>Scorecard</div>
 
-            {/* Hole bubble row — matches tournament captain view */}
+            {/* Hole bubbles — green when scored, gold = current */}
             <div style={{display:"flex",overflowX:"auto",gap:6,marginBottom:14,paddingBottom:4}}>
               {course.holes.map(h=>{
-                const myScored = getScore("me", h.hole) !== null;
+                const scored = getScore("me", h.hole) !== null;
                 return (
                   <div key={h.hole} style={{
                     flexShrink:0,width:32,height:32,borderRadius:"50%",
                     display:"flex",alignItems:"center",justifyContent:"center",
                     fontSize:11,fontWeight:700,
-                    background:myScored?"rgba(123,180,80,0.2)":C.dim,
-                    color:myScored?C.green:C.muted,
-                    border:"1px solid "+(myScored?C.green:C.border),
+                    background:scored?"rgba(123,180,80,0.2)":C.dim,
+                    color:scored?C.green:C.muted,
+                    border:"1px solid "+(scored?C.green:C.border),
                   }}>{h.hole}</div>
                 );
               })}
@@ -1052,7 +1029,10 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
                     const my = getScore("me", h.hole);
                     const isBack = h.side==="back" && h.hole===10;
                     return (
-                      <tr key={h.hole} style={{borderTop:"1px solid "+(isBack?C.green:C.dim),background:isBack?"rgba(123,180,80,0.04)":"transparent"}}>
+                      <tr key={h.hole} style={{
+                        borderTop:"1px solid "+(isBack?C.green:C.dim),
+                        background:isBack?"rgba(123,180,80,0.04)":"transparent",
+                      }}>
                         <td style={{padding:"5px 8px",color:C.muted,fontSize:11,fontWeight:isBack?700:400}}>
                           {h.hole}{isBack?" | B9":""}
                         </td>
