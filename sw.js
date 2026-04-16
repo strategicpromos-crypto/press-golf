@@ -1,5 +1,5 @@
 // Press Golf Service Worker
-const CACHE = "press-v1";
+const CACHE = "press-v2";
 const ASSETS = ["/", "/index.html", "/manifest.json"];
 
 self.addEventListener("install", e => {
