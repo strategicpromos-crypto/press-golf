@@ -310,6 +310,12 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
   const [posting,     setPosting]     = useState(false);
   const [liveRoundId, setLiveRoundId] = useState(null);
   const [resuming,    setResuming]    = useState(false);
+  const [liveTab,     setLiveTab]     = useState("score");
+  const [showRoundSettings, setShowRoundSettings] = useState(false);
+  const [showShareRound,    setShowShareRound]    = useState(false);
+  const [back9Adjustments,  setBack9Adjustments]  = useState({});
+  const [holePars,          setHolePars]          = useState({});
+  const realtimeSub = useRef(null);
 
   // Add opponent form
   const [addOppId,       setAddOppId]       = useState("");
@@ -322,12 +328,12 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
 
   const course = COURSES[courseId];
   const holeData = course?.holes[currentHole - 1];
+  const effPar   = holeData ? (holePars[currentHole] ?? holeData.par) : 4;
   const saveTimer = useRef(null);
 
   // -- Check for existing active round on mount ------------------------------
   useEffect(() => {
     async function checkExisting() {
-      // maybeSingle() returns null cleanly — .single() throws when no row found
       const { data } = await sb.from("live_rounds")
         .select("*")
         .eq("owner_id", user.id)
@@ -362,6 +368,33 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
     }, 800); // save 0.8s after last change
     return () => clearTimeout(saveTimer.current);
   }, [scores, currentHole, liveRoundId, step]);
+
+  // -- Real-time: sync opponent scores into our state ----------------------
+  useEffect(() => {
+    if (!liveRoundId || step !== "playing") return;
+    realtimeSub.current = sb
+      .channel("live_round_" + liveRoundId)
+      .on("postgres_changes", {
+        event: "UPDATE", schema: "public",
+        table: "live_rounds", filter: "id=eq." + liveRoundId,
+      }, payload => {
+        if (payload.new?.scores) {
+          setScores(prev => {
+            const incoming = payload.new.scores;
+            const merged = { ...incoming };
+            merged["me"] = prev["me"] || {};
+            return merged;
+          });
+        }
+      })
+      .subscribe();
+    return () => {
+      if (realtimeSub.current) {
+        sb.removeChannel(realtimeSub.current);
+        realtimeSub.current = null;
+      }
+    };
+  }, [liveRoundId, step]);
 
   // -- Start round - saves to DB immediately ---------------------------------
   async function startRound() {
@@ -729,11 +762,14 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
             <div style={{textAlign:"center"}}>
               <div style={{fontSize:11,color:C.muted,letterSpacing:2,textTransform:"uppercase"}}>Hole</div>
               <div style={{fontSize:48,fontWeight:800,color:C.text,lineHeight:1}}>{currentHole}</div>
-              <div style={{fontSize:12,color:C.green,fontWeight:600}}>Par {holeData.par} - Hdcp {holeData.hdcp}</div>
+              <div style={{fontSize:12,color:C.green,fontWeight:600}}>Par {effPar}{effPar!==holeData.par?" ⚡":""} · Hdcp {holeData.hdcp}</div>
             </div>
             <div style={{display:"flex",flexDirection:"column",gap:6,alignItems:"flex-end"}}>
               <button onClick={onBack} style={{background:"rgba(123,180,80,0.15)",border:"1px solid "+C.green,color:C.green,fontSize:11,cursor:"pointer",padding:"5px 10px",borderRadius:12,fontWeight:700}}>🏠 Home</button>
-              <button onClick={()=>setStep("summary")} style={{background:"transparent",border:"1px solid "+C.border,color:C.muted,fontSize:11,cursor:"pointer",padding:"5px 10px",borderRadius:12}}>Summary</button>
+              <button onClick={()=>setShowRoundSettings(true)} style={{background:"rgba(232,184,75,0.15)",border:"1px solid "+C.gold,color:C.gold,fontSize:11,cursor:"pointer",padding:"5px 10px",borderRadius:12,fontWeight:700}}>⚙️ Edit</button>
+              {opponents.some(o=>!o.sameGroup)&&liveRoundId&&(
+                <button onClick={()=>setShowShareRound(true)} style={{background:"rgba(123,180,80,0.15)",border:"1px solid "+C.green,color:C.green,fontSize:11,cursor:"pointer",padding:"5px 10px",borderRadius:12,fontWeight:700}}>🔗 Share</button>
+              )}
             </div>
           </div>
           {/* Progress bar */}
@@ -744,153 +780,313 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
           </div>
         </div>
 
-        {/* Hole bubble selector — tap any hole to jump there */}
-        <div style={{display:"flex",overflowX:"auto",gap:6,padding:"10px 14px 6px",borderBottom:"1px solid "+C.border}}>
-          {course.holes.map(h=>{
-            const myScored = getScore("me", h.hole) !== null;
-            return (
-              <button key={h.hole} onClick={()=>setCurrentHole(h.hole)} style={{
-                flexShrink:0,width:36,height:36,borderRadius:"50%",fontSize:12,fontWeight:700,cursor:"pointer",
-                background:h.hole===currentHole?C.gold:myScored?"rgba(123,180,80,0.15)":C.dim,
-                color:h.hole===currentHole?"#0a1a0f":myScored?C.green:C.muted,
-                border:"1px solid "+(h.hole===currentHole?C.gold:myScored?C.green:C.border),
-              }}>{h.hole}</button>
-            );
-          })}
+        {/* Match standing bar */}
+        {opponents.length > 0 && (()=>{
+          const opp = opponents[0];
+          const absStrokes = Math.abs(opp.strokes||0);
+          const strokeHoles = getStrokeHoles(courseId, absStrokes);
+          const myS = scores["me"]||{};
+          const oppS = scores[opp.playerId]||{};
+          let front=0, back=0;
+          for(const h of course.holes){
+            const my=safeInt(myS[h.hole],-1), op=safeInt(oppS[h.hole],-1);
+            if(my<0||op<0) continue;
+            const myNet = opp.strokes<0&&strokeHoles.includes(h.hole)?my-1:my;
+            const opNet = opp.strokes>0&&strokeHoles.includes(h.hole)?op-1:op;
+            const d = myNet-opNet;
+            if(h.side==="front") front+=d; else back+=d;
+          }
+          const tot=front+back;
+          const fmt=v=>v===0?"A/S":v<0?Math.abs(v)+" UP":Math.abs(v)+" DN";
+          const clr=v=>v<0?C.green:v>0?C.red:C.muted;
+          return(
+            <div style={{background:C.card,borderBottom:"1px solid "+C.border,padding:"10px 16px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <div>
+                <div style={{fontWeight:700,fontSize:14}}>Me <span style={{color:C.muted,fontWeight:400,fontSize:12}}>vs</span> {opponents.length===1?opp.name:opponents.length+" players"}</div>
+                <div style={{fontSize:11,color:C.muted}}>{course.name} · thru {Math.max(0,currentHole-1)} holes</div>
+              </div>
+              <div style={{display:"flex",gap:16}}>
+                {[["F9",front],["B9",back],["TOT",tot]].map(([lbl,val])=>(
+                  <div key={lbl} style={{textAlign:"center"}}>
+                    <div style={{fontSize:9,color:C.muted,letterSpacing:1}}>{lbl}</div>
+                    <div style={{fontSize:15,fontWeight:800,color:clr(val)}}>{fmt(val)}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* Tabs */}
+        <div style={{display:"flex",borderBottom:"1px solid "+C.border,background:"rgba(0,0,0,0.2)"}}>
+          {[["score","⛳ Score"],["match","📊 Match"]].map(([id,lbl])=>(
+            <button key={id} onClick={()=>setLiveTab(id)} style={{flex:1,padding:"12px",fontSize:13,fontWeight:liveTab===id?700:500,background:"transparent",color:liveTab===id?C.green:C.muted,border:"none",borderBottom:liveTab===id?"2px solid "+C.green:"2px solid transparent",cursor:"pointer"}}>{lbl}</button>
+          ))}
         </div>
 
-        <div style={{padding:"14px 18px"}}>
+        <div style={{padding:"14px 16px"}}>
 
-          {/* -- MY SCORE -- */}
-          <div style={{background:C.card,border:"2px solid "+C.green,borderRadius:14,padding:"16px",marginBottom:12}}>
-            <div style={{fontSize:11,color:C.green,letterSpacing:2,textTransform:"uppercase",marginBottom:12,fontWeight:600}}>⛳ Your Score</div>
-            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
-              <ScoreButton label="-" size={60} onClick={()=>{
-                const cur = myScore !== null ? myScore : holeData.par;
-                setScore("me", currentHole, cur - 1);
-              }}/>
-              <div style={{flex:1,textAlign:"center"}}>
-                <div style={{fontSize:72,fontWeight:800,color:C.text,lineHeight:1}}>
-                  {myScore !== null ? myScore : "-"}
+          {/* ── SCORE TAB ── */}
+          {liveTab==="score"&&(<>
+
+            {/* Hole bubble selector */}
+            <div style={{display:"flex",overflowX:"auto",gap:6,marginBottom:14,paddingBottom:4}}>
+              {course.holes.map(h=>{
+                const scored = getScore("me",h.hole)!==null;
+                return(
+                  <button key={h.hole} onClick={()=>setCurrentHole(h.hole)} style={{
+                    flexShrink:0,width:36,height:36,borderRadius:"50%",fontSize:12,fontWeight:700,cursor:"pointer",
+                    background:h.hole===currentHole?C.gold:scored?"rgba(123,180,80,0.15)":C.dim,
+                    color:h.hole===currentHole?"#0a1a0f":scored?C.green:C.muted,
+                    border:"1px solid "+(h.hole===currentHole?C.gold:scored?C.green:C.border),
+                  }}>{h.hole}</button>
+                );
+              })}
+            </div>
+
+            {/* My score */}
+            <div style={{background:C.card,border:"2px solid "+C.green,borderRadius:14,padding:"16px",marginBottom:12}}>
+              <div style={{fontSize:11,color:C.green,letterSpacing:2,textTransform:"uppercase",marginBottom:12,fontWeight:600}}>⛳ Your Score</div>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
+                <ScoreButton label="-" size={60} onClick={()=>setScore("me",currentHole,(myScore!==null?myScore:effPar)-1)}/>
+                <div style={{flex:1,textAlign:"center"}}>
+                  <div style={{fontSize:72,fontWeight:800,color:C.text,lineHeight:1}}>{myScore!==null?myScore:"-"}</div>
+                  {myScore!==null&&<div style={{fontSize:14,color:scoreColor(myScore,effPar),marginTop:4,fontWeight:700}}>{scoreName(myScore,effPar)}</div>}
+                  {myScore===null&&<div style={{fontSize:12,color:C.muted,marginTop:4}}>tap + to start</div>}
                 </div>
-                {myScore !== null && (
-                  <div style={{fontSize:14,color:scoreColor(myScore,holeData.par),marginTop:4,fontWeight:700}}>
-                    {scoreName(myScore, holeData.par)}
-                  </div>
-                )}
-                {myScore === null && (
-                  <div style={{fontSize:12,color:C.muted,marginTop:4}}>tap + to start</div>
-                )}
+                <ScoreButton label="+" size={60} onClick={()=>setScore("me",currentHole,(myScore!==null?myScore:effPar-1)+1)}/>
               </div>
-              <ScoreButton label="+" size={60} onClick={()=>{
-                const cur = myScore !== null ? myScore : holeData.par - 1;
-                setScore("me", currentHole, cur + 1);
-              }}/>
+            </div>
+
+            {/* Same-group opponents — stacked, editable */}
+            {opponents.filter(o=>o.sameGroup).map(opp=>{
+              const oppScore=getScore(opp.playerId,currentHole);
+              const getsStroke=oppGetsStrokeOnHole(opp,currentHole);
+              const iGetStroke=iGetStrokeOnHole(opp,currentHole);
+              const tally=getTally(scores,course,opp,courseId);
+              return(
+                <div key={opp.playerId} style={{background:C.card,border:"1px solid "+(getsStroke||iGetStroke?"rgba(232,184,75,0.5)":C.border),borderRadius:14,padding:"14px",marginBottom:10}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+                    <div>
+                      <div style={{fontWeight:700,fontSize:15}}>{opp.name} <span style={{fontSize:10,color:C.green,background:"rgba(123,180,80,0.12)",padding:"2px 7px",borderRadius:8}}>Same Group</span></div>
+                      {getsStroke&&<div style={{fontSize:11,color:C.gold,marginTop:2}}>⭐ {opp.name} gets a stroke</div>}
+                      {iGetStroke&&<div style={{fontSize:11,color:C.green,marginTop:2}}>⭐ You get a stroke</div>}
+                    </div>
+                    <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4}}>
+                      <div style={{fontSize:13,fontWeight:700,color:tally.label==="Even"?C.muted:tally.label?.includes("Up")?C.green:C.red}}>{tally.label||"-"}</div>
+                      {(opp.betType==="nassau"||opp.betType==="nassau-press")&&(
+                        (opp.manualPresses||[]).some(p=>p.hole===currentHole)
+                          ?<button disabled style={{background:"#555",border:"none",color:"#aaa",padding:"5px 9px",borderRadius:8,fontSize:11,fontWeight:700,cursor:"not-allowed"}}>Pressed</button>
+                          :tally.total<0&&<button onClick={()=>callManualPress(opp.playerId)} style={{background:C.red,border:"none",color:"#fff",padding:"5px 9px",borderRadius:8,fontSize:11,fontWeight:700,cursor:"pointer"}}>Press!</button>
+                      )}
+                    </div>
+                  </div>
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
+                    <ScoreButton label="-" size={52} onClick={()=>setScore(opp.playerId,currentHole,(oppScore!==null?oppScore:effPar)-1)}/>
+                    <div style={{flex:1,textAlign:"center"}}>
+                      <div style={{fontSize:52,fontWeight:800,color:oppScore!==null?C.text:C.dim,lineHeight:1}}>{oppScore!==null?oppScore:"-"}</div>
+                      {oppScore!==null&&getsStroke&&<div style={{fontSize:11,color:C.gold,marginTop:2}}>Net: {oppScore-1}</div>}
+                      {oppScore!==null&&iGetStroke&&<div style={{fontSize:11,color:C.green,marginTop:2}}>Your net: {myScore!==null?myScore-1:"-"}</div>}
+                      {oppScore===null&&<div style={{fontSize:11,color:C.dim,marginTop:2}}>tap + to enter</div>}
+                    </div>
+                    <ScoreButton label="+" size={52} onClick={()=>setScore(opp.playerId,currentHole,(oppScore!==null?oppScore:effPar-1)+1)}/>
+                  </div>
+                </div>
+              );
+            })}
+
+            {/* Different-group opponents — read-only live score */}
+            {opponents.filter(o=>!o.sameGroup).map(opp=>{
+              const oppScore=getScore(opp.playerId,currentHole);
+              return(
+                <div key={opp.playerId} style={{background:C.card,border:"1px solid "+C.border,borderRadius:12,padding:"12px 16px",marginBottom:10,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                  <div>
+                    <div style={{fontSize:13,fontWeight:700}}>{opp.name}</div>
+                    <div style={{fontSize:11,color:C.muted}}>Different group · live score</div>
+                  </div>
+                  <div style={{fontSize:36,fontWeight:800,color:oppScore!==null?scoreColor(oppScore,effPar):C.dim}}>{oppScore!==null?oppScore:"—"}</div>
+                </div>
+              );
+            })}
+
+            <button onClick={()=>isLastHole?setStep("summary"):setCurrentHole(h=>h+1)} disabled={!canAdvance}
+              style={{width:"100%",padding:"16px",background:!canAdvance?"#333":isLastHole?C.gold:C.green,color:!canAdvance?C.muted:"#0a1a0f",border:"none",borderRadius:12,fontSize:15,fontWeight:700,cursor:!canAdvance?"not-allowed":"pointer",marginTop:8}}>
+              {!canAdvance?"Enter your score to continue":isLastHole?"Finish Round ⛳":"Next — Hole "+(currentHole+1)}
+            </button>
+            <div style={{textAlign:"center",fontSize:11,color:C.dim,marginTop:8}}>Auto-saving · Round is safe if you close the app</div>
+          </>)}
+
+          {/* ── MATCH TAB ── */}
+          {liveTab==="match"&&(
+            <div>
+              {opponents.map(opp=>{
+                const tally=getTally(scores,course,opp,courseId);
+                const absStrokes=Math.abs(opp.strokes||0);
+                const strokeHoles=getStrokeHoles(courseId,absStrokes);
+                return(
+                  <div key={opp.playerId} style={{marginBottom:20}}>
+                    <div style={{background:C.card,border:"1px solid "+C.border,borderRadius:12,padding:"12px 16px",marginBottom:10}}>
+                      <div style={{fontSize:11,color:C.green,letterSpacing:1.5,textTransform:"uppercase",marginBottom:6,fontWeight:600}}>Bet — {opp.name}</div>
+                      <div style={{fontSize:14,fontWeight:700}}>
+                        {opp.betType==="nassau"?"Nassau":opp.betType==="nassau-press"?"Nassau + Auto Press":opp.betType==="match"?"Match Play":"Skins"} · ${opp.betAmount}
+                      </div>
+                      <div style={{fontSize:12,color:C.muted,marginTop:4}}>
+                        {opp.strokes===0?"Even":opp.strokes>0?"You give "+(opp.strokes/2)+" strokes/side":"You get "+(Math.abs(opp.strokes)/2)+" strokes/side"}
+                      </div>
+                      <div style={{marginTop:8,fontSize:13,fontWeight:800,color:tally.total===0?C.muted:tally.total>0?C.green:C.red}}>
+                        Running: {tally.total===0?"Even":tally.total>0?"+$"+tally.total.toFixed(2):"-$"+Math.abs(tally.total).toFixed(2)}
+                      </div>
+                    </div>
+                    <div style={{background:C.card,border:"1px solid "+C.border,borderRadius:12,padding:"14px",overflowX:"auto"}}>
+                      <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>Scorecard</div>
+                      <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,minWidth:360}}>
+                        <thead>
+                          <tr style={{borderBottom:"1px solid "+C.border}}>
+                            <th style={{textAlign:"left",padding:"4px 6px",color:C.muted,fontWeight:500}}>Hole</th>
+                            {course.holes.map(h=><th key={h.hole} style={{padding:"3px",textAlign:"center",color:h.hole===currentHole?C.gold:C.muted,fontWeight:h.hole===currentHole?700:400}}>{h.hole}</th>)}
+                            <th style={{padding:"3px 6px",textAlign:"center",color:C.green,fontWeight:700}}>TOT</th>
+                          </tr>
+                          <tr>
+                            <td style={{padding:"3px 6px",color:C.dim,fontSize:10}}>Par</td>
+                            {course.holes.map(h=><td key={h.hole} style={{padding:"3px",textAlign:"center",color:C.dim,fontSize:11}}>{h.par}</td>)}
+                            <td style={{padding:"3px 6px",textAlign:"center",color:C.dim,fontSize:11}}>{course.par}</td>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr style={{borderTop:"1px solid "+C.dim}}>
+                            <td style={{padding:"4px 6px",fontWeight:700,color:C.green,fontSize:12}}>You</td>
+                            {course.holes.map(h=>{const s=getScore("me",h.hole);const st=strokeHoles.includes(h.hole)&&opp.strokes<0;return<td key={h.hole} style={{padding:"4px 3px",textAlign:"center",fontWeight:700,color:s!==null?scoreColor(s,h.par):C.dim,position:"relative"}}>{s!==null?s:"—"}{st&&s!==null&&<span style={{fontSize:7,color:C.gold,position:"absolute",top:2,right:2}}>●</span>}</td>;})}
+                            <td style={{padding:"4px 6px",textAlign:"center",fontWeight:800,color:C.green}}>{Object.values(scores["me"]||{}).reduce((s,v)=>s+safeInt(v,0),0)||"—"}</td>
+                          </tr>
+                          <tr style={{borderTop:"1px solid "+C.dim}}>
+                            <td style={{padding:"4px 6px",fontWeight:700,color:C.gold,fontSize:12}}>{opp.name.split(" ")[0]}</td>
+                            {course.holes.map(h=>{const s=getScore(opp.playerId,h.hole);const st=strokeHoles.includes(h.hole)&&opp.strokes>0;return<td key={h.hole} style={{padding:"4px 3px",textAlign:"center",fontWeight:700,color:s!==null?scoreColor(s,h.par):C.dim,position:"relative"}}>{s!==null?s:"—"}{st&&s!==null&&<span style={{fontSize:7,color:C.gold,position:"absolute",top:2,right:2}}>●</span>}</td>;})}
+                            <td style={{padding:"4px 6px",textAlign:"center",fontWeight:800,color:C.gold}}>{Object.values(scores[opp.playerId]||{}).reduce((s,v)=>s+safeInt(v,0),0)||"—"}</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                      <div style={{fontSize:10,color:C.dim,marginTop:8}}>● = stroke hole · updates live</div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+        </div>
+
+        {/* ── SHARE ROUND OVERLAY ── */}
+        {showShareRound&&(
+          <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.92)",zIndex:800,overflowY:"auto",fontFamily:"Georgia,serif"}}>
+            <div style={{padding:"50px 20px 40px",maxWidth:480,margin:"0 auto"}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+                <div style={{fontSize:20,fontWeight:800,color:C.text}}>🔗 Share Round</div>
+                <button onClick={()=>setShowShareRound(false)} style={{background:C.dim,border:"none",color:C.muted,width:34,height:34,borderRadius:"50%",fontSize:16,cursor:"pointer"}}>✕</button>
+              </div>
+              <div style={{fontSize:13,color:C.muted,marginBottom:20,lineHeight:1.6}}>
+                Send each player in a different group their own link. They enter their scores on their phone — your screen updates instantly.
+              </div>
+              {opponents.filter(o=>!o.sameGroup).map(opp=>{
+                const link="https://press-golf.vercel.app?round="+liveRoundId+"&player="+opp.playerId;
+                const sms=encodeURIComponent("Hey "+opp.name+" — enter your scores here as we play:
+"+link+"
+
+Your scores sync to my round in real time. — Press Golf");
+                return(
+                  <div key={opp.playerId} style={{background:C.card,border:"1px solid "+C.border,borderRadius:14,padding:"16px",marginBottom:12}}>
+                    <div style={{fontWeight:800,fontSize:16,marginBottom:4}}>{opp.name}</div>
+                    <div style={{fontSize:12,color:C.muted,marginBottom:12}}>
+                      {opp.betType==="nassau"?"Nassau $"+opp.betAmount:opp.betType==="nassau-press"?"Nassau+Press $"+opp.betAmount:opp.betType==="match"?"Match Play $"+opp.betAmount+"/hole":"Skins $"+opp.betAmount}
+                      {" · "}{opp.strokes===0?"Even":opp.strokes>0?"You give "+(opp.strokes/2)+"/side":"You get "+(Math.abs(opp.strokes)/2)+"/side"}
+                    </div>
+                    <div style={{display:"flex",gap:8}}>
+                      <button onClick={()=>window.open("sms:?&body="+sms)}
+                        style={{flex:2,padding:"12px",background:C.green,color:"#0a1a0f",border:"none",borderRadius:10,fontSize:14,fontWeight:800,cursor:"pointer"}}>
+                        📱 Text {opp.name}
+                      </button>
+                      <button onClick={()=>{try{navigator.clipboard.writeText(link);}catch(e){}}}
+                        style={{flex:1,padding:"12px",background:"transparent",color:C.muted,border:"1px solid "+C.border,borderRadius:10,fontSize:12,fontWeight:600,cursor:"pointer"}}>
+                        📋 Copy
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+              <button onClick={()=>setShowShareRound(false)} style={{width:"100%",padding:"16px",background:C.green,color:"#0a1a0f",border:"none",borderRadius:12,fontSize:15,fontWeight:800,cursor:"pointer",marginTop:8}}>
+                ✓ Done
+              </button>
             </div>
           </div>
+        )}
 
-          {/* -- OPPONENT SCORES -- */}
-          {opponents.map(opp => {
-            const oppScore    = getScore(opp.playerId, currentHole);
-            const getsStroke  = oppGetsStrokeOnHole(opp, currentHole);
-            const iGetStroke  = iGetStrokeOnHole(opp, currentHole);
-            const tally       = getTally(scores, course, opp, courseId);
-
-            return (
-              <div key={opp.playerId} style={{background:C.card,border:(getsStroke||iGetStroke?"1px solid rgba(232,184,75,0.5)":"1px solid "+C.border),borderRadius:14,padding:"14px",marginBottom:10}}>
-                {/* Header row */}
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
-                  <div>
-                    <div style={{display:"flex",alignItems:"center",gap:8}}>
-                      <div style={{fontWeight:700,fontSize:16}}>{opp.name}</div>
-                      {opp.sameGroup && <div style={{fontSize:10,color:C.green,background:"rgba(123,180,80,0.12)",padding:"2px 7px",borderRadius:8}}>Same Group</div>}
-                    </div>
-                    {getsStroke && <div style={{fontSize:11,color:C.gold,marginTop:2}}>⭐ {opp.name} gets a stroke this hole</div>}
-                    {iGetStroke && <div style={{fontSize:11,color:C.green,marginTop:2}}>⭐ You get a stroke this hole</div>}
-                    {!getsStroke && !iGetStroke && !opp.sameGroup && <div style={{fontSize:10,color:C.dim,marginTop:2}}>different group - scores optional</div>}
-                  </div>
-                  <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:6}}>
-                    <div style={{textAlign:"right"}}>
-                      <div style={{fontSize:14,fontWeight:700,color:
-                        tally.label==="Even" ? C.muted :
-                        tally.label?.includes("Up") ? C.green : C.red
-                      }}>
-                        {tally.label || "-"}
-                      </div>
-                      {/* Show press count if nassau-press */}
-                      {opp.betType === "nassau-press" && tally.pressDetail && (
-                        <div style={{fontSize:10,color:C.gold,marginTop:2}}>
-                          {(tally.pressDetail.front?.bets?.length||0) + (tally.pressDetail.back?.bets?.length||0) - 2 > 0
-                            ? ((tally.pressDetail.front?.bets?.length||0) + (tally.pressDetail.back?.bets?.length||0) - 2) + " presses"
-                            : null}
-                        </div>
-                      )}
-                      <div style={{fontSize:10,color:C.muted}}>standing</div>
-                    </div>
-                    {/* Manual Press button - only for same group Nassau bets */}
-                    {opp.sameGroup && (opp.betType === "nassau" || opp.betType === "nassau-press") && (
-                      (opp.manualPresses||[]).some(p=>p.hole===currentHole)
-                        ? (
-                          <button disabled style={{background:"#555",border:"none",color:"#aaa",padding:"6px 10px",borderRadius:8,fontSize:11,fontWeight:700,cursor:"not-allowed",whiteSpace:"nowrap"}}>
-                            Pressed
-                          </button>
-                        )
-                        : tally.total < 0 && (
-                          <button
-                            onClick={() => callManualPress(opp.playerId)}
-                            style={{background:C.red,border:"none",color:"#fff",padding:"6px 10px",borderRadius:8,fontSize:11,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}
-                          >
-                            Press!
-                          </button>
-                        )
-                    )}
-                  </div>
-                </div>
-
-                {/* Score row */}
-                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
-                  <ScoreButton label="-" size={52} onClick={()=>{
-                    const cur = oppScore !== null ? oppScore : holeData.par;
-                    setScore(opp.playerId, currentHole, cur - 1);
-                  }}/>
-                  <div style={{flex:1,textAlign:"center"}}>
-                    <div style={{fontSize:52,fontWeight:800,color:oppScore!==null?C.text:C.dim,lineHeight:1}}>
-                      {oppScore !== null ? oppScore : "-"}
-                    </div>
-                    {oppScore !== null && getsStroke && (
-                      <div style={{fontSize:11,color:C.gold,marginTop:2}}>Net score: {oppScore - 1}</div>
-                    )}
-                    {oppScore !== null && iGetStroke && (
-                      <div style={{fontSize:11,color:C.green,marginTop:2}}>Your net: {myScore !== null ? myScore - 1 : "-"}</div>
-                    )}
-                    {oppScore === null && <div style={{fontSize:11,color:C.dim,marginTop:2}}>tap + to enter</div>}
-                  </div>
-                  <ScoreButton label="+" size={52} onClick={()=>{
-                    const cur = oppScore !== null ? oppScore : holeData.par - 1;
-                    setScore(opp.playerId, currentHole, cur + 1);
-                  }}/>
-                </div>
+        {/* ── EDIT ROUND OVERLAY ── */}
+        {showRoundSettings&&(
+          <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.92)",zIndex:800,overflowY:"auto",fontFamily:"Georgia,serif"}}>
+            <div style={{padding:"50px 20px 40px",maxWidth:480,margin:"0 auto"}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+                <div style={{fontSize:20,fontWeight:800,color:C.text}}>⚙️ Edit Round</div>
+                <button onClick={()=>setShowRoundSettings(false)} style={{background:C.dim,border:"none",color:C.muted,width:34,height:34,borderRadius:"50%",fontSize:16,cursor:"pointer"}}>✕</button>
               </div>
-            );
-          })}
+              <div style={{fontSize:13,color:C.muted,marginBottom:20,lineHeight:1.5}}>
+                Edit player names and strokes. Back 9 adjustment adds or removes strokes for the remaining back 9 only.
+              </div>
 
-          {/* Next / Finish */}
-          <BigBtn
-            onClick={()=>isLastHole?setStep("summary"):setCurrentHole(h=>h+1)}
-            disabled={!canAdvance}
-            color={isLastHole?C.gold:C.green}
-            textColor="#0a1a0f"
-            style={{marginTop:8}}
-          >
-            {!canAdvance ? "Enter your score to continue"
-              : isLastHole ? "Finish Round "
-              : "Next - Hole " + (currentHole + 1)}
-          </BigBtn>
+              {opponents.map((opp,i)=>{
+                const perSide = Math.abs(opp.strokes||0)/2;
+                const dir = opp.strokes>=0?"igive":"iget";
+                const b9delta = back9Adjustments[opp.playerId]||0;
+                return(
+                  <div key={opp.playerId} style={{background:C.card,border:"1px solid "+C.border,borderRadius:14,padding:"16px",marginBottom:12}}>
+                    <div style={{fontSize:11,color:C.green,letterSpacing:1.5,textTransform:"uppercase",marginBottom:10,fontWeight:600}}>Player {i+1}</div>
+                    <input value={opp.name} onChange={e=>setOpponents(prev=>prev.map(o=>o.playerId===opp.playerId?{...o,name:e.target.value}:o))}
+                      style={{width:"100%",padding:"12px",background:C.surface,border:"1px solid "+C.border,borderRadius:8,color:C.text,fontSize:16,fontWeight:600,outline:"none",boxSizing:"border-box",marginBottom:12}}/>
+                    <div style={{fontSize:11,color:C.muted,marginBottom:6}}>Strokes per side</div>
+                    <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:12}}>
+                      <button onClick={()=>setOpponents(prev=>prev.map(o=>o.playerId===opp.playerId?{...o,strokes:Math.max(0,Math.abs(o.strokes||0)-2)*(o.strokes>=0?1:-1)}:o))}
+                        style={{width:36,height:36,borderRadius:"50%",background:C.dim,border:"1px solid "+C.border,color:C.text,fontSize:20,fontWeight:700,cursor:"pointer"}}>−</button>
+                      <div style={{flex:1,textAlign:"center",fontSize:18,fontWeight:800}}>{perSide===0?"Even":dir==="igive"?"You give "+perSide:"You get "+perSide}</div>
+                      <button onClick={()=>setOpponents(prev=>prev.map(o=>o.playerId===opp.playerId?{...o,strokes:(Math.abs(o.strokes||0)+2)*(o.strokes>=0?1:-1)}:o))}
+                        style={{width:36,height:36,borderRadius:"50%",background:C.dim,border:"1px solid "+C.border,color:C.text,fontSize:20,fontWeight:700,cursor:"pointer"}}>+</button>
+                      <button onClick={()=>setOpponents(prev=>prev.map(o=>o.playerId===opp.playerId?{...o,strokes:-(o.strokes||0)}:o))}
+                        style={{padding:"8px 14px",background:"rgba(232,184,75,0.15)",border:"1px solid "+C.gold,color:C.gold,borderRadius:8,fontSize:12,fontWeight:700,cursor:"pointer"}}>Flip ⇌</button>
+                    </div>
+                    <div style={{fontSize:11,color:C.muted,marginBottom:6}}>Back 9 Adjustment (kicks in at hole 10)</div>
+                    <div style={{display:"flex",alignItems:"center",gap:12}}>
+                      <button onClick={()=>setBack9Adjustments(prev=>({...prev,[opp.playerId]:(prev[opp.playerId]||0)-1}))}
+                        style={{width:36,height:36,borderRadius:"50%",background:C.dim,border:"1px solid "+C.border,color:C.text,fontSize:20,fontWeight:700,cursor:"pointer"}}>−</button>
+                      <div style={{flex:1,textAlign:"center",fontSize:16,fontWeight:700,color:b9delta===0?C.muted:C.gold}}>{b9delta===0?"No adjustment":b9delta>0?"+"+b9delta+" strokes":b9delta+" strokes"}</div>
+                      <button onClick={()=>setBack9Adjustments(prev=>({...prev,[opp.playerId]:(prev[opp.playerId]||0)+1}))}
+                        style={{width:36,height:36,borderRadius:"50%",background:C.dim,border:"1px solid "+C.border,color:C.text,fontSize:20,fontWeight:700,cursor:"pointer"}}>+</button>
+                    </div>
+                  </div>
+                );
+              })}
 
-          <div style={{textAlign:"center",fontSize:11,color:C.dim,marginTop:8}}>
-            Auto-saving - Round is safe if you close the app
+              {/* South Toledo hole #4 par override */}
+              {courseId==="south-toledo"&&(
+                <div style={{background:C.card,border:"1px solid "+C.border,borderRadius:14,padding:"16px",marginBottom:12}}>
+                  <div style={{fontWeight:700,fontSize:15,marginBottom:4}}>⛳ Hole #4 Par Override</div>
+                  <div style={{fontSize:11,color:C.muted,marginBottom:12}}>Normally par 3. Toggle if your group plays it as par 4.</div>
+                  <div style={{display:"flex",gap:8}}>
+                    {[3,4].map(p=>(
+                      <button key={p} onClick={()=>setHolePars(prev=>({...prev,4:p}))}
+                        style={{flex:1,padding:"16px",background:(holePars[4]??3)===p?C.green:"#1a2a1a",color:(holePars[4]??3)===p?"#0a1a0f":"#ffffff",border:"2px solid "+((holePars[4]??3)===p?C.green:"rgba(255,255,255,0.3)"),borderRadius:10,fontSize:16,fontWeight:(holePars[4]??3)===p?800:600,cursor:"pointer"}}>
+                        Par {p}{p===3?" ✓ default":""}
+                      </button>
+                    ))}
+                  </div>
+                  {(holePars[4]??3)===4&&<div style={{fontSize:11,color:C.gold,marginTop:8,textAlign:"center"}}>Playing as par 4 — effective course par 71</div>}
+                </div>
+              )}
+
+              <button onClick={()=>setShowRoundSettings(false)}
+                style={{width:"100%",padding:"16px",background:C.green,color:"#0a1a0f",border:"none",borderRadius:12,fontSize:15,fontWeight:800,cursor:"pointer",marginTop:8}}>
+                ✓ Done — Back to Round
+              </button>
+            </div>
           </div>
-        </div>
+        )}
+
       </div>
     );
   }
@@ -991,24 +1187,15 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
           {/* Scorecard — tournament style */}
           <div style={{background:C.card,border:"1px solid "+C.border,borderRadius:14,padding:"14px",marginBottom:16}}>
             <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:12}}>Scorecard</div>
-
-            {/* Hole bubbles — green when scored, gold = current */}
+            {/* Hole bubbles */}
             <div style={{display:"flex",overflowX:"auto",gap:6,marginBottom:14,paddingBottom:4}}>
               {course.holes.map(h=>{
                 const scored = getScore("me", h.hole) !== null;
                 return (
-                  <div key={h.hole} style={{
-                    flexShrink:0,width:32,height:32,borderRadius:"50%",
-                    display:"flex",alignItems:"center",justifyContent:"center",
-                    fontSize:11,fontWeight:700,
-                    background:scored?"rgba(123,180,80,0.2)":C.dim,
-                    color:scored?C.green:C.muted,
-                    border:"1px solid "+(scored?C.green:C.border),
-                  }}>{h.hole}</div>
+                  <div key={h.hole} style={{flexShrink:0,width:32,height:32,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700,background:scored?"rgba(123,180,80,0.2)":C.dim,color:scored?C.green:C.muted,border:"1px solid "+(scored?C.green:C.border)}}>{h.hole}</div>
                 );
               })}
             </div>
-
             {/* Score grid */}
             <div style={{overflowX:"auto"}}>
               <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,minWidth:280}}>
@@ -1017,11 +1204,7 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
                     <th style={{textAlign:"left",padding:"5px 8px",color:C.muted,fontWeight:600,fontSize:11}}>Hole</th>
                     <th style={{padding:"5px 4px",textAlign:"center",color:C.muted,fontWeight:600,fontSize:11}}>Par</th>
                     <th style={{padding:"5px 4px",textAlign:"center",color:C.green,fontWeight:700,fontSize:11}}>You</th>
-                    {opponents.map(o=>(
-                      <th key={o.playerId} style={{padding:"5px 4px",textAlign:"center",color:C.gold,fontWeight:700,fontSize:11}}>
-                        {o.name.split(" ")[0]}
-                      </th>
-                    ))}
+                    {opponents.map(o=>(<th key={o.playerId} style={{padding:"5px 4px",textAlign:"center",color:C.gold,fontWeight:700,fontSize:11}}>{o.name.split(" ")[0]}</th>))}
                   </tr>
                 </thead>
                 <tbody>
@@ -1029,27 +1212,14 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
                     const my = getScore("me", h.hole);
                     const isBack = h.side==="back" && h.hole===10;
                     return (
-                      <tr key={h.hole} style={{
-                        borderTop:"1px solid "+(isBack?C.green:C.dim),
-                        background:isBack?"rgba(123,180,80,0.04)":"transparent",
-                      }}>
-                        <td style={{padding:"5px 8px",color:C.muted,fontSize:11,fontWeight:isBack?700:400}}>
-                          {h.hole}{isBack?" | B9":""}
-                        </td>
+                      <tr key={h.hole} style={{borderTop:"1px solid "+(isBack?C.green:C.dim),background:isBack?"rgba(123,180,80,0.04)":"transparent"}}>
+                        <td style={{padding:"5px 8px",color:C.muted,fontSize:11,fontWeight:isBack?700:400}}>{h.hole}{isBack?" | B9":""}</td>
                         <td style={{padding:"5px 4px",textAlign:"center",color:C.muted}}>{h.par}</td>
-                        <td style={{padding:"5px 4px",textAlign:"center",fontWeight:700,
-                          color:my!==null?scoreColor(my,h.par):C.dim}}>
-                          {my!==null?my:"—"}
-                        </td>
+                        <td style={{padding:"5px 4px",textAlign:"center",fontWeight:700,color:my!==null?scoreColor(my,h.par):C.dim}}>{my!==null?my:"—"}</td>
                         {opponents.map(opp=>{
                           const s = getScore(opp.playerId, h.hole);
                           const sh = getStrokeHolesForOpp(opp).includes(h.hole);
-                          return (
-                            <td key={opp.playerId} style={{padding:"5px 4px",textAlign:"center",
-                              color:s!==null?scoreColor(s,h.par):C.dim}}>
-                              {s!==null?s:"—"}{sh?"·":""}
-                            </td>
-                          );
+                          return <td key={opp.playerId} style={{padding:"5px 4px",textAlign:"center",color:s!==null?scoreColor(s,h.par):C.dim}}>{s!==null?s:"—"}{sh?"·":""}</td>;
                         })}
                       </tr>
                     );
@@ -1057,14 +1227,8 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
                   <tr style={{borderTop:"2px solid "+C.green,background:"rgba(123,180,80,0.07)"}}>
                     <td style={{padding:"6px 8px",color:C.green,fontWeight:800,fontSize:11,letterSpacing:1}}>TOT</td>
                     <td style={{padding:"6px 4px",textAlign:"center",color:C.muted,fontWeight:700}}>{course.par}</td>
-                    <td style={{padding:"6px 4px",textAlign:"center",color:C.green,fontWeight:800}}>
-                      {Object.values(scores["me"]||{}).reduce((s,v)=>s+safeInt(v,0),0)||"—"}
-                    </td>
-                    {opponents.map(opp=>(
-                      <td key={opp.playerId} style={{padding:"6px 4px",textAlign:"center",color:C.gold,fontWeight:800}}>
-                        {Object.values(scores[opp.playerId]||{}).reduce((s,v)=>s+safeInt(v,0),0)||"—"}
-                      </td>
-                    ))}
+                    <td style={{padding:"6px 4px",textAlign:"center",color:C.green,fontWeight:800}}>{Object.values(scores["me"]||{}).reduce((s,v)=>s+safeInt(v,0),0)||"—"}</td>
+                    {opponents.map(opp=>(<td key={opp.playerId} style={{padding:"6px 4px",textAlign:"center",color:C.gold,fontWeight:800}}>{Object.values(scores[opp.playerId]||{}).reduce((s,v)=>s+safeInt(v,0),0)||"—"}</td>))}
                   </tr>
                 </tbody>
               </table>
