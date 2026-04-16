@@ -310,6 +310,7 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
   const [posting,     setPosting]     = useState(false);
   const [liveRoundId, setLiveRoundId] = useState(null);
   const [resuming,    setResuming]    = useState(false);
+  const [showScorecard, setShowScorecard] = useState(false);
 
   // Add opponent form
   const [addOppId,       setAddOppId]       = useState("");
@@ -878,16 +879,110 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
             Auto-saving · Round is safe if you close the app
           </div>
 
-          {/* Share links — one per opponent with a linked account */}
-          {liveRoundId && opponents.some(o => o.linkedUserId) && (
-            <div style={{marginTop:14,background:C.card,border:"1px solid "+C.border,borderRadius:14,padding:"14px"}}>
+          {/* Live running scorecard — collapsible */}
+          <div style={{marginTop:14,background:C.card,border:"1px solid "+C.border,borderRadius:14,overflow:"hidden"}}>
+            <button
+              onClick={()=>setShowScorecard(s=>!s)}
+              style={{width:"100%",display:"flex",justifyContent:"space-between",alignItems:"center",padding:"12px 14px",background:"transparent",border:"none",color:C.text,cursor:"pointer"}}
+            >
+              <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",fontWeight:600}}>
+                📋 Scorecard
+              </div>
+              <div style={{display:"flex",alignItems:"center",gap:10}}>
+                {/* Running totals summary */}
+                <div style={{display:"flex",gap:12"}}>
+                  <span style={{fontSize:11,color:C.green,fontWeight:700}}>
+                    You: {Object.values(scores["me"]||{}).reduce((s,v)=>s+safeInt(v,0),0)||"—"}
+                  </span>
+                  {opponents.map(o=>(
+                    <span key={o.playerId} style={{fontSize:11,color:C.gold,fontWeight:700}}>
+                      {o.name.split(" ")[0]}: {Object.values(scores[o.playerId]||{}).reduce((s,v)=>s+safeInt(v,0),0)||"—"}
+                    </span>
+                  ))}
+                </div>
+                <span style={{color:C.muted,fontSize:14}}>{showScorecard?"▲":"▼"}</span>
+              </div>
+            </button>
+
+            {showScorecard && (
+              <div style={{overflowX:"auto",borderTop:"1px solid "+C.border}}>
+                <table style={{width:"100%",borderCollapse:"collapse",fontSize:11,minWidth:300}}>
+                  <thead>
+                    <tr style={{background:"rgba(0,0,0,0.3)"}}>
+                      <th style={{textAlign:"left",padding:"6px 8px",color:C.muted,fontWeight:600}}>Hole</th>
+                      <th style={{padding:"6px 4px",color:C.muted,fontWeight:600,textAlign:"center"}}>Par</th>
+                      <th style={{padding:"6px 4px",color:C.green,fontWeight:700,textAlign:"center"}}>You</th>
+                      {opponents.map(o=>(
+                        <th key={o.playerId} style={{padding:"6px 4px",color:C.gold,fontWeight:700,textAlign:"center"}}>
+                          {o.name.split(" ")[0]}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {course.holes.map(h=>{
+                      const my = getScore("me", h.hole);
+                      const isCurrentHole = h.hole === currentHole;
+                      const isFuture = h.hole > currentHole;
+                      return (
+                        <tr
+                          key={h.hole}
+                          style={{
+                            borderTop:"1px solid "+C.dim,
+                            background: isCurrentHole ? "rgba(232,184,75,0.08)" : h.side==="back"&&h.hole===10 ? "rgba(123,180,80,0.04)" : "transparent",
+                            opacity: isFuture ? 0.4 : 1,
+                          }}
+                        >
+                          <td style={{padding:"5px 8px",color:isCurrentHole?C.gold:C.muted,fontWeight:isCurrentHole?700:400}}>
+                            {h.hole}{isCurrentHole?" ◀":""}{h.side==="back"&&h.hole===10?" |B9":""} 
+                          </td>
+                          <td style={{padding:"5px 4px",textAlign:"center",color:C.muted}}>{h.par}</td>
+                          <td style={{padding:"5px 4px",textAlign:"center",fontWeight:700,
+                            color:my!==null ? scoreColor(my,h.par) : C.dim}}>
+                            {my!==null?my:"—"}
+                          </td>
+                          {opponents.map(opp=>{
+                            const s = getScore(opp.playerId, h.hole);
+                            const getsStroke = getStrokeHolesForOpp(opp).includes(h.hole);
+                            return (
+                              <td key={opp.playerId} style={{padding:"5px 4px",textAlign:"center",
+                                color:s!==null?scoreColor(s,h.par):C.dim}}>
+                                {s!==null?s:"—"}{getsStroke?"·":""}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      );
+                    })}
+                    {/* Totals row */}
+                    <tr style={{borderTop:"2px solid "+C.green,background:"rgba(123,180,80,0.06)"}}>
+                      <td style={{padding:"6px 8px",color:C.green,fontWeight:800,fontSize:10,letterSpacing:1}}>TOT</td>
+                      <td style={{padding:"6px 4px",textAlign:"center",color:C.muted,fontWeight:700}}>{course.par}</td>
+                      <td style={{padding:"6px 4px",textAlign:"center",color:C.green,fontWeight:800}}>
+                        {Object.values(scores["me"]||{}).reduce((s,v)=>s+safeInt(v,0),0)||"—"}
+                      </td>
+                      {opponents.map(opp=>(
+                        <td key={opp.playerId} style={{padding:"6px 4px",textAlign:"center",color:C.gold,fontWeight:800}}>
+                          {Object.values(scores[opp.playerId]||{}).reduce((s,v)=>s+safeInt(v,0),0)||"—"}
+                        </td>
+                      ))}
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* Share score entry links — shown for all opponents when round is saved */}
+          {liveRoundId && opponents.length > 0 && (
+            <div style={{marginTop:10,background:C.card,border:"1px solid "+C.border,borderRadius:14,padding:"14px"}}>
               <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>
                 Share Score Entry Links
               </div>
-              {opponents.filter(o => o.linkedUserId).map(opp => {
+              {opponents.map(opp => {
                 const link = "https://press-golf.vercel.app?round=" + liveRoundId + "&player=" + opp.playerId;
                 return (
-                  <div key={opp.playerId} style={{marginBottom:10,background:C.surface,borderRadius:10,padding:"10px 12px"}}>
+                  <div key={opp.playerId} style={{marginBottom:8,background:C.surface,borderRadius:10,padding:"10px 12px"}}>
                     <div style={{fontWeight:700,fontSize:13,marginBottom:6}}>{opp.name}</div>
                     <div style={{display:"flex",gap:8}}>
                       <button
@@ -897,11 +992,13 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
                         }}
                         style={{flex:1,padding:"9px 6px",background:C.green,border:"none",borderRadius:8,color:"#0a1a0f",fontSize:12,fontWeight:700,cursor:"pointer"}}
                       >
-                        📱 Text Link
+                        📱 Text
                       </button>
                       <button
-                        onClick={() => {
-                          try { navigator.clipboard.writeText(link); } catch(e) {}
+                        onClick={async () => {
+                          try {
+                            await navigator.clipboard.writeText(link);
+                          } catch(e) {}
                         }}
                         style={{flex:1,padding:"9px 6px",background:C.dim,border:"1px solid "+C.border,borderRadius:8,color:C.text,fontSize:12,fontWeight:600,cursor:"pointer"}}
                       >
