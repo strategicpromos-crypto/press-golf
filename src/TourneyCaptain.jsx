@@ -422,14 +422,14 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
           })}
         </div>
 
-        {/* CTP button — auto-shows on all par 3 holes when ctpEnabled */}
-        {ctpEnabled&&effPar===3&&(()=>{
+        {/* CTP button — only on holes selected as CTP holes */}
+        {ctpEnabled&&ctpHoles.includes(currentHole)&&(()=>{
           const leader=ctpLeaders[currentHole];
           return(
             <button onClick={()=>{setCtpName("");setCtpDist("");setCtpPopup(true);}}
               style={{width:"100%",padding:"14px 16px",marginBottom:10,background:leader?"rgba(232,184,75,0.15)":"rgba(232,184,75,0.08)",border:"2px solid rgba(232,184,75,0.5)",borderRadius:12,cursor:"pointer",textAlign:"left",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <div style={{display:"flex",alignItems:"center",gap:10}}>
-                <div style={{fontSize:26,flexShrink:0}}>📍</div>
+                <svg width="28" height="36" viewBox="0 0 28 36" fill="none" xmlns="http://www.w3.org/2000/svg" style={{flexShrink:0,display:"block"}}><path d="M14 0C6.268 0 0 6.268 0 14c0 9.333 14 22 14 22S28 23.333 28 14C28 6.268 21.732 0 14 0z" fill="#e05050"/><circle cx="14" cy="14" r="5.5" fill="white"/></svg>
                 <div>
                   <div style={{fontSize:11,color:C.gold,letterSpacing:1.5,textTransform:"uppercase",fontWeight:700,marginBottom:2}}>Closest to the Pin</div>
                   {leader?(
@@ -439,7 +439,7 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
                   )}
                 </div>
               </div>
-              <div style={{fontSize:20,color:C.gold,marginLeft:8}}>+</div>
+              <div style={{fontSize:18,color:C.gold,fontWeight:800,marginLeft:8}}>+</div>
             </button>
           );
         })()}
