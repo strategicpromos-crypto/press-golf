@@ -19,7 +19,7 @@ const TEAM_COLORS = [
 ];
 
 function safeInt(v,f=0){const n=parseInt(v,10);return isNaN(n)?f:n;}
-function relLabel(d){if(d===null||d===undefined)return"—";if(d===0)return"E";return d>0?"+"+d:String(d);}
+function relLabel(d){if(d===null||d===undefined)return"--";if(d===0)return"E";return d>0?"+"+d:String(d);}
 function relColor(d){if(d===null||d===undefined)return C.muted;if(d<0)return C.green;if(d>0)return C.red;return C.muted;}
 
 // Build top 10 individual leaderboard from all teams
@@ -52,7 +52,7 @@ function calcIndividualLeaderboard(teams, holeData){
 // Top 10 leaderboard UI — reused across director, captain, spectator
 function Top10Tab({ teams, course }){
   const players = calcIndividualLeaderboard(teams, course.holes);
-  const medals = ["🥇","🥈","🥉"];
+  const medals = ["1st","2nd","3rd"];
   if(players.length === 0) return(
     <div style={{textAlign:"center",padding:"40px 20px",color:C.muted}}>
       <div style={{fontSize:32,marginBottom:12}}>⛳</div>
@@ -214,7 +214,8 @@ export default function TeamTournament({onBack, user, onDelete}){
     saveTimer.current=setTimeout(async()=>{
       // Never downgrade status — once scoring starts, always stay "active"
       // Leaderboard screen should not reset status to "setup"
-      const newStatus = (screen==="scoring"||screen==="leaderboard") ? "active" : "setup";
+      // Never downgrade — once created always stays active
+      const newStatus = "active";
       await sb.from("team_tournaments").update({
         teams,
         course_id:courseId,
@@ -257,7 +258,7 @@ export default function TeamTournament({onBack, user, onDelete}){
     const makePin = () => String(Math.floor(1000 + Math.random() * 9000));
     const teamsWithPins = builtTeams.map(t => ({ ...t, pin: makePin() }));
 
-    const name = COURSES[courseId]?.name + " · " + now.toLocaleDateString("en-US",{month:"short",day:"numeric"});
+    const name = COURSES[courseId]?.name + " - " + now.toLocaleDateString("en-US",{month:"short",day:"numeric"});
     const{data}=await sb.from("team_tournaments").insert({
       owner_id:user.id,
       name,
@@ -273,7 +274,7 @@ export default function TeamTournament({onBack, user, onDelete}){
       ctp_leaders:{},
       teams:teamsWithPins,
       current_hole:1,
-      status:"setup",
+      status:"active",
       director_code:dirCode,       // WEDS48#7XQ — director only
       spectator_code:publicCode,   // WEDS48 — public
     }).select().single();
@@ -404,12 +405,11 @@ export default function TeamTournament({onBack, user, onDelete}){
   // HOME
   if(screen==="home"){
     // Show in "active" section: status=active OR has any scores (guards against status corruption)
-    const active=(savedTourneys||[]).filter(t=>
-      t.status==="active"||(t.teams||[]).some(tm=>Object.keys(tm?.scores||{}).length>0)
-    );
-    const setups=(savedTourneys||[]).filter(t=>
-      t.status==="setup"&&!(t.teams||[]).some(tm=>Object.keys(tm?.scores||{}).length>0)
-    );
+    // "In Progress" = has scores entered OR past hole 1
+    // "Saved Setups" = no scores yet AND still on hole 1 (just created, not started)
+    const hasAnyScores = t => (t.teams||[]).some(tm=>Object.keys(tm?.scores||{}).length>0);
+    const active=(savedTourneys||[]).filter(t=> hasAnyScores(t)||(t.current_hole||1)>1 );
+    const setups=(savedTourneys||[]).filter(t=> !hasAnyScores(t)&&(t.current_hole||1)<=1 );
     return(
       <div style={{fontFamily:"Georgia,serif",minHeight:"100vh",background:C.bg,color:C.text,paddingBottom:40,position:"relative"}}>
         <div style={{background:"linear-gradient(180deg,"+C.card+" 0%,transparent 100%)",padding:"50px 24px 24px"}}>
@@ -457,7 +457,7 @@ export default function TeamTournament({onBack, user, onDelete}){
                       </div>
                       <div style={{display:"flex",gap:8}}>
                         <button onClick={()=>resumeTourney(t)} disabled={loading} style={{flex:2,padding:"11px",background:C.gold,color:"#0a1a0f",border:"none",borderRadius:10,fontSize:14,fontWeight:800,cursor:"pointer"}}>
-                          {loading?"Loading...":"▶ Resume Round"}
+                          {loading?"Loading...":"Resume Round"}
                         </button>
                         <button onClick={async()=>{await resumeTourney(t);setScreen("leaderboard");}} style={{flex:1,padding:"11px",background:"transparent",color:C.gold,border:"1px solid "+C.gold+"44",borderRadius:10,fontSize:13,fontWeight:700,cursor:"pointer"}}>
                           📊 LB
@@ -498,21 +498,19 @@ export default function TeamTournament({onBack, user, onDelete}){
                       <div style={{fontSize:11,color:C.muted,marginBottom:4}}>
                         {COURSES[t.course_id]?.name||t.course_id} · {(t.teams||[]).length} teams · Last edited {new Date(t.updated_at).toLocaleDateString()}
                       </div>
-                      <div style={{fontSize:10,color:C.muted,marginBottom:10}}>
-                        Links generated when you Tee Off
+                      <div style={{fontSize:10,color:C.green,marginBottom:10}}>
+                        🔗 Links ready — send to captains, then open setup to start
                       </div>
                       <div style={{display:"flex",gap:8}}>
                         <button onClick={()=>resumeTourney(t)} disabled={loading} style={{flex:1,padding:"11px",background:C.green,color:"#0a1a0f",border:"none",borderRadius:10,fontSize:13,fontWeight:800,cursor:"pointer"}}>
-                          ✏️ Edit Setup
+                          {loading?"Loading...":"Open Setup & Links"}
                         </button>
                         <button onClick={async()=>{
-                          // Tee Off on a setup tournament — lock it and go
+                          // Resume the setup — goes to setup screen where links are visible
                           await resumeTourney(t);
-                          setCurrentHole(1);setActiveTeam(0);
-                          await sb.from("team_tournaments").update({status:"active",current_hole:1,updated_at:new Date().toISOString()}).eq("id",t.id);
-                          setScreen("scoring");
+                          // resumeTourney sets screen to "setup" for status=setup tournaments
                         }} style={{flex:1,padding:"11px",background:"transparent",color:C.green,border:"1px solid "+C.green+"44",borderRadius:10,fontSize:13,fontWeight:700,cursor:"pointer"}}>
-                          ⛳ Tee Off
+                          ✏️ Open Setup
                         </button>
                       </div>
                     </>
@@ -522,12 +520,11 @@ export default function TeamTournament({onBack, user, onDelete}){
             </div>
           )}
 
-          {/* New tournament — goes to setup screen, DB entry created only on Tee Off */}
-          <BigBtn onClick={()=>{
-            // Reset state for a fresh setup — no DB entry created yet
-            setTourneyId(null);
-            setDirectorCode(null);
-            setTeams(buildTeams(numTeams));
+          {/* New tournament — creates DB entry immediately so links are available on setup screen */}
+          <BigBtn onClick={async()=>{
+            // Reset all settings first
+            const freshTeams = buildTeams(numTeams);
+            setTeams(freshTeams);
             setCurrentHole(1);
             setActiveTeam(0);
             setCourseId("south-toledo");
@@ -539,6 +536,9 @@ export default function TeamTournament({onBack, user, onDelete}){
             setCtpEnabled(false);
             setCtpHoles([]);
             setCtpLeaders({});
+            setDirectorCode(null);
+            setTourneyId(null);
+            // Go to setup — DB entry created when director hits Tee It Up (or when they save)
             setScreen("setup");
           }}>+ New Tournament Setup</BigBtn>
 
@@ -561,9 +561,9 @@ export default function TeamTournament({onBack, user, onDelete}){
               </div>
 
               {[
-                {icon:"🎯",title:"Director",desc:"Creates the tournament, sets teams and players, shares codes. Can edit any score."},
-                {icon:"⛳",title:"Team Captain",desc:"Gets a private code + PIN. Enters their team's scores hole by hole. Can fix any hole anytime."},
-                {icon:"👀",title:"Spectator",desc:"Uses the public code to watch the live leaderboard. No account needed. Pull down to refresh."},
+                {icon:"[D]",title:"Director",desc:"Creates the tournament, sets teams and players, shares codes. Can edit any score."},
+                {icon:"[C]",title:"Team Captain",desc:"Gets a private code + PIN. Enters their team's scores hole by hole. Can fix any hole anytime."},
+                {icon:"[S]",title:"Spectator",desc:"Uses the public code to watch the live leaderboard. No account needed. Pull down to refresh."},
               ].map((r,i)=>(
                 <div key={i} style={{background:C.card,border:"1px solid "+C.border,borderRadius:12,padding:"14px",marginBottom:10}}>
                   <div style={{fontSize:13,fontWeight:700,marginBottom:4}}>{r.icon} {r.title}</div>
@@ -585,9 +585,9 @@ export default function TeamTournament({onBack, user, onDelete}){
 
               <div style={{fontSize:11,color:C.green,letterSpacing:1.5,textTransform:"uppercase",margin:"16px 0 8px",fontWeight:600}}>Scoring Rules</div>
               {[
-                {title:"2 Best Ball",desc:"The 2 lowest scores on your team count every hole. App picks them automatically — marked with ✓ COUNTS."},
-                {title:"Birdie Bonus",desc:"3+ birdies/eagles on a hole = extra strokes off. Each player beyond the top 2 adds their vs-par value. 3 eagles = −2 bonus."},
-                {title:"Front / Back / Total",desc:"Three separate bets. Scores show as −2, E, +3 vs par. Leaderboard ranks by total."},
+                {title:"2 Best Ball",desc:"The 2 lowest scores on your team count every hole. App picks them automatically - marked COUNTS."},
+                {title:"Birdie Bonus",desc:"3+ birdies/eagles on a hole = extra strokes off. Each player beyond the top 2 adds their vs-par value."},
+                {title:"Front / Back / Total",desc:"Three separate bets. Scores show as -2, E, +3 vs par. Leaderboard ranks by total."},
                 {title:"Strokes per side",desc:"Set per team. 3-man team typically gets 2 strokes/side vs a 4-man team."},
               ].map((r,i)=>(
                 <div key={i} style={{background:C.card,border:"1px solid "+C.border,borderRadius:12,padding:"14px",marginBottom:8}}>
@@ -613,7 +613,7 @@ export default function TeamTournament({onBack, user, onDelete}){
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
             <button onClick={()=>setScreen("home")} style={{background:"rgba(123,180,80,0.15)",border:"1px solid "+C.green,color:C.green,fontSize:13,cursor:"pointer",padding:"8px 16px",borderRadius:20,fontWeight:700}}>‹ Home</button>
             <div style={{fontSize:11,color:saveStatus==="saving"?C.gold:C.green,fontWeight:600}}>
-              {saveStatus==="saving"?"💾 Saving...":saveStatus==="saved"?"✓ Saved":""}
+              {saveStatus==="saving"?"Saving...":saveStatus==="saved"?"Saved":""}
             </div>
           </div>
           <div style={{fontSize:22,fontWeight:800,textAlign:"center"}}>Tournament Setup</div>
@@ -663,7 +663,7 @@ export default function TeamTournament({onBack, user, onDelete}){
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <div>
                 <div style={{fontWeight:700,fontSize:15}}>Birdie Bonus</div>
-                <div style={{fontSize:11,color:C.muted,marginTop:3}}>{birdieBonus?"3+ birdies on a hole = extra −1 per additional birdie":"Off for this tournament"}</div>
+                <div style={{fontSize:11,color:C.muted,marginTop:3}}>{birdieBonus?"3+ birdies on a hole = extra -1 per additional birdie":"Off for this tournament"}</div>
               </div>
               <button onClick={()=>setBirdieBonus(b=>!b)} style={{width:52,height:28,borderRadius:14,border:"none",cursor:"pointer",background:birdieBonus?C.green:"#333",position:"relative",transition:"background 0.2s",flexShrink:0}}>
                 <div style={{position:"absolute",top:4,left:birdieBonus?26:4,width:20,height:20,borderRadius:"50%",background:"#fff",transition:"left 0.2s"}}/>
@@ -676,7 +676,7 @@ export default function TeamTournament({onBack, user, onDelete}){
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <div>
                 <div style={{fontWeight:700,fontSize:15}}>💰 Skins Game</div>
-                <div style={{fontSize:11,color:C.muted,marginTop:3}}>{skinsEnabled?"Tracking skins — live tab in leaderboard":"Off for this tournament"}</div>
+                <div style={{fontSize:11,color:C.muted,marginTop:3}}>{skinsEnabled?"Tracking skins - live tab in leaderboard":"Off for this tournament"}</div>
               </div>
               <button onClick={()=>{setSkinsEnabled(b=>!b);if(skinsEnabled)setBigBoyEnabled(false);}} style={{width:52,height:28,borderRadius:14,border:"none",cursor:"pointer",background:skinsEnabled?C.green:"#333",position:"relative",transition:"background 0.2s",flexShrink:0}}>
                 <div style={{position:"absolute",top:4,left:skinsEnabled?26:4,width:20,height:20,borderRadius:"50%",background:"#fff",transition:"left 0.2s"}}/>
@@ -690,7 +690,7 @@ export default function TeamTournament({onBack, user, onDelete}){
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                 <div>
                   <div style={{fontWeight:700,fontSize:14,color:C.gold}}>⭐ Big Boy Skins</div>
-                  <div style={{fontSize:11,color:C.muted,marginTop:3}}>{bigBoyEnabled?"Opt-in parallel game — BB players only":"Off"}</div>
+                  <div style={{fontSize:11,color:C.muted,marginTop:3}}>{bigBoyEnabled?"Opt-in parallel game - BB players only":"Off"}</div>
                 </div>
                 <button onClick={()=>setBigBoyEnabled(b=>!b)} style={{width:52,height:28,borderRadius:14,border:"none",cursor:"pointer",background:bigBoyEnabled?C.gold:"#333",position:"relative",transition:"background 0.2s",flexShrink:0}}>
                   <div style={{position:"absolute",top:4,left:bigBoyEnabled?26:4,width:20,height:20,borderRadius:"50%",background:"#fff",transition:"left 0.2s"}}/>
@@ -706,7 +706,7 @@ export default function TeamTournament({onBack, user, onDelete}){
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                 <div>
                   <div style={{fontWeight:700,fontSize:14,color:C.text}}>Teammate Ties Cancel Skin</div>
-                  <div style={{fontSize:11,color:C.muted,marginTop:2}}>{teammatesTie?"Stricter — teammates tie = skin carries":"Default — teammates don't cancel, team wins"}</div>
+                  <div style={{fontSize:11,color:C.muted,marginTop:2}}>{teammatesTie?"Stricter - teammates tie = skin carries":"Default - teammates don't cancel, team wins"}</div>
                 </div>
                 <button onClick={()=>setTeammatesTie(b=>!b)} style={{width:52,height:28,borderRadius:14,border:"none",cursor:"pointer",background:teammatesTie?C.red:"#333",position:"relative",transition:"background 0.2s",flexShrink:0}}>
                   <div style={{position:"absolute",top:4,left:teammatesTie?26:4,width:20,height:20,borderRadius:"50%",background:"#fff",transition:"left 0.2s"}}/>
@@ -860,7 +860,7 @@ export default function TeamTournament({onBack, user, onDelete}){
                   <div style={{fontSize:13,fontWeight:700,color:C.text,marginBottom:4}}>👀 Spectator Leaderboard</div>
                   <div style={{fontSize:11,color:C.muted,marginBottom:8}}>Anyone with this link can watch the live leaderboard — no account needed</div>
                   <div style={{display:"flex",gap:8}}>
-                    <button onClick={()=>window.open(`sms:?&body=${encodeURIComponent("⛳ Watch the tournament live!\n"+spectatorLink)}`)}
+                    <button onClick={()=>window.open(`sms:?&body=${encodeURIComponent("Watch the tournament live!\n"+spectatorLink)}`)}
                       style={{flex:2,padding:"11px",background:C.green,color:"#0a1a0f",border:"none",borderRadius:10,fontSize:13,fontWeight:800,cursor:"pointer"}}>📱 Text Spectators</button>
                     <button onClick={()=>navigator.clipboard?.writeText(spectatorLink)}
                       style={{flex:1,padding:"11px",background:"transparent",color:C.muted,border:"1px solid "+C.border,borderRadius:10,fontSize:12,cursor:"pointer"}}>📋 Copy</button>
@@ -897,29 +897,41 @@ export default function TeamTournament({onBack, user, onDelete}){
           })()}
 
           <div style={{height:8}}/>
-          <BigBtn onClick={async()=>{
-            setLoading(true);
-            let id=tourneyId;
-            if(!id){
-              // First time teeing off — create the DB entry now and lock the ID
-              id=await createTourney(teams);
-              setTourneyId(id);
-            } else {
-              // Already exists — just flip status to active (ID never changes)
-              await sb.from("team_tournaments").update({
-                teams,course_id:courseId,birdie_bonus:birdieBonus,
-                ball_count_by_par:ballsByPar,hole_pars:holePars,
-                skins_enabled:skinsEnabled,big_boy_enabled:bigBoyEnabled,
-                ctp_enabled:ctpEnabled,ctp_holes:ctpHoles,ctp_leaders:ctpLeaders,
-                status:"active",current_hole:1,updated_at:new Date().toISOString()
-              }).eq("id",id);
-            }
-            setLoading(false);
-            setCurrentHole(1);setActiveTeam(0);
-            setScreen("scoring");
-          }}>
-            {loading?"Creating...":"⛳ Tee It Up!"}
-          </BigBtn>
+          {/* Two-step Tee Off: first create/save the tournament and show links, then go to scoring */}
+          {!tourneyId ? (
+            <BigBtn onClick={async()=>{
+              setLoading(true);
+              // Create the DB entry now — links become available immediately
+              const id = await createTourney(teams);
+              if(id) setTourneyId(id);
+              setLoading(false);
+              // Stay on setup screen — director sends links, then taps "Start Scoring"
+            }}>
+              {loading?"Creating...":"Create Tournament & Get Links"}
+            </BigBtn>
+          ) : (
+            <>
+              <div style={{background:"rgba(123,180,80,0.08)",border:"1px solid rgba(123,180,80,0.3)",borderRadius:10,padding:"10px 14px",marginBottom:10,fontSize:12,color:C.green,textAlign:"center"}}>
+                ✓ Tournament created — send links above, then start scoring when everyone is ready
+              </div>
+              <BigBtn onClick={async()=>{
+                setLoading(true);
+                // Save latest team edits and flip to active
+                await sb.from("team_tournaments").update({
+                  teams,course_id:courseId,birdie_bonus:birdieBonus,
+                  ball_count_by_par:ballsByPar,hole_pars:holePars,
+                  skins_enabled:skinsEnabled,big_boy_enabled:bigBoyEnabled,
+                  ctp_enabled:ctpEnabled,ctp_holes:ctpHoles,ctp_leaders:ctpLeaders,
+                  status:"active",current_hole:1,updated_at:new Date().toISOString()
+                }).eq("id",tourneyId);
+                setLoading(false);
+                setCurrentHole(1);setActiveTeam(0);
+                setScreen("scoring");
+              }} color={C.gold}>
+                {loading?"Starting...":"Start Scoring"}
+              </BigBtn>
+            </>
+          )}
         </div>
       </div>
     );
@@ -947,9 +959,9 @@ export default function TeamTournament({onBack, user, onDelete}){
               <div style={{fontSize:11,color:C.muted,letterSpacing:2,textTransform:"uppercase"}}>Hole</div>
               <div style={{fontSize:48,fontWeight:800,lineHeight:1}}>{currentHole}</div>
               <div style={{fontSize:12,color:C.green,fontWeight:600}}>
-                Par {effPar}{effPar!==holeData.par?" ⚡":""}  · Hdcp {holeData.hdcp}
+                Par {effPar}{effPar!==holeData.par?" !!":""}  · Hdcp {holeData.hdcp}
               </div>
-              {saveStatus&&<div style={{fontSize:10,color:saveStatus==="saving"?C.gold:C.green,marginTop:2}}>{saveStatus==="saving"?"💾 Saving...":"✓ Saved"}</div>}
+              {saveStatus&&<div style={{fontSize:10,color:saveStatus==="saving"?C.gold:C.green,marginTop:2}}>{saveStatus==="saving"?"Saving...":"Saved"}</div>}
             </div>
             <div style={{display:"flex",flexDirection:"column",gap:6,alignItems:"flex-end"}}>
               <button onClick={()=>setScreen("home")}
@@ -1023,7 +1035,7 @@ export default function TeamTournament({onBack, user, onDelete}){
                 {[["F9",sc.frontDiff,sc.front],["B9",sc.backDiff,sc.back],["Tot",sc.totalDiff,sc.total]].map(([lbl,diff,raw])=>(
                   <div key={lbl} style={{textAlign:"center"}}>
                     <div style={{fontSize:10,color:C.muted}}>{lbl}</div>
-                    <div style={{fontSize:15,fontWeight:800,color:raw===0?C.muted:relColor(diff)}}>{raw===0?"—":relLabel(diff)}</div>
+                    <div style={{fontSize:15,fontWeight:800,color:raw===0?C.muted:relColor(diff)}}>{raw===0?"--":relLabel(diff)}</div>
                   </div>
                 ))}
               </div>
@@ -1054,7 +1066,7 @@ export default function TeamTournament({onBack, user, onDelete}){
                     {isCtpLeader&&<span style={{fontSize:10,color:C.gold,fontWeight:700,marginLeft:8}}>📍 CTP LEADER {ctpLeader.distance}</span>}
                   </div>
                   <div style={{display:"flex",alignItems:"center",gap:8}}>
-                    {diff!==null&&<div style={{fontSize:14,fontWeight:800,color:relColor(diff)}}>{relLabel(diff)}{diff<=-1?" 🐦":""}</div>}
+                    {diff!==null&&<div style={{fontSize:14,fontWeight:800,color:relColor(diff)}}>{relLabel(diff)}{diff<=-1?"  (birdie)":""}</div>}
                     {/* CTP checkbox — shows on every player on CTP holes */}
                     {isCtpHole&&(
                       <button
@@ -1070,7 +1082,7 @@ export default function TeamTournament({onBack, user, onDelete}){
                           fontSize:isCtpLeader?16:14,cursor:"pointer",fontWeight:800,
                           display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0
                         }}>
-                        {isCtpLeader?"📍":"☐"}
+                        {isCtpLeader?"[CTP]":"[ ]"}
                       </button>
                     )}
                   </div>
@@ -1079,7 +1091,7 @@ export default function TeamTournament({onBack, user, onDelete}){
                   <button onClick={()=>setPlayerScore(activeTeam,j,currentHole,score!==null?Math.max(1,score-1):effPar-1)}
                     style={{width:56,height:56,borderRadius:"50%",background:C.dim,border:"1px solid "+C.border,color:C.text,fontSize:30,fontWeight:700,cursor:"pointer"}}>−</button>
                   <div style={{flex:1,textAlign:"center"}}>
-                    <div style={{fontSize:56,fontWeight:800,color:score!==null?C.text:C.muted,lineHeight:1}}>{score!==null?score:"—"}</div>
+                    <div style={{fontSize:56,fontWeight:800,color:score!==null?C.text:C.muted,lineHeight:1}}>{score!==null?score:"--"}</div>
                     {score===null&&<div style={{fontSize:11,color:C.muted,marginTop:4}}>tap + to enter</div>}
                   </div>
                   <button onClick={()=>setPlayerScore(activeTeam,j,currentHole,score!==null?score+1:effPar)}
@@ -1111,7 +1123,7 @@ export default function TeamTournament({onBack, user, onDelete}){
           })()}
 
           <BigBtn onClick={()=>isLastHole?setScreen("leaderboard"):setCurrentHole(h=>h+1)} color={isLastHole?C.gold:C.green}>
-            {isLastHole?"See Final Results 🏆":"Next — Hole "+(currentHole+1)}
+            {isLastHole?"See Final Results":"Next - Hole "+(currentHole+1)}
           </BigBtn>
 
           {/* Mini standings */}
@@ -1120,7 +1132,7 @@ export default function TeamTournament({onBack, user, onDelete}){
               <div key={t.id||rank} style={{background:C.card,border:"1px solid "+t.color+"44",borderRadius:20,padding:"5px 12px",fontSize:12,display:"flex",alignItems:"center",gap:6}}>
                 <span style={{color:C.muted}}>{rank+1}.</span>
                 <span style={{fontWeight:700,color:t.color}}>{t.name}</span>
-                <span style={{fontWeight:800,color:relColor(t.sc.totalDiff)}}>{t.sc.total?relLabel(t.sc.totalDiff):"—"}</span>
+                <span style={{fontWeight:800,color:relColor(t.sc.totalDiff)}}>{t.sc.total?relLabel(t.sc.totalDiff):"--"}</span>
               </div>
             ))}
           </div>
@@ -1172,7 +1184,7 @@ export default function TeamTournament({onBack, user, onDelete}){
                         <div style={{fontSize:11,color:C.red,marginTop:6}}>Must be closer than {leader.distance} to claim</div>
                       </>
                     ):(
-                      <div style={{fontSize:13,color:C.muted}}>{isOwn?"You currently hold CTP — update your distance below":"No leader yet — first entry wins!"}</div>
+                      <div style={{fontSize:13,color:C.muted}}>{isOwn?"You currently hold CTP - update your distance below":"No leader yet - first entry wins!"}</div>
                     )}
                   </div>
 
@@ -1293,7 +1305,7 @@ export default function TeamTournament({onBack, user, onDelete}){
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                     <div>
                       <div style={{fontWeight:700,fontSize:13,color:C.gold}}>⭐ Big Boy Skins</div>
-                      <div style={{fontSize:11,color:C.muted,marginTop:2}}>{bigBoyEnabled?"Parallel opt-in game — BB vs BB only":"Off"}</div>
+                      <div style={{fontSize:11,color:C.muted,marginTop:2}}>{bigBoyEnabled?"Parallel opt-in game - BB vs BB only":"Off"}</div>
                     </div>
                     <button onClick={async()=>{const v=!bigBoyEnabled;setBigBoyEnabled(v);await sb.from("team_tournaments").update({big_boy_enabled:v,updated_at:new Date().toISOString()}).eq("id",tourneyId);}} style={{width:52,height:28,borderRadius:14,border:"none",cursor:"pointer",background:bigBoyEnabled?C.gold:"#333",position:"relative",flexShrink:0,transition:"background 0.2s"}}>
                       <div style={{position:"absolute",top:4,left:bigBoyEnabled?26:4,width:20,height:20,borderRadius:"50%",background:"#fff",transition:"left 0.2s"}}/>
@@ -1306,7 +1318,7 @@ export default function TeamTournament({onBack, user, onDelete}){
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                     <div>
                       <div style={{fontWeight:700,fontSize:13,color:C.text}}>Teammate Ties Cancel Skin</div>
-                      <div style={{fontSize:11,color:C.muted,marginTop:2}}>{teammatesTie?"Stricter — teammates tie = carries":"Default — team wins if no other team ties"}</div>
+                      <div style={{fontSize:11,color:C.muted,marginTop:2}}>{teammatesTie?"Stricter - teammates tie = carries":"Default - team wins if no other team ties"}</div>
                     </div>
                     <button onClick={async()=>{const v=!teammatesTie;setTeammatesTie(v);await sb.from("team_tournaments").update({teammates_tie:v,updated_at:new Date().toISOString()}).eq("id",tourneyId);}} style={{width:52,height:28,borderRadius:14,border:"none",cursor:"pointer",background:teammatesTie?C.red:"#333",position:"relative",flexShrink:0,transition:"background 0.2s"}}>
                       <div style={{position:"absolute",top:4,left:teammatesTie?26:4,width:20,height:20,borderRadius:"50%",background:"#fff",transition:"left 0.2s"}}/>
@@ -1329,7 +1341,7 @@ export default function TeamTournament({onBack, user, onDelete}){
                           color:(holePars[4]??3)===p?"#0a1a0f":"#ffffff",
                           border:"2px solid "+((holePars[4]??3)===p?C.green:"rgba(255,255,255,0.3)"),
                           borderRadius:10,fontSize:16,fontWeight:(holePars[4]??3)===p?800:600,cursor:"pointer"}}>
-                        Par {p}{p===3?" ✓ default":""}
+                        Par {p}{p===3?" (default)":""}
                       </button>
                     ))}
                   </div>
@@ -1361,7 +1373,7 @@ export default function TeamTournament({onBack, user, onDelete}){
                       {/* Team size */}
                       <div style={{background:C.surface,borderRadius:10,padding:"10px 12px"}}>
                         <div style={{fontSize:10,color:sizeWarning?C.red:C.muted,fontWeight:600,marginBottom:6,textTransform:"uppercase",letterSpacing:1}}>
-                          {sizeWarning?"⚠️ ":""}Players
+                          {sizeWarning?"Warning: ":""}Players
                         </div>
                         <div style={{display:"flex",alignItems:"center",gap:8}}>
                           <button onClick={()=>updateTeam(i,{size:Math.max(1,size-1)})}
@@ -1418,7 +1430,7 @@ export default function TeamTournament({onBack, user, onDelete}){
                   <div style={{display:"flex",gap:8}}>
                     <button onClick={()=>{
                       const link=`https://press-golf.vercel.app?tourney=${tourneyId}&spectate=1`;
-                      window.open(`sms:?&body=${encodeURIComponent(`⛳ Watch the tournament live!\n${link}`)}`);
+                      window.open(`sms:?&body=${encodeURIComponent(`Watch the tournament live!\n${link}`)}`);
                     }} style={{flex:2,padding:"11px",background:C.green,color:"#0a1a0f",border:"none",borderRadius:10,fontSize:13,fontWeight:800,cursor:"pointer"}}>
                       📱 Text Spectators
                     </button>
@@ -1436,7 +1448,7 @@ export default function TeamTournament({onBack, user, onDelete}){
                 onClick={()=>setShowSettings(false)}
                 disabled={cbWarnings.length>0}
                 style={{width:"100%",padding:"16px",background:cbWarnings.length>0?"#1a2a1a":C.green,color:cbWarnings.length>0?C.muted:"#0a1a0f",border:"none",borderRadius:12,fontSize:16,fontWeight:800,cursor:cbWarnings.length>0?"not-allowed":"pointer"}}>
-                {cbWarnings.length>0?"Fix team size before closing ⚠️":"✓ Done — Changes Saved"}
+                {cbWarnings.length>0?"Fix team size before closing":"Done - Changes Saved"}
               </button>
             </div>
           </div>
@@ -1459,14 +1471,14 @@ export default function TeamTournament({onBack, user, onDelete}){
               {ballsByPar[3]===ballsByPar[4]&&ballsByPar[4]===ballsByPar[5]
                 ? `${ballsByPar[4]||2} Best Ball`
                 : `Par3:${ballsByPar[3]||2} Par4:${ballsByPar[4]||2} Par5:${ballsByPar[5]||2}`
-              }{birdieBonus?" · Birdie Bonus ✓":""} · Hole {currentHole}
+              }{birdieBonus?" - Birdie Bonus":""} - Hole {currentHole}
             </div>
           </div>
         </div>
 
         {/* Tabs */}
         <div style={{display:"flex",borderBottom:"1px solid "+C.border,background:"rgba(0,0,0,0.2)",overflowX:"auto"}}>
-          {[["standings","🏆 Standings"],["scorecard","📋 Scorecard"],["top10","⭐ Top 10"],["skins","💰 Skins"],...(ctpEnabled&&ctpHoles.length>0?[["ctp","📍 CTP"]]:[])]
+          {[["standings","Standings"],["scorecard","Scorecard"],["top10","Top 10"],["skins","Skins"],...(ctpEnabled&&ctpHoles.length>0?[["ctp","CTP"]]:[])]
             .map(([id,lbl])=>(
             <button key={id} onClick={()=>setLbTab(id)} style={{flex:1,padding:"10px 2px",fontSize:11,fontWeight:lbTab===id?700:500,background:"transparent",color:lbTab===id?(id==="ctp"?C.gold:C.green):C.muted,border:"none",borderBottom:lbTab===id?"2px solid "+(id==="ctp"?C.gold:C.green):"2px solid transparent",cursor:"pointer",whiteSpace:"nowrap",flexShrink:0}}>{lbl}</button>
           ))}
@@ -1489,10 +1501,10 @@ export default function TeamTournament({onBack, user, onDelete}){
                         <div style={{fontWeight:800,fontSize:15,color:rank===0?C.gold:C.text}}>{team.name}</div>
                         {team.strokesPerSide>0&&<div style={{fontSize:9,color:C.gold}}>+{team.strokesPerSide}/side</div>}
                       </div>
-                      <div style={{fontSize:11,color:C.muted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:2}}>{(team.players||[]).filter(Boolean).join(" · ")||"No players"}</div>
+                      <div style={{fontSize:11,color:C.muted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:2}}>{(team.players||[]).filter(Boolean).join(" / ")||"No players"}</div>
                     </div>
                     {[team.sc.frontDiff,team.sc.backDiff,team.sc.totalDiff].map((d,idx)=>(
-                      <div key={idx} style={{width:44,textAlign:"center",fontWeight:800,fontSize:16,color:team.sc.total===0?C.muted:relColor(d)}}>{team.sc.total===0?"—":relLabel(d)}</div>
+                      <div key={idx} style={{width:44,textAlign:"center",fontWeight:800,fontSize:16,color:team.sc.total===0?C.muted:relColor(d)}}>{team.sc.total===0?"--":relLabel(d)}</div>
                     ))}
                   </div>
                 </div>
@@ -1523,11 +1535,11 @@ export default function TeamTournament({onBack, user, onDelete}){
                     return(
                       <tr key={team.id||ri} style={{borderTop:"1px solid "+C.dim}}>
                         <td style={{padding:"4px 6px",fontWeight:700,color:team.color,whiteSpace:"nowrap"}}>{team.name}</td>
-                        {fH.map(h=>{const hd=team.sc.byHole[h.hole];return<td key={h.hole} style={{padding:"4px 3px",textAlign:"center",fontWeight:600,color:hd?relColor(hd.diff):C.dim}}>{hd?relLabel(hd.diff):"—"}</td>;})}
-                        <td style={{padding:"4px",textAlign:"center",fontWeight:800,color:team.sc.front?relColor(team.sc.frontDiff):C.muted}}>{team.sc.front?relLabel(team.sc.frontDiff):"—"}</td>
-                        {bH.map(h=>{const hd=team.sc.byHole[h.hole];return<td key={h.hole} style={{padding:"4px 3px",textAlign:"center",fontWeight:600,color:hd?relColor(hd.diff):C.dim}}>{hd?relLabel(hd.diff):"—"}</td>;})}
-                        <td style={{padding:"4px",textAlign:"center",fontWeight:800,color:team.sc.back?relColor(team.sc.backDiff):C.muted}}>{team.sc.back?relLabel(team.sc.backDiff):"—"}</td>
-                        <td style={{padding:"4px",textAlign:"center",fontWeight:800,color:team.sc.total?relColor(team.sc.totalDiff):C.muted}}>{team.sc.total?relLabel(team.sc.totalDiff):"—"}</td>
+                        {fH.map(h=>{const hd=team.sc.byHole[h.hole];return<td key={h.hole} style={{padding:"4px 3px",textAlign:"center",fontWeight:600,color:hd?relColor(hd.diff):C.dim}}>{hd?relLabel(hd.diff):"--"}</td>;})}
+                        <td style={{padding:"4px",textAlign:"center",fontWeight:800,color:team.sc.front?relColor(team.sc.frontDiff):C.muted}}>{team.sc.front?relLabel(team.sc.frontDiff):"--"}</td>
+                        {bH.map(h=>{const hd=team.sc.byHole[h.hole];return<td key={h.hole} style={{padding:"4px 3px",textAlign:"center",fontWeight:600,color:hd?relColor(hd.diff):C.dim}}>{hd?relLabel(hd.diff):"--"}</td>;})}
+                        <td style={{padding:"4px",textAlign:"center",fontWeight:800,color:team.sc.back?relColor(team.sc.backDiff):C.muted}}>{team.sc.back?relLabel(team.sc.backDiff):"--"}</td>
+                        <td style={{padding:"4px",textAlign:"center",fontWeight:800,color:team.sc.total?relColor(team.sc.totalDiff):C.muted}}>{team.sc.total?relLabel(team.sc.totalDiff):"--"}</td>
                       </tr>
                     );
                   })}
