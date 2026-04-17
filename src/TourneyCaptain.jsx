@@ -10,7 +10,7 @@ const C = {
 };
 
 function safeInt(v,f=0){const n=parseInt(v,10);return isNaN(n)?f:n;}
-function relLabel(d){if(d===null||d===undefined)return"—";if(d===0)return"E";return d>0?"+"+d:String(d);}
+function relLabel(d){if(d===null||d===undefined)return"--";if(d===0)return"E";return d>0?"+"+d:String(d);}
 function relColor(d){if(d===null||d===undefined)return C.muted;if(d<0)return C.green;if(d>0)return C.red;return C.muted;}
 
 function calcTeamScore(teamScores,teamSize,holeData,birdieBonus,ballsByPar,holePars){
@@ -169,7 +169,7 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
         <div style={{ background:`linear-gradient(180deg,${C.card} 0%,transparent 100%)`, padding:"44px 16px 16px" }}>
           <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:4 }}>
             <button onClick={()=>setTab("scores")} style={{ background:"rgba(123,180,80,0.15)", border:`1px solid ${C.green}`, color:C.green, fontSize:13, cursor:"pointer", padding:"6px 14px", borderRadius:16, fontWeight:700 }}>‹ Scores</button>
-            <div style={{ fontSize:13, color:saveStatus==="saving"?C.gold:C.green, fontWeight:600 }}>{saveStatus==="saving"?"💾 Saving...":saveStatus==="saved"?"✓ Saved":""}</div>
+            <div style={{ fontSize:13, color:saveStatus==="saving"?C.gold:C.green, fontWeight:600 }}>{saveStatus==="saving"?"Saving...":saveStatus==="saved"?"Saved":""}</div>
           </div>
           <div style={{ display:"flex", alignItems:"center", gap:8, marginTop:12 }}>
             <div style={{ width:12, height:12, borderRadius:"50%", background:team.color }}/>
@@ -237,8 +237,8 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
           <div style={{ textAlign:"center" }}>
             <div style={{ fontSize:11, color:C.muted, letterSpacing:2, textTransform:"uppercase" }}>Hole</div>
             <div style={{ fontSize:48, fontWeight:800, lineHeight:1 }}>{currentHole}</div>
-            <div style={{ fontSize:12, color:C.green, fontWeight:600 }}>Par {effPar}{effPar!==holeData.par?" ⚡":""} · Hdcp {holeData.hdcp}</div>
-            {saveStatus && <div style={{ fontSize:10, color:saveStatus==="saving"?C.gold:C.green, marginTop:2 }}>{saveStatus==="saving"?"💾 Saving...":"✓ Saved"}</div>}
+            <div style={{ fontSize:12, color:C.green, fontWeight:600 }}>Par {effPar}{effPar!==holeData.par?" !!":""} · Hdcp {holeData.hdcp}</div>
+            {saveStatus && <div style={{ fontSize:10, color:saveStatus==="saving"?C.gold:C.green, marginTop:2 }}>{saveStatus==="saving"?"Saving...":"Saved"}</div>}
           </div>
           <button onClick={()=>setShowCaptainSettings(true)}
             style={{ background:"rgba(123,180,80,0.15)", border:`1px solid ${C.green}`, color:C.green, fontSize:15, cursor:"pointer", padding:"12px 20px", borderRadius:12, fontWeight:700 }}>⚙️ Settings</button>
@@ -262,10 +262,10 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
 
             {/* Board tabs */}
             {(()=>{
-              const medals=["🥇","🥈","🥉"];
+              const medals=["1st","2nd","3rd"];
               return(<>
                 <div style={{display:"flex",gap:0,marginBottom:16,border:"1px solid "+C.border,borderRadius:10,overflow:"hidden"}}>
-                  {[["standings","🏆 Standings"],["top10","⭐ Top 10"],["skins","💰 Skins"],...(ctpEnabled&&ctpHoles.length>0?[["ctp","📍 CTP"]]:[])]
+                  {[["standings","Standings"],["top10","Top 10"],["skins","Skins"],...(ctpEnabled&&ctpHoles.length>0?[["ctp","CTP"]]:[])]
                     .map(([id,lbl])=>(
                     <button key={id} onClick={()=>setBTab(id)} style={{flex:1,padding:"11px",fontSize:12,fontWeight:bTab===id?700:500,background:bTab===id?(id==="ctp"?C.gold:C.green):"transparent",color:bTab===id?"#0a1a0f":C.muted,border:"none",cursor:"pointer"}}>{lbl}</button>
                   ))}
@@ -290,12 +290,12 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
                           <div style={{ flex:1,minWidth:0 }}>
                             <div style={{ display:"flex",alignItems:"center",gap:6 }}>
                               <div style={{ width:10,height:10,borderRadius:"50%",background:t.color,flexShrink:0 }}/>
-                              <div style={{ fontWeight:800,fontSize:14,color:isMyTeam?C.green:rank===0?C.gold:C.text }}>{t.name}{isMyTeam?" ★":""}</div>
+                              <div style={{ fontWeight:800,fontSize:14,color:isMyTeam?C.green:rank===0?C.gold:C.text }}>{t.name}{isMyTeam?" *":""}</div>
                             </div>
                           </div>
                           {[t.sc.frontDiff,t.sc.backDiff,t.sc.totalDiff].map((diff,idx)=>{
                             const raw=idx===0?t.sc.front:idx===1?t.sc.back:t.sc.total;
-                            return<div key={idx} style={{ width:44,textAlign:"center",fontWeight:800,fontSize:15,color:raw===0?C.muted:relColor(diff) }}>{raw===0?"—":relLabel(diff)}</div>;
+                            return<div key={idx} style={{ width:44,textAlign:"center",fontWeight:800,fontSize:15,color:raw===0?C.muted:relColor(diff) }}>{raw===0?"--":relLabel(diff)}</div>;
                           })}
                         </div>
                       );
@@ -321,7 +321,7 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
                     <div key={`${p.ti}-${p.pi}`} style={{background:p.isMe?"rgba(123,180,80,0.08)":i===0?"rgba(232,184,75,0.08)":C.card,border:`1px solid ${p.isMe?C.green+"44":i===0?C.gold+"44":C.border}`,borderRadius:12,padding:"12px 14px",marginBottom:8,display:"flex",alignItems:"center",gap:12}}>
                       <div style={{width:32,textAlign:"center",fontSize:i<3?20:14,fontWeight:800,color:i<3?C.gold:C.muted,flexShrink:0}}>{i<3?medals[i]:i+1}</div>
                       <div style={{flex:1,minWidth:0}}>
-                        <div style={{fontWeight:800,fontSize:15,color:p.isMe?C.green:i===0?C.gold:C.text}}>{p.name}{p.isMe?" ★":""}</div>
+                        <div style={{fontWeight:800,fontSize:15,color:p.isMe?C.green:i===0?C.gold:C.text}}>{p.name}{p.isMe?" *":""}</div>
                         <div style={{display:"flex",alignItems:"center",gap:6,marginTop:2}}>
                           <div style={{width:8,height:8,borderRadius:"50%",background:p.teamColor}}/>
                           <div style={{fontSize:11,color:C.muted}}>{p.teamName}</div>
@@ -392,7 +392,7 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
               {[["F",sc.frontDiff,sc.front],["B",sc.backDiff,sc.back],["T",sc.totalDiff,sc.total]].map(([l,d,raw])=>(
                 <div key={l} style={{ textAlign:"center" }}>
                   <div style={{ fontSize:9, color:C.muted }}>{l}</div>
-                  <div style={{ fontSize:14, fontWeight:800, color:raw===0?C.muted:relColor(d) }}>{raw===0?"—":relLabel(d)}</div>
+                  <div style={{ fontSize:14, fontWeight:800, color:raw===0?C.muted:relColor(d) }}>{raw===0?"--":relLabel(d)}</div>
                 </div>
               ))}
             </div>
@@ -464,7 +464,7 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
                   {isCtpLeader&&<span style={{ fontSize:10, color:C.gold, fontWeight:700, marginLeft:8 }}>📍 CTP {ctpLeader.distance}</span>}
                 </div>
                 <div style={{display:"flex",alignItems:"center",gap:8}}>
-                  {diff!==null&&<div style={{ fontSize:14, fontWeight:800, color:relColor(diff) }}>{relLabel(diff)}{diff<=-1?" 🐦":""}</div>}
+                  {diff!==null&&<div style={{ fontSize:14, fontWeight:800, color:relColor(diff) }}>{relLabel(diff)}{diff<=-1?" (birdie)":""}</div>}
                   {isCtpHole&&(
                     <button
                       onClick={()=>{
@@ -472,7 +472,7 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
                         setCtpPopup({holeNum:currentHole,teamIdx,playerIdx:j,playerName:team.players?.[j]||"Player "+(j+1),teamName:team.name});
                       }}
                       style={{width:36,height:36,borderRadius:8,background:isCtpLeader?C.gold:"rgba(232,184,75,0.15)",border:"2px solid "+(isCtpLeader?C.gold:"rgba(232,184,75,0.4)"),color:isCtpLeader?"#0a1a0f":C.gold,fontSize:isCtpLeader?16:14,cursor:"pointer",fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                      {isCtpLeader?"📍":"☐"}
+                      {isCtpLeader?"[CTP]":"[ ]"}
                     </button>
                   )}
                 </div>
@@ -481,7 +481,7 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
                 <button onClick={()=>setPlayerScore(j,currentHole,score!==null?Math.max(1,score-1):effPar-1)}
                   style={{ width:56,height:56,borderRadius:"50%",background:C.dim,border:`1px solid ${C.border}`,color:C.text,fontSize:30,fontWeight:700,cursor:"pointer" }}>−</button>
                 <div style={{ flex:1,textAlign:"center" }}>
-                  <div style={{ fontSize:56,fontWeight:800,color:score!==null?C.text:C.muted,lineHeight:1 }}>{score!==null?score:"—"}</div>
+                  <div style={{ fontSize:56,fontWeight:800,color:score!==null?C.text:C.muted,lineHeight:1 }}>{score!==null?score:"--"}</div>
                   {score===null&&<div style={{ fontSize:11,color:C.muted,marginTop:4 }}>tap + to enter</div>}
                 </div>
                 <button onClick={()=>setPlayerScore(j,currentHole,score!==null?score+1:effPar)}
@@ -525,7 +525,7 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
           color:isLastHole?C.muted:"#0a1a0f",border:"none",borderRadius:14,
           fontSize:17,fontWeight:800,cursor:isLastHole?"not-allowed":"pointer",marginBottom:12
         }}>
-          {isLastHole?"Round Complete! ⛳":"Next — Hole "+(currentHole+1)}
+          {isLastHole?"Round Complete!":"Next - Hole "+(currentHole+1)}
         </button>
       </div>
 
@@ -572,7 +572,7 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
                       <div style={{fontSize:11,color:C.red,marginTop:6}}>Must be closer than {leader.distance}</div>
                     </>
                   ):(
-                    <div style={{fontSize:13,color:C.muted}}>{isOwn?"You hold CTP — update distance below":"No leader yet — first entry wins!"}</div>
+                    <div style={{fontSize:13,color:C.muted}}>{isOwn?"You hold CTP - update distance below":"No leader yet - first entry wins!"}</div>
                   )}
                 </div>
                 <div style={{fontSize:12,color:C.muted,marginBottom:8}}>Enter distance (e.g. 4'6" or 12.5 ft)</div>
@@ -670,7 +670,7 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
                         color:current===p?"#0a1a0f":C.text,
                         border:"1px solid "+(current===p?C.green:C.border),
                         borderRadius:10,fontSize:15,fontWeight:current===p?800:500,cursor:"pointer"
-                      }}>Par {p}{p===3?" ✓":""}
+                      }}>Par {p}{p===3?" (def)":""}
                       </button>
                     );
                   })}
@@ -687,7 +687,7 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
                 <div style={{ width:12,height:12,borderRadius:"50%",background:team.color }}/>
                 <div style={{ fontWeight:800,fontSize:16,color:C.text }}>{team.name}</div>
               </div>
-              <div style={{ fontSize:11,color:C.muted,marginBottom:8,fontWeight:600 }}>Player Names{tourney.big_boy_enabled?" · tap BB to enroll in Big Boy":""}</div>
+              <div style={{ fontSize:11,color:C.muted,marginBottom:8,fontWeight:600 }}>Player Names{tourney.big_boy_enabled?" - tap BB to enroll in Big Boy":""}</div>
               <div style={{ display:"flex",flexDirection:"column",gap:8 }}>
                 {Array.from({length:team.size||2},(_,j)=>(
                   <div key={j} style={{display:"flex",alignItems:"center",gap:8}}>
