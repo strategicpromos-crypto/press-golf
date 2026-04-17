@@ -55,8 +55,9 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
   const [showSummary,       setShowSummary]       = useState(false);
   const [showCaptainSettings, setShowCaptainSettings] = useState(false);
   const [bTab,         setBTab]         = useState("standings");
-  const [ctpPopup,     setCtpPopup]     = useState(null);
-  const [ctpInput,     setCtpInput]     = useState("");
+  const [ctpPopup,     setCtpPopup]     = useState(false); // simple open/close
+  const [ctpName,      setCtpName]      = useState("");
+  const [ctpDist,      setCtpDist]      = useState("");
   const saveTimer = useRef(null);
   const subRef    = useRef(null);
 
@@ -265,7 +266,7 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
               const medals=["1st","2nd","3rd"];
               return(<>
                 <div style={{display:"flex",gap:0,marginBottom:16,border:"1px solid "+C.border,borderRadius:10,overflow:"hidden"}}>
-                  {[["standings","Standings"],["top10","Top 10"],["skins","Skins"],...(ctpEnabled&&ctpHoles.length>0?[["ctp","CTP"]]:[])]
+                  {[["standings","Standings"],["top10","Top 10"],["skins","Skins"],...(ctpEnabled?[["ctp","CTP"]]:[])]
                     .map(([id,lbl])=>(
                     <button key={id} onClick={()=>setBTab(id)} style={{flex:1,padding:"11px",fontSize:12,fontWeight:bTab===id?700:500,background:bTab===id?(id==="ctp"?C.gold:C.green):"transparent",color:bTab===id?"#0a1a0f":C.muted,border:"none",cursor:"pointer"}}>{lbl}</button>
                   ))}
@@ -337,27 +338,22 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
                 {bTab==="skins"&&<SkinsTab teams={tourney.teams||[]} course={course} holePars={tourney.hole_pars||{}} skinsEnabled={tourney.skins_enabled===true} bigBoyEnabled={tourney.big_boy_enabled===true}/>}
                 {bTab==="ctp"&&(
                   <div>
-                    <div style={{fontSize:11,color:C.gold,letterSpacing:1.5,textTransform:"uppercase",marginBottom:12,fontWeight:600}}>📍 Closest to the Pin</div>
-                    {ctpHoles.sort((a,b)=>a-b).map(holeNum=>{
-                      const leader=ctpLeaders[holeNum];
-                      const h=course.holes.find(x=>x.hole===holeNum);
+                    <div style={{fontSize:11,color:C.gold,letterSpacing:1.5,textTransform:"uppercase",marginBottom:12,fontWeight:600}}>Closest to the Pin</div>
+                    {course.holes.filter(h=>(tourney.hole_pars||{})[h.hole]===3||(!(tourney.hole_pars?.[h.hole])&&h.par===3)).map(h=>{
+                      const leader=ctpLeaders[h.hole];
                       return(
-                        <div key={holeNum} style={{background:leader?"rgba(232,184,75,0.08)":C.card,border:"1px solid "+(leader?"rgba(232,184,75,0.4)":C.border),borderRadius:12,padding:"14px",marginBottom:10}}>
+                        <div key={h.hole} style={{background:leader?"rgba(232,184,75,0.08)":C.card,border:"1px solid "+(leader?"rgba(232,184,75,0.4)":C.border),borderRadius:12,padding:"14px",marginBottom:10}}>
                           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                            <div>
-                              <div style={{fontWeight:800,fontSize:15}}>Hole {holeNum} · Par {h?.par}</div>
-                            </div>
+                            <div><div style={{fontWeight:800,fontSize:15}}>Hole {h.hole} - Par {(tourney.hole_pars||{})[h.hole]??h.par}</div></div>
                             {leader?(
-                              <div style={{textAlign:"right"}}>
-                                <div style={{fontSize:20,fontWeight:800,color:C.gold}}>{leader.distance}</div>
-                              </div>
+                              <div style={{textAlign:"right"}}><div style={{fontSize:20,fontWeight:800,color:C.gold}}>{leader.distance}</div></div>
                             ):(
                               <div style={{fontSize:12,color:C.dim}}>No entry yet</div>
                             )}
                           </div>
                           {leader&&(
                             <div style={{marginTop:8,background:"rgba(232,184,75,0.1)",borderRadius:8,padding:"8px 10px",display:"flex",alignItems:"center",gap:8}}>
-                              <span style={{fontSize:18}}>🏆</span>
+                              <div style={{fontSize:18}}>[CTP]</div>
                               <div>
                                 <div style={{fontWeight:700,fontSize:14,color:C.gold}}>{leader.name}</div>
                                 <div style={{fontSize:11,color:C.muted}}>{leader.teamName}</div>
@@ -426,24 +422,25 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
           })}
         </div>
 
-        {/* CTP banner — shows current leader when on a CTP hole */}
-        {ctpEnabled&&ctpHoles.includes(currentHole)&&(()=>{
+        {/* CTP button — auto-shows on all par 3 holes when ctpEnabled */}
+        {ctpEnabled&&effPar===3&&(()=>{
           const leader=ctpLeaders[currentHole];
           return(
-            <div style={{marginBottom:8,background:"rgba(232,184,75,0.1)",border:"1px solid rgba(232,184,75,0.35)",borderRadius:12,padding:"10px 14px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-              <div>
-                <div style={{fontSize:10,color:C.gold,letterSpacing:2,textTransform:"uppercase",fontWeight:600}}>📍 CTP Hole {currentHole}</div>
-                {leader?(
-                  <div style={{fontSize:13,fontWeight:700,color:C.text,marginTop:2}}>
-                    {leader.name} · <span style={{color:C.gold}}>{leader.distance}</span>
-                    <span style={{fontSize:11,color:C.muted,marginLeft:6}}>{leader.teamName}</span>
-                  </div>
-                ):(
-                  <div style={{fontSize:12,color:C.muted,marginTop:2}}>No leader yet — tap ☐ to claim</div>
-                )}
+            <button onClick={()=>{setCtpName("");setCtpDist("");setCtpPopup(true);}}
+              style={{width:"100%",padding:"14px 16px",marginBottom:10,background:leader?"rgba(232,184,75,0.15)":"rgba(232,184,75,0.08)",border:"2px solid rgba(232,184,75,0.5)",borderRadius:12,cursor:"pointer",textAlign:"left",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <div style={{display:"flex",alignItems:"center",gap:10}}>
+                <div style={{fontSize:26,flexShrink:0}}>📍</div>
+                <div>
+                  <div style={{fontSize:11,color:C.gold,letterSpacing:1.5,textTransform:"uppercase",fontWeight:700,marginBottom:2}}>Closest to the Pin</div>
+                  {leader?(
+                    <div style={{fontSize:13,fontWeight:700,color:C.text}}>{leader.name} <span style={{color:C.gold,fontWeight:800}}>{leader.distance}</span></div>
+                  ):(
+                    <div style={{fontSize:12,color:C.muted}}>No leader yet - tap to claim</div>
+                  )}
+                </div>
               </div>
-              {leader&&<div style={{fontSize:20}}>📍</div>}
-            </div>
+              <div style={{fontSize:20,color:C.gold,marginLeft:8}}>+</div>
+            </button>
           );
         })()}
 
@@ -452,29 +449,15 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
           const score=getPlayerScore(j,currentHole);
           const isBest=best2Set.has(j)&&score!==null;
           const diff=score!==null?score-effPar:null;
-          const isCtpHole=ctpEnabled&&ctpHoles.includes(currentHole);
-          const ctpLeader=ctpLeaders[currentHole];
-          const isCtpLeader=ctpLeader&&ctpLeader.teamIdx===teamIdx&&ctpLeader.playerIdx===j;
           return(
-            <div key={j} style={{ background:isBest?"rgba(123,180,80,0.08)":C.card, border:`1px solid ${isCtpLeader?"rgba(232,184,75,0.6)":isBest?C.green:C.border}`, borderRadius:14, padding:"12px 14px", marginBottom:10 }}>
+            <div key={j} style={{ background:isBest?"rgba(123,180,80,0.08)":C.card, border:`1px solid ${isBest?C.green:C.border}`, borderRadius:14, padding:"12px 14px", marginBottom:10 }}>
               <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
                 <div>
                   <span style={{ fontWeight:700, fontSize:15 }}>{team.players?.[j]||"Player "+(j+1)}</span>
-                  {isBest&&<span style={{ fontSize:10, color:C.green, fontWeight:700, marginLeft:8 }}>✓ COUNTS</span>}
-                  {isCtpLeader&&<span style={{ fontSize:10, color:C.gold, fontWeight:700, marginLeft:8 }}>📍 CTP {ctpLeader.distance}</span>}
+                  {isBest&&<span style={{ fontSize:10, color:C.green, fontWeight:700, marginLeft:8 }}>COUNTS</span>}
                 </div>
                 <div style={{display:"flex",alignItems:"center",gap:8}}>
-                  {diff!==null&&<div style={{ fontSize:14, fontWeight:800, color:relColor(diff) }}>{relLabel(diff)}{diff<=-1?" (birdie)":""}</div>}
-                  {isCtpHole&&(
-                    <button
-                      onClick={()=>{
-                        setCtpInput(isCtpLeader?ctpLeader.distance:"");
-                        setCtpPopup({holeNum:currentHole,teamIdx,playerIdx:j,playerName:team.players?.[j]||"Player "+(j+1),teamName:team.name});
-                      }}
-                      style={{width:36,height:36,borderRadius:8,background:isCtpLeader?C.gold:"rgba(232,184,75,0.15)",border:"2px solid "+(isCtpLeader?C.gold:"rgba(232,184,75,0.4)"),color:isCtpLeader?"#0a1a0f":C.gold,fontSize:isCtpLeader?16:14,cursor:"pointer",fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                      {isCtpLeader?"[CTP]":"[ ]"}
-                    </button>
-                  )}
+                  {diff!==null&&<div style={{ fontSize:14, fontWeight:800, color:relColor(diff) }}>{relLabel(diff)}</div>}
                 </div>
               </div>
               <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:8 }}>
@@ -530,66 +513,72 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
       </div>
 
       {/* ── CAPTAIN SETTINGS OVERLAY ─────────────────────────────────── */}
-      {/* ── CTP POPUP MODAL ─────────────────────────────────────────── */}
+      {/* ── CTP POPUP — simple: player name + distance ──────────────── */}
       {ctpPopup&&(()=>{
-        const leader=ctpLeaders[ctpPopup.holeNum];
-        const inputVal=parseFloat(ctpInput);
-        const leaderDist=leader?parseFloat(leader.distance):null;
-        const isValid=!isNaN(inputVal)&&inputVal>0&&(leaderDist===null||inputVal<leaderDist);
-        const isOwn=leader&&leader.teamIdx===ctpPopup.teamIdx&&leader.playerIdx===ctpPopup.playerIdx;
+        const leader=ctpLeaders[currentHole];
+        const canSave=ctpName.trim().length>0&&ctpDist.trim().length>0;
 
         async function submitCtp(){
-          if(!isValid&&!isOwn)return;
-          // Read current DB, update only ctp_leaders so concurrent saves don't conflict
-          const{data:current}=await sb.from("team_tournaments").select("ctp_leaders").eq("id",tourney.id).single();
-          const newLeaders={...(current?.ctp_leaders||{}),[ctpPopup.holeNum]:{
-            name:ctpPopup.playerName,
-            teamName:ctpPopup.teamName,
-            teamIdx:ctpPopup.teamIdx,
-            playerIdx:ctpPopup.playerIdx,
-            distance:ctpInput.trim(),
-            hole:ctpPopup.holeNum,
+          if(!canSave)return;
+          const newLeaders={...(tourney.ctp_leaders||{}),[currentHole]:{
+            name:ctpName.trim(),
+            teamName:team.name,
+            distance:ctpDist.trim(),
+            hole:currentHole,
           }};
           await sb.from("team_tournaments").update({ctp_leaders:newLeaders,updated_at:new Date().toISOString()}).eq("id",tourney.id);
           setTourney(prev=>({...prev,ctp_leaders:newLeaders}));
-          setCtpPopup(null);
-          setCtpInput("");
+          setCtpPopup(false);setCtpName("");setCtpDist("");
         }
 
         return(
           <div style={{position:"fixed",inset:0,zIndex:600,background:"rgba(0,0,0,0.9)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
             <div style={{background:C.surface,border:"2px solid "+C.gold,borderRadius:20,padding:24,width:"100%",maxWidth:340}}>
               <div style={{textAlign:"center",marginBottom:16}}>
-                <div style={{fontSize:36,marginBottom:6}}>📍</div>
-                <div style={{fontSize:20,fontWeight:800,color:C.gold,marginBottom:4}}>Closest to the Pin</div>
-                <div style={{fontSize:13,color:C.muted,marginBottom:4}}>Hole {ctpPopup.holeNum} · {ctpPopup.playerName}</div>
-                <div style={{background:C.card,border:"1px solid rgba(232,184,75,0.3)",borderRadius:12,padding:"12px 14px",marginBottom:14,marginTop:8}}>
-                  {leader&&!isOwn?(
-                    <>
-                      <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:4}}>Current Leader</div>
-                      <div style={{fontSize:18,fontWeight:800,color:C.gold}}>{leader.distance}</div>
-                      <div style={{fontSize:12,color:C.muted,marginTop:2}}>{leader.name} · {leader.teamName}</div>
-                      <div style={{fontSize:11,color:C.red,marginTop:6}}>Must be closer than {leader.distance}</div>
-                    </>
-                  ):(
-                    <div style={{fontSize:13,color:C.muted}}>{isOwn?"You hold CTP - update distance below":"No leader yet - first entry wins!"}</div>
-                  )}
-                </div>
-                <div style={{fontSize:12,color:C.muted,marginBottom:8}}>Enter distance (e.g. 4'6" or 12.5 ft)</div>
-                <input autoFocus value={ctpInput} onChange={e=>setCtpInput(e.target.value)}
-                  placeholder={"e.g. 4'6\" or 12.5"}
-                  style={{width:"100%",padding:"16px",background:C.bg,border:`2px solid ${isValid||isOwn?"rgba(232,184,75,0.6)":C.border}`,borderRadius:10,color:C.gold,fontSize:22,fontWeight:800,outline:"none",textAlign:"center",boxSizing:"border-box",fontFamily:"monospace"}}
-                />
-                {ctpInput&&!isValid&&!isOwn&&leaderDist!==null&&(
-                  <div style={{fontSize:11,color:C.red,marginTop:6}}>Must beat current leader ({leader.distance})</div>
-                )}
+                <div style={{fontSize:20,fontWeight:800,color:C.gold,marginBottom:2}}>Closest to the Pin</div>
+                <div style={{fontSize:13,color:C.muted}}>Hole {currentHole} - Par {effPar}</div>
               </div>
+
+              {leader&&(
+                <div style={{background:"rgba(232,184,75,0.1)",border:"1px solid rgba(232,184,75,0.3)",borderRadius:10,padding:"10px 14px",marginBottom:16,textAlign:"center"}}>
+                  <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:3}}>Current Leader</div>
+                  <div style={{fontSize:22,fontWeight:800,color:C.gold}}>{leader.distance}</div>
+                  <div style={{fontSize:12,color:C.muted,marginTop:2}}>{leader.name} - {leader.teamName}</div>
+                </div>
+              )}
+
+              <div style={{marginBottom:12}}>
+                <div style={{fontSize:11,color:C.green,letterSpacing:1.5,textTransform:"uppercase",fontWeight:600,marginBottom:6}}>Player Name</div>
+                <input autoFocus value={ctpName} onChange={e=>setCtpName(e.target.value)}
+                  placeholder="Who is closest?"
+                  style={{width:"100%",padding:"14px",background:C.bg,border:"1px solid "+C.border,borderRadius:10,color:C.text,fontSize:16,outline:"none",boxSizing:"border-box"}}/>
+              </div>
+
+              <div style={{marginBottom:20}}>
+                <div style={{fontSize:11,color:C.green,letterSpacing:1.5,textTransform:"uppercase",fontWeight:600,marginBottom:6}}>Distance</div>
+                <input value={ctpDist} onChange={e=>setCtpDist(e.target.value)}
+                  placeholder="e.g. 4 ft 6 in"
+                  style={{width:"100%",padding:"14px",background:C.bg,border:"1px solid "+C.border,borderRadius:10,color:C.text,fontSize:16,outline:"none",boxSizing:"border-box"}}/>
+              </div>
+
+              {/* Clear button — only when a leader already exists */}
+              {leader&&(
+                <button onClick={async()=>{
+                  const newLeaders={...(tourney.ctp_leaders||{})};
+                  delete newLeaders[currentHole];
+                  await sb.from("team_tournaments").update({ctp_leaders:newLeaders,updated_at:new Date().toISOString()}).eq("id",tourney.id);
+                  setTourney(prev=>({...prev,ctp_leaders:newLeaders}));
+                  setCtpPopup(false);setCtpName("");setCtpDist("");
+                }} style={{width:"100%",padding:"12px",background:"rgba(224,80,80,0.1)",border:"1px solid rgba(224,80,80,0.4)",borderRadius:10,color:C.red,fontSize:13,fontWeight:700,cursor:"pointer",marginBottom:10}}>
+                  Remove CTP Entry
+                </button>
+              )}
               <div style={{display:"flex",gap:10}}>
-                <button onClick={()=>{setCtpPopup(null);setCtpInput("");}}
+                <button onClick={()=>{setCtpPopup(false);setCtpName("");setCtpDist("");}}
                   style={{flex:1,padding:"14px",background:"transparent",color:C.muted,border:"1px solid "+C.border,borderRadius:12,fontSize:14,fontWeight:600,cursor:"pointer"}}>Cancel</button>
-                <button onClick={submitCtp} disabled={!isValid&&!isOwn}
-                  style={{flex:2,padding:"14px",background:isValid||isOwn?C.gold:"#1a1a1a",color:isValid||isOwn?"#0a1a0f":C.dim,border:"none",borderRadius:12,fontSize:14,fontWeight:800,cursor:isValid||isOwn?"pointer":"not-allowed"}}>
-                  📍 Claim CTP
+                <button onClick={submitCtp} disabled={!canSave}
+                  style={{flex:2,padding:"14px",background:canSave?C.gold:"#1a1a1a",color:canSave?"#0a1a0f":C.dim,border:"none",borderRadius:12,fontSize:15,fontWeight:800,cursor:canSave?"pointer":"not-allowed"}}>
+                  Save CTP
                 </button>
               </div>
             </div>
