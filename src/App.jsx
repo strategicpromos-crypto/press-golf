@@ -765,9 +765,36 @@ export default function App(){
   // Opponent score entry — no login required, anyone with the link can score
   if(roundParam && playerParam) return <OpponentScoreEntry roundId={roundParam} playerId={playerParam} onBack={()=>window.location.href="/"}/>;
 
+  // Captain/Spectator links -- NO LOGIN REQUIRED (no account needed)
+  // Must be above the auth wall so captains don't need a Press account
+  if(tourneyView==="join"){
+    return <TourneyLoader
+      tourneyId={tourneyId}
+      teamIdx={tourneyTeam!==null&&tourneyTeam!==undefined?parseInt(tourneyTeam):null}
+      isSpectator={spectate==="1"}
+      onBack={()=>{setTourneyView(null);window.history.replaceState({},"","/");}}
+      onCaptain={(t,idx)=>{
+        // Save captain session to localStorage so PWA can restore it
+        try{ localStorage.setItem("press_captain_session",JSON.stringify({tid:t.id,tidx:idx,savedAt:Date.now()})); }catch(e){}
+        setTourneyData(t);setTourneyCaptainIdx(idx);setTourneyView("captain");
+      }}
+      onSpectator={(t)=>{setTourneyData(t);setTourneyView("spectator");}}
+    />;
+  }
+  if(tourneyView==="captain"){
+    return <TourneyCaptain tourney={tourneyData} teamIdx={tourneyCaptainIdx}
+      onBack={()=>{
+        setTourneyView(null);window.history.replaceState({},"","/");
+      }}/>;
+  }
+  if(tourneyView==="spectator"){
+    return <TourneySpectator tourney={tourneyData}
+      onBack={()=>{setTourneyView(null);window.history.replaceState({},"","/");}}/>;
+  }
+
   if(!user)return <AuthScreen onAuth={setUser} onPrivacy={()=>setShowPrivacy(true)}/>;
 
-  // PASSWORD RECOVERY — user clicked reset link, needs to set a new password
+  // PASSWORD RECOVERY -- user clicked reset link, needs to set a new password
   if(needsNewPassword) return <SetNewPasswordScreen onDone={()=>setNeedsNewPassword(false)}/>;
 
   // Captain loading from localStorage restore
@@ -800,32 +827,7 @@ export default function App(){
     );
   }
 
-  // Tourney views — shown to captains/spectators who open a shared link
-  if(tourneyView==="join"){
-    return <TourneyLoader
-      tourneyId={tourneyId}
-      teamIdx={tourneyTeam!==null&&tourneyTeam!==undefined?parseInt(tourneyTeam):null}
-      isSpectator={spectate==="1"}
-      onBack={()=>{setTourneyView(null);window.history.replaceState({},"","/");}}
-      onCaptain={(t,idx)=>{
-        // Save captain session to localStorage so PWA can restore it
-        try{ localStorage.setItem("press_captain_session",JSON.stringify({tid:t.id,tidx:idx,savedAt:Date.now()})); }catch(e){}
-        setTourneyData(t);setTourneyCaptainIdx(idx);setTourneyView("captain");
-      }}
-      onSpectator={(t)=>{setTourneyData(t);setTourneyView("spectator");}}
-    />;
-  }
-  if(tourneyView==="captain"){
-    return <TourneyCaptain tourney={tourneyData} teamIdx={tourneyCaptainIdx}
-      onBack={()=>{
-        // Keep captain session in localStorage — they may want to come back
-        setTourneyView(null);window.history.replaceState({},"","/");
-      }}/>;
-  }
-  if(tourneyView==="spectator"){
-    return <TourneySpectator tourney={tourneyData}
-      onBack={()=>{setTourneyView(null);window.history.replaceState({},"","/");}}/>;
-  }
+  // [tourney views moved above auth wall — see below]
 
   if(inviteCode)return <AcceptInviteScreen code={inviteCode} user={user}/>;
   return <Press user={user} onSignOut={()=>sb.auth.signOut()} onPrivacy={()=>setShowPrivacy(true)} onUpgrade={()=>setShowPaywall(true)} onShowProInfo={()=>setShowProInfo(true)} isPro={isPro} setIsPro={setIsPro}/>;
