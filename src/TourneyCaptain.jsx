@@ -266,7 +266,7 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
               const medals=["1st","2nd","3rd"];
               return(<>
                 <div style={{display:"flex",gap:0,marginBottom:16,border:"1px solid "+C.border,borderRadius:10,overflow:"hidden"}}>
-                  {[["standings","Standings"],["top10","Top 10"],["skins","Skins"],...(ctpEnabled?[["ctp","CTP"]]:[])]
+                  {[["standings","Standings"],["top10","Individuals"],["skins","Skins"],...(ctpEnabled?[["ctp","CTP"]]:[])]
                     .map(([id,lbl])=>(
                     <button key={id} onClick={()=>setBTab(id)} style={{flex:1,padding:"11px",fontSize:12,fontWeight:bTab===id?700:500,background:bTab===id?(id==="ctp"?C.gold:C.green):"transparent",color:bTab===id?"#0a1a0f":C.muted,border:"none",cursor:"pointer"}}>{lbl}</button>
                   ))}
@@ -305,35 +305,65 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
                 </>)}
 
                 {bTab==="top10"&&(()=>{
+                  const holePars=tourney.hole_pars||{};
+                  const frontHoles=course.holes.filter(h=>h.side==="front");
+                  const backHoles=course.holes.filter(h=>h.side==="back");
+                  function cellColor(d){if(d<=-2)return"#5b9bd5";if(d===-1)return C.green;if(d===0)return C.muted;if(d===1)return C.gold;return C.red;}
                   const players=[];
                   (tourney.teams||[]).forEach((t,ti)=>{
                     for(let pi=0;pi<(t.size||1);pi++){
                       const name=t.players?.[pi]?.trim()?t.players[pi].trim():`Player ${pi+1}`;
                       let total=0,holesPlayed=0;
+                      const byHole={};
                       for(const h of course.holes){
                         const s=t.scores?.[pi]?.[h.hole];
-                        if(s!==undefined&&s!==null){total+=parseInt(s)-h.par;holesPlayed++;}
+                        const effPar=holePars[h.hole]??h.par;
+                        if(s!==undefined&&s!==null){
+                          const diff=parseInt(s)-effPar;
+                          total+=diff;holesPlayed++;
+                          byHole[h.hole]={diff,side:h.side};
+                        }
                       }
-                      if(holesPlayed>0)players.push({name,teamName:t.name||`Team ${ti+1}`,teamColor:t.color,total,holesPlayed,ti,pi,isMe:ti===teamIdx});
+                      if(holesPlayed>0)players.push({name,teamName:t.name||`Team ${ti+1}`,teamColor:t.color,total,holesPlayed,byHole,ti,pi,isMe:ti===teamIdx});
                     }
                   });
                   players.sort((a,b)=>a.total!==b.total?a.total-b.total:b.holesPlayed-a.holesPlayed);
-                  return players.slice(0,10).map((p,i)=>(
-                    <div key={`${p.ti}-${p.pi}`} style={{background:p.isMe?"rgba(123,180,80,0.08)":i===0?"rgba(232,184,75,0.08)":C.card,border:`1px solid ${p.isMe?C.green+"44":i===0?C.gold+"44":C.border}`,borderRadius:12,padding:"12px 14px",marginBottom:8,display:"flex",alignItems:"center",gap:12}}>
-                      <div style={{width:32,textAlign:"center",fontSize:i<3?20:14,fontWeight:800,color:i<3?C.gold:C.muted,flexShrink:0}}>{i<3?medals[i]:i+1}</div>
-                      <div style={{flex:1,minWidth:0}}>
-                        <div style={{fontWeight:800,fontSize:15,color:p.isMe?C.green:i===0?C.gold:C.text}}>{p.name}{p.isMe?" *":""}</div>
-                        <div style={{display:"flex",alignItems:"center",gap:6,marginTop:2}}>
-                          <div style={{width:8,height:8,borderRadius:"50%",background:p.teamColor}}/>
-                          <div style={{fontSize:11,color:C.muted}}>{p.teamName}</div>
+                  return players.slice(0,30).map((p,i)=>{
+                    const frontDiff=frontHoles.reduce((s,h)=>p.byHole[h.hole]!==undefined?s+p.byHole[h.hole].diff:s,0);
+                    const backDiff=backHoles.reduce((s,h)=>p.byHole[h.hole]!==undefined?s+p.byHole[h.hole].diff:s,0);
+                    const hasFront=frontHoles.some(h=>p.byHole[h.hole]!==undefined);
+                    const hasBack=backHoles.some(h=>p.byHole[h.hole]!==undefined);
+                    return(
+                      <div key={`${p.ti}-${p.pi}`} style={{background:p.isMe?"rgba(123,180,80,0.06)":i===0?"rgba(232,184,75,0.06)":C.card,border:`1px solid ${p.isMe?C.green+"44":i===0?C.gold+"44":C.border}`,borderRadius:12,padding:"10px 12px",marginBottom:10}}>
+                        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
+                          <div style={{width:26,textAlign:"center",fontSize:i<3?15:11,fontWeight:800,color:i<3?C.gold:C.muted,flexShrink:0}}>{i<3?medals[i]:i+1}</div>
+                          <div style={{flex:1,minWidth:0}}>
+                            <div style={{fontWeight:800,fontSize:13,color:p.isMe?C.green:i===0?C.gold:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}{p.isMe?" *":""}</div>
+                            <div style={{display:"flex",alignItems:"center",gap:5,marginTop:1}}>
+                              <div style={{width:7,height:7,borderRadius:"50%",background:p.teamColor}}/>
+                              <div style={{fontSize:10,color:C.muted}}>{p.teamName}</div>
+                            </div>
+                          </div>
+                          <div style={{textAlign:"right",flexShrink:0}}>
+                            <div style={{fontSize:18,fontWeight:800,color:relColor(p.total)}}>{relLabel(p.total)}</div>
+                            <div style={{fontSize:9,color:C.dim}}>thru {p.holesPlayed}</div>
+                          </div>
+                        </div>
+                        <div style={{overflowX:"auto"}}>
+                          <div style={{display:"flex",alignItems:"center",gap:2,marginBottom:3,minWidth:280}}>
+                            <div style={{width:18,fontSize:7,color:C.muted,flexShrink:0,textAlign:"right",paddingRight:2}}>F</div>
+                            {frontHoles.map(h=>{const d=p.byHole[h.hole];return(<div key={h.hole} style={{flex:1,height:20,borderRadius:3,background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.08)",display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:8,fontWeight:700,color:d!==undefined?cellColor(d.diff):C.dim}}>{d!==undefined?relLabel(d.diff):""}</span></div>);})}
+                            <div style={{width:24,height:20,borderRadius:3,background:"rgba(123,180,80,0.08)",border:"1px solid rgba(123,180,80,0.2)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><span style={{fontSize:8,fontWeight:800,color:hasFront?relColor(frontDiff):C.dim}}>{hasFront?relLabel(frontDiff):""}</span></div>
+                          </div>
+                          <div style={{display:"flex",alignItems:"center",gap:2,minWidth:280}}>
+                            <div style={{width:18,fontSize:7,color:C.muted,flexShrink:0,textAlign:"right",paddingRight:2}}>B</div>
+                            {backHoles.map(h=>{const d=p.byHole[h.hole];return(<div key={h.hole} style={{flex:1,height:20,borderRadius:3,background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.08)",display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:8,fontWeight:700,color:d!==undefined?cellColor(d.diff):C.dim}}>{d!==undefined?relLabel(d.diff):""}</span></div>);})}
+                            <div style={{width:24,height:20,borderRadius:3,background:"rgba(123,180,80,0.08)",border:"1px solid rgba(123,180,80,0.2)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><span style={{fontSize:8,fontWeight:800,color:hasBack?relColor(backDiff):C.dim}}>{hasBack?relLabel(backDiff):""}</span></div>
+                          </div>
                         </div>
                       </div>
-                      <div style={{textAlign:"right"}}>
-                        <div style={{fontSize:22,fontWeight:800,color:relColor(p.total)}}>{relLabel(p.total)}</div>
-                        <div style={{fontSize:10,color:C.dim}}>thru {p.holesPlayed}</div>
-                      </div>
-                    </div>
-                  ));
+                    );
+                  });
                 })()}
                 {bTab==="skins"&&<SkinsTab teams={tourney.teams||[]} course={course} holePars={tourney.hole_pars||{}} skinsEnabled={tourney.skins_enabled===true} bigBoyEnabled={tourney.big_boy_enabled===true}/>}
                 {bTab==="ctp"&&(
