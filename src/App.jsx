@@ -666,11 +666,18 @@ export default function App(){
 
   const urlParams   = new URLSearchParams(window.location.search);
   const inviteCode  = urlParams.get("invite");
-  const tourneyId   = urlParams.get("tourney");   // now a UUID, not a code
-  const tourneyTeam = urlParams.get("team");
-  const spectate    = urlParams.get("spectate");  // "1" = spectator link
   const roundParam  = urlParams.get("round");
   const playerParam = urlParams.get("player");
+
+  // Read tourney params — check URL first, then localStorage fallback for iOS PWA
+  // iOS strips URL params when launching a PWA from a link; index.html saves them first
+  const _urlTourney = urlParams.get("tourney");
+  const _urlTeam    = urlParams.get("team");
+  const _urlSpec    = urlParams.get("spectate");
+  const _linkParams = (()=>{ try{ const s=localStorage.getItem("press_link_params"); if(s){ const p=JSON.parse(s); const age=Date.now()-p.savedAt; if(age<24*60*60*1000) return p; } }catch(e){} return null; })();
+  const tourneyId   = _urlTourney || _linkParams?.tourney || null;
+  const tourneyTeam = _urlTeam    || _linkParams?.team    || null;
+  const spectate    = _urlSpec    || _linkParams?.spectate|| null;
 
   // Initialize from URL directly so captain links work on first render
   const [tourneyView,       setTourneyView]       = useState(()=>tourneyId?"join":null);
@@ -765,10 +772,16 @@ export default function App(){
       tourneyId={tourneyId}
       teamIdx={tourneyTeam!==null&&tourneyTeam!==undefined?parseInt(tourneyTeam):null}
       isSpectator={spectate==="1"}
-      onBack={()=>{setTourneyView(null);window.history.replaceState({},"","/");}}
+      onBack={()=>{
+        // If URL has tourney params, we have nowhere to go back to — just reload clean
+        window.location.href="/";
+      }}
       onCaptain={(t,idx)=>{
-        // Save captain session to localStorage so PWA can restore it
-        try{ localStorage.setItem("press_captain_session",JSON.stringify({tid:t.id,tidx:idx,savedAt:Date.now()})); }catch(e){}
+        // Save captain session and clear the link params (consumed)
+        try{
+          localStorage.setItem("press_captain_session",JSON.stringify({tid:t.id,tidx:idx,savedAt:Date.now()}));
+          localStorage.removeItem("press_link_params");
+        }catch(e){}
         setTourneyData(t);setTourneyCaptainIdx(idx);setTourneyView("captain");
       }}
       onSpectator={(t)=>{setTourneyData(t);setTourneyView("spectator");}}
@@ -777,7 +790,8 @@ export default function App(){
   if(tourneyView==="captain"){
     return <TourneyCaptain tourney={tourneyData} teamIdx={tourneyCaptainIdx}
       onBack={()=>{
-        setTourneyView(null);window.history.replaceState({},"","/");
+        // Go to resume prompt rather than wiping state — captain may want to return
+        setTourneyView("captain_resume");
       }}/>;
   }
   if(tourneyView==="spectator"){
@@ -820,7 +834,7 @@ export default function App(){
           <button onClick={()=>setTourneyView("captain")} style={{width:"100%",padding:"18px",background:"#7bb450",color:"#0a1a0f",border:"none",borderRadius:14,fontSize:17,fontWeight:800,cursor:"pointer"}}>
             ▶ Resume Scoring
           </button>
-          <button onClick={()=>{localStorage.removeItem("press_captain_session");setTourneyView(null);setTourneyData(null);}} style={{width:"100%",padding:"14px",background:"transparent",color:"#6b7f6d",border:"1px solid rgba(123,180,80,0.2)",borderRadius:12,fontSize:14,fontWeight:600,cursor:"pointer"}}>
+          <button onClick={()=>{localStorage.removeItem("press_captain_session");window.location.href="/";}} style={{width:"100%",padding:"14px",background:"transparent",color:"#6b7f6d",border:"1px solid rgba(123,180,80,0.2)",borderRadius:12,fontSize:14,fontWeight:600,cursor:"pointer"}}>
             Not my tournament
           </button>
         </div>
