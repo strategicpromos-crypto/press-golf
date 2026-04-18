@@ -777,7 +777,11 @@ export default function App(){
       teamIdx={tourneyTeam!==null&&tourneyTeam!==undefined?parseInt(tourneyTeam):null}
       isSpectator={spectate==="1"}
       onBack={()=>{
-        // If URL has tourney params, we have nowhere to go back to — just reload clean
+        // Clear stale link params so PWA doesn't loop back to the same broken screen
+        try{
+          localStorage.removeItem("press_link_params");
+          localStorage.removeItem("press_captain_session");
+        }catch(e){}
         window.location.href="/";
       }}
       onCaptain={(t,idx)=>{
