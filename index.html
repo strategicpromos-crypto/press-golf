@@ -31,6 +31,27 @@
   </head>
   <body style="background-color:#080f0a;">
     <div id="root"></div>
+    <script>
+      // Capture captain/spectator link params BEFORE React loads
+      // iOS PWA strips URL params on launch — this saves them first
+      (function(){
+        try {
+          var p = new URLSearchParams(window.location.search);
+          var tid = p.get("tourney");
+          var team = p.get("team");
+          var spec = p.get("spectate");
+          if(tid) {
+            // Save link params so PWA can read them even after iOS strips the URL
+            localStorage.setItem("press_link_params", JSON.stringify({
+              tourney: tid,
+              team: team,
+              spectate: spec,
+              savedAt: Date.now()
+            }));
+          }
+        } catch(e){}
+      })();
+    </script>
     <script type="module" src="/src/main.jsx"></script>
     <script>
       if ("serviceWorker" in navigator) {
