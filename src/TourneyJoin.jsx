@@ -20,6 +20,12 @@ export function TourneyLoader({ tourneyId, teamIdx, isSpectator, onBack, onCapta
     setStatus("loading");
     const { data, error } = await sb.from("team_tournaments").select("*").eq("id", tourneyId).single();
     if (error || !data) {
+      // Clear stale localStorage immediately — prevents the infinite loop
+      // where Back reloads the page and press_link_params re-triggers this screen
+      try{
+        localStorage.removeItem("press_link_params");
+        localStorage.removeItem("press_captain_session");
+      }catch(e){}
       setError("Tournament not found. The link may have expired.");
       setStatus("error");
       return;
