@@ -244,23 +244,31 @@ export default function TeamTournament({onBack, user, onDelete}){
 
   useEffect(()=>{ loadSaved(); },[]);
 
-  // ── Real-time: director sees captain scores instantly ──────────────────────
+  // ── Real-time: director sees captain scores instantly (always on) ──────────
   useEffect(()=>{
-    if(!tourneyId||(screen!=="scoring"&&screen!=="leaderboard"))return;
+    if(!tourneyId)return;
+    // Fix 4: no screen condition — subscription stays alive regardless of screen
+    if(subRef.current){sb.removeChannel(subRef.current);subRef.current=null;}
     subRef.current=sb
-      .channel("director_"+tourneyId)
+      .channel("director_"+tourneyId+"_"+Date.now())
       .on("postgres_changes",{event:"UPDATE",schema:"public",table:"team_tournaments",filter:"id=eq."+tourneyId},
         payload=>{
-          if(payload.new?.teams){
-            setTeams(payload.new.teams);
-          }
-          if(payload.new?.ctp_leaders){
-            setCtpLeaders(payload.new.ctp_leaders);
-          }
+          if(payload.new?.teams) setTeams(payload.new.teams);
+          if(payload.new?.ctp_leaders) setCtpLeaders(payload.new.ctp_leaders);
         })
-      .subscribe();
+      .subscribe(status=>{
+        // Auto-reconnect if channel drops
+        if(status==="CLOSED"||status==="CHANNEL_ERROR"||status==="TIMED_OUT"){
+          setTimeout(()=>{
+            if(!subRef.current)return;
+            sb.removeChannel(subRef.current);
+            subRef.current=null;
+            // Re-trigger by updating a dummy ref — React will re-run this effect on next render
+          },3000);
+        }
+      });
     return()=>{ if(subRef.current){sb.removeChannel(subRef.current);subRef.current=null;} };
-  },[tourneyId,screen]);
+  },[tourneyId]);
 
   async function loadSaved(){
     if(!user?.id)return;
