@@ -685,9 +685,13 @@ export default function App(){
   const [tourneyCaptainIdx, setTourneyCaptainIdx] = useState(null);
   const [captainLoading,    setCaptainLoading]    = useState(false);
 
-  // On startup: restore captain session from localStorage if no URL params
+  // Watch for captain link params — set tourneyView="join" whenever tourneyId present
+  // This handles: fresh load, PWA foreground, and Android link interception
   useEffect(()=>{
-    if(tourneyId) { return; } // already set to "join" by useState initializer
+    if(tourneyId) {
+      setTourneyView("join");
+      return;
+    }
     // Check if captain has a saved session
     try {
       const saved = localStorage.getItem("press_captain_session");
@@ -799,18 +803,6 @@ export default function App(){
       onBack={()=>{setTourneyView(null);window.history.replaceState({},"","/");}}/>;
   }
 
-  if(loading)return(<div style={{background:C.bg,minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:16}}><div style={{fontSize:46,fontWeight:800,color:C.green,letterSpacing:-2}}>Press</div><Spinner/></div>);
-  if(showPrivacy)return <PrivacyPolicy onBack={()=>setShowPrivacy(false)}/>;
-  if(showPaywall)return <ProPaywall onBack={()=>setShowPaywall(false)} onUpgrade={handleUpgrade} saving={stripeSaving}/>;
-  if(showProInfo)return <ProInfo onBack={()=>setShowProInfo(false)} isPro={isPro} onUpgrade={()=>{setShowProInfo(false);setShowPaywall(true);}}/>;
-
-  // Opponent score entry — no login required, anyone with the link can score
-  if(roundParam && playerParam) return <OpponentScoreEntry roundId={roundParam} playerId={playerParam} onBack={()=>window.location.href="/"}/>;
-
-  if(!user)return <AuthScreen onAuth={setUser} onPrivacy={()=>setShowPrivacy(true)}/>;
-
-  // PASSWORD RECOVERY -- user clicked reset link, needs to set a new password
-  if(needsNewPassword) return <SetNewPasswordScreen onDone={()=>setNeedsNewPassword(false)}/>;
 
   // Captain loading from localStorage restore
   if(captainLoading) return(
@@ -841,6 +833,20 @@ export default function App(){
       </div>
     );
   }
+
+    if(loading)return(<div style={{background:C.bg,minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:16}}><div style={{fontSize:46,fontWeight:800,color:C.green,letterSpacing:-2}}>Press</div><Spinner/></div>);
+  if(showPrivacy)return <PrivacyPolicy onBack={()=>setShowPrivacy(false)}/>;
+  if(showPaywall)return <ProPaywall onBack={()=>setShowPaywall(false)} onUpgrade={handleUpgrade} saving={stripeSaving}/>;
+  if(showProInfo)return <ProInfo onBack={()=>setShowProInfo(false)} isPro={isPro} onUpgrade={()=>{setShowProInfo(false);setShowPaywall(true);}}/>;
+
+  // Opponent score entry — no login required, anyone with the link can score
+  if(roundParam && playerParam) return <OpponentScoreEntry roundId={roundParam} playerId={playerParam} onBack={()=>window.location.href="/"}/>;
+
+  if(!user)return <AuthScreen onAuth={setUser} onPrivacy={()=>setShowPrivacy(true)}/>;
+
+  // PASSWORD RECOVERY -- user clicked reset link, needs to set a new password
+  if(needsNewPassword) return <SetNewPasswordScreen onDone={()=>setNeedsNewPassword(false)}/>;
+
 
   // [tourney views moved above auth wall — see below]
 
