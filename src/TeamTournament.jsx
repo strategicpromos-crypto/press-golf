@@ -23,7 +23,7 @@ function relLabel(d){if(d===null||d===undefined)return"--";if(d===0)return"E";re
 function relColor(d){if(d===null||d===undefined)return C.muted;if(d<0)return C.green;if(d>0)return C.red;return C.muted;}
 
 // Build top 10 individual leaderboard from all teams
-function calcIndividualLeaderboard(teams, holeData){
+function calcIndividualLeaderboard(teams, holeData, holePars){
   const players = [];
   teams.forEach((team, teamIdx) => {
     for(let pi = 0; pi < (team.size||1); pi++){
@@ -32,54 +32,118 @@ function calcIndividualLeaderboard(teams, holeData){
         : `Player ${pi+1}`;
       const teamName = team.name || `Team ${teamIdx+1}`;
       let total = 0, holesPlayed = 0;
+      const byHole = {};
       for(const h of holeData){
         const s = team.scores?.[pi]?.[h.hole];
+        const effPar = (holePars||{})[h.hole] ?? h.par;
         if(s !== undefined && s !== null){
-          total += safeInt(s) - h.par;
+          const diff = safeInt(s) - effPar;
+          total += diff;
           holesPlayed++;
+          byHole[h.hole] = { diff, side: h.side };
         }
       }
-      players.push({ name, teamName, teamColor: team.color||TEAM_COLORS[teamIdx%TEAM_COLORS.length], total, holesPlayed, teamIdx, pi });
+      players.push({ name, teamName, teamColor: team.color||TEAM_COLORS[teamIdx%TEAM_COLORS.length], total, holesPlayed, byHole, teamIdx, pi });
     }
   });
-  // Sort by score (lowest = best), then holes played descending
   return players
     .filter(p => p.holesPlayed > 0)
     .sort((a,b) => a.total !== b.total ? a.total - b.total : b.holesPlayed - a.holesPlayed)
-    .slice(0, 10);
+    .slice(0, 30);
 }
 
-// Top 10 leaderboard UI — reused across director, captain, spectator
-function Top10Tab({ teams, course }){
-  const players = calcIndividualLeaderboard(teams, course.holes);
+// Individual scorecard — top 30, full hole-by-hole vs-par
+function Top10Tab({ teams, course, holePars }){
+  const players = calcIndividualLeaderboard(teams, course.holes, holePars);
   const medals = ["1st","2nd","3rd"];
+  const frontHoles = course.holes.filter(h=>h.side==="front");
+  const backHoles  = course.holes.filter(h=>h.side==="back");
+
   if(players.length === 0) return(
     <div style={{textAlign:"center",padding:"40px 20px",color:C.muted}}>
       <div style={{fontSize:32,marginBottom:12}}>⛳</div>
       <div style={{fontSize:14}}>Individual scores will appear here as players enter their scores.</div>
     </div>
   );
+
+  // Cell style for a hole score
+  function cellColor(diff){
+    if(diff===null||diff===undefined) return C.dim;
+    if(diff<=-2) return "#5b9bd5"; // eagle or better — blue
+    if(diff===-1) return C.green;  // birdie
+    if(diff===0)  return C.muted;  // par
+    if(diff===1)  return C.gold;   // bogey
+    return C.red;                  // double+
+  }
+
   return(
     <div>
-      <div style={{fontSize:11,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:12,textAlign:"center"}}>Individual scores · all players</div>
-      {players.map((p,i)=>(
-        <div key={`${p.teamIdx}-${p.pi}`} style={{background:i===0?"rgba(232,184,75,0.08)":C.card,border:`1px solid ${i===0?C.gold+"44":C.border}`,borderRadius:12,padding:"12px 14px",marginBottom:8,display:"flex",alignItems:"center",gap:12}}>
-          <div style={{width:32,textAlign:"center",fontSize:i<3?20:14,fontWeight:800,color:i<3?C.gold:C.muted,flexShrink:0}}>
-            {i<3?medals[i]:i+1}
-          </div>
-          <div style={{flex:1,minWidth:0}}>
-            <div style={{fontWeight:800,fontSize:15,color:i===0?C.gold:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</div>
-            <div style={{display:"flex",alignItems:"center",gap:6,marginTop:2}}>
-              <div style={{width:8,height:8,borderRadius:"50%",background:p.teamColor,flexShrink:0}}/>
-              <div style={{fontSize:11,color:C.muted}}>{p.teamName}</div>
+      <div style={{fontSize:11,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:12,textAlign:"center"}}>Individual Scorecard · Top 30</div>
+      {players.map((p,i)=>{
+        const frontDiff = frontHoles.reduce((s,h)=> p.byHole[h.hole]!==undefined ? s+p.byHole[h.hole].diff : s, 0);
+        const backDiff  = backHoles.reduce((s,h)=>  p.byHole[h.hole]!==undefined ? s+p.byHole[h.hole].diff : s, 0);
+        const hasFront  = frontHoles.some(h=>p.byHole[h.hole]!==undefined);
+        const hasBack   = backHoles.some(h=>p.byHole[h.hole]!==undefined);
+        return(
+          <div key={`${p.teamIdx}-${p.pi}`} style={{background:i===0?"rgba(232,184,75,0.06)":C.card,border:`1px solid ${i===0?C.gold+"44":C.border}`,borderRadius:12,padding:"10px 12px",marginBottom:10}}>
+            {/* Header row — rank, name, team, total */}
+            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
+              <div style={{width:28,textAlign:"center",fontSize:i<3?16:12,fontWeight:800,color:i<3?C.gold:C.muted,flexShrink:0}}>
+                {i<3?medals[i]:i+1}
+              </div>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontWeight:800,fontSize:14,color:i===0?C.gold:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</div>
+                <div style={{display:"flex",alignItems:"center",gap:5,marginTop:1}}>
+                  <div style={{width:7,height:7,borderRadius:"50%",background:p.teamColor,flexShrink:0}}/>
+                  <div style={{fontSize:10,color:C.muted}}>{p.teamName}</div>
+                </div>
+              </div>
+              <div style={{textAlign:"right",flexShrink:0}}>
+                <div style={{fontSize:20,fontWeight:800,color:relColor(p.total)}}>{relLabel(p.total)}</div>
+                <div style={{fontSize:9,color:C.dim}}>thru {p.holesPlayed}</div>
+              </div>
+            </div>
+
+            {/* Scorecard rows */}
+            <div style={{overflowX:"auto"}}>
+              {/* Front 9 */}
+              <div style={{display:"flex",alignItems:"center",gap:2,marginBottom:3,minWidth:280}}>
+                <div style={{width:20,fontSize:8,color:C.muted,flexShrink:0,textAlign:"right",paddingRight:3}}>F</div>
+                {frontHoles.map(h=>{
+                  const d = p.byHole[h.hole];
+                  return(
+                    <div key={h.hole} style={{flex:1,height:22,borderRadius:3,background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.08)",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                      <span style={{fontSize:9,fontWeight:700,color:d!==undefined?cellColor(d.diff):C.dim}}>
+                        {d!==undefined?relLabel(d.diff):""}
+                      </span>
+                    </div>
+                  );
+                })}
+                <div style={{width:26,height:22,borderRadius:3,background:"rgba(123,180,80,0.08)",border:"1px solid rgba(123,180,80,0.2)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                  <span style={{fontSize:9,fontWeight:800,color:hasFront?relColor(frontDiff):C.dim}}>{hasFront?relLabel(frontDiff):""}</span>
+                </div>
+              </div>
+              {/* Back 9 */}
+              <div style={{display:"flex",alignItems:"center",gap:2,minWidth:280}}>
+                <div style={{width:20,fontSize:8,color:C.muted,flexShrink:0,textAlign:"right",paddingRight:3}}>B</div>
+                {backHoles.map(h=>{
+                  const d = p.byHole[h.hole];
+                  return(
+                    <div key={h.hole} style={{flex:1,height:22,borderRadius:3,background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.08)",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                      <span style={{fontSize:9,fontWeight:700,color:d!==undefined?cellColor(d.diff):C.dim}}>
+                        {d!==undefined?relLabel(d.diff):""}
+                      </span>
+                    </div>
+                  );
+                })}
+                <div style={{width:26,height:22,borderRadius:3,background:"rgba(123,180,80,0.08)",border:"1px solid rgba(123,180,80,0.2)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                  <span style={{fontSize:9,fontWeight:800,color:hasBack?relColor(backDiff):C.dim}}>{hasBack?relLabel(backDiff):""}</span>
+                </div>
+              </div>
             </div>
           </div>
-          <div style={{textAlign:"right",flexShrink:0}}>
-            <div style={{fontSize:22,fontWeight:800,color:relColor(p.total)}}>{relLabel(p.total)}</div>
-            <div style={{fontSize:10,color:C.dim}}>thru {p.holesPlayed}</div>
-          </div>
-        </div>
-      ))}
+        );
+      })}
       <div style={{fontSize:10,color:C.dim,textAlign:"center",marginTop:12}}>Individual scores · not counting balls · updates live</div>
     </div>
   );
@@ -1536,7 +1600,7 @@ export default function TeamTournament({onBack, user, onDelete}){
 
         {/* Tabs */}
         <div style={{display:"flex",borderBottom:"1px solid "+C.border,background:"rgba(0,0,0,0.2)",overflowX:"auto"}}>
-          {[["standings","Standings"],["scorecard","Scorecard"],["top10","Top 10"],["skins","Skins"],...(ctpEnabled?[["ctp","CTP"]]:[])]
+          {[["standings","Standings"],["scorecard","Scorecard"],["top10","Individuals"],["skins","Skins"],...(ctpEnabled?[["ctp","CTP"]]:[])]
             .map(([id,lbl])=>(
             <button key={id} onClick={()=>setLbTab(id)} style={{flex:1,padding:"10px 2px",fontSize:11,fontWeight:lbTab===id?700:500,background:"transparent",color:lbTab===id?(id==="ctp"?C.gold:C.green):C.muted,border:"none",borderBottom:lbTab===id?"2px solid "+(id==="ctp"?C.gold:C.green):"2px solid transparent",cursor:"pointer",whiteSpace:"nowrap",flexShrink:0}}>{lbl}</button>
           ))}
@@ -1606,7 +1670,7 @@ export default function TeamTournament({onBack, user, onDelete}){
             </div>
           )}
 
-          {lbTab==="top10"&&<Top10Tab teams={teams} course={course}/>}
+          {lbTab==="top10"&&<Top10Tab teams={teams} course={course} holePars={holePars}/>}
 
           {lbTab==="skins"&&<SkinsTab teams={teams} course={course} holePars={holePars} skinsEnabled={skinsEnabled} bigBoyEnabled={bigBoyEnabled} teammatesTie={teammatesTie}/>}
 
