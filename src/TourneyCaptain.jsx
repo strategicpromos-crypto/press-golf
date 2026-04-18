@@ -61,14 +61,14 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
   const saveTimer   = useRef(null);
   const subRef      = useRef(null);
   const pollTimer   = useRef(null);
-  const pendingTeams= useRef(null);  // flush on Next Hole
-  const [connStatus, setConnStatus] = useState("connecting"); // connecting|online|offline
-
-  // ── Writer lock — only the first device to open this captain link can write ─
-  // Key is per-tourney per-team so 9 different teams all get their own lock
-  const writerKey = `press_writer_${initialTourney.id}_${teamIdx}`;
-  const isWriter  = useRef(false);
+  const pendingTeams= useRef(null);
+  const [connStatus,   setConnStatus]   = useState("connecting"); // connecting|online|offline
+  const isWriter       = useRef(false);
   const [readOnlyMode, setReadOnlyMode] = useState(false);
+  const [claiming,     setClaiming]     = useState(false); // reclaim in progress
+
+  // localStorage key — per tourney per team
+  const localKey = `press_writer_${initialTourney.id}_${teamIdx}`;
 
   const ctpEnabled  = tourney.ctp_enabled===true;
   const ctpHoles    = tourney.ctp_holes||[];
@@ -99,13 +99,11 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
         if(status==="SUBSCRIBED") setConnStatus("online");
         else if(status==="CLOSED"||status==="CHANNEL_ERROR"||status==="TIMED_OUT"){
           setConnStatus("offline");
-          // Auto-reconnect after 3 seconds
           setTimeout(()=>startSubscription(), 3000);
         }
       });
   }
 
-  // Fix 2: 30-second polling fallback — keeps data fresh even if WS drops
   function startPolling(){
     if(pollTimer.current) clearInterval(pollTimer.current);
     pollTimer.current = setInterval(async()=>{
@@ -117,31 +115,69 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
     }, 30000);
   }
 
-  useEffect(()=>{
-    // ── Claim writer lock ──────────────────────────────────────────────────
-    // First device to open this captain link claims the write token.
-    // Any other device (e.g. director peeking) gets read-only mode.
-    const existing = localStorage.getItem(writerKey);
-    const myToken  = Date.now().toString();
-    if(!existing){
-      localStorage.setItem(writerKey, myToken);
+  // ── Write a token into teams[teamIdx].writer_token in Supabase ─────────────
+  async function claimWriterToken(token){
+    const{data:current}=await sb.from("team_tournaments").select("teams").eq("id",tourney.id).single();
+    if(!current) return false;
+    const updatedTeams=(current.teams||[]).map((t,i)=>
+      i===teamIdx ? {...t, writer_token: token} : t
+    );
+    const{error}=await sb.from("team_tournaments").update({
+      teams: updatedTeams,
+      updated_at: new Date().toISOString()
+    }).eq("id",tourney.id);
+    return !error;
+  }
+
+  // ── Reclaim — captain refreshed or PWA reset, localStorage gone ────────────
+  async function reclaimWriter(){
+    setClaiming(true);
+    const newToken = Date.now().toString(36)+"_"+Math.random().toString(36).slice(2,6);
+    const ok = await claimWriterToken(newToken);
+    if(ok){
+      localStorage.setItem(localKey, newToken);
       isWriter.current = true;
-    } else {
-      // Token already claimed on another device — read-only
-      isWriter.current = false;
-      setReadOnlyMode(true);
+      setReadOnlyMode(false);
+    }
+    setClaiming(false);
+  }
+
+  useEffect(()=>{
+    async function initWriter(){
+      // 1. What token does this device have in localStorage?
+      const myLocalToken = localStorage.getItem(localKey);
+
+      // 2. What token does Supabase have for this team slot?
+      const{data}=await sb.from("team_tournaments").select("teams").eq("id",tourney.id).single();
+      const sbToken = (data?.teams||[])[teamIdx]?.writer_token || null;
+
+      if(!sbToken){
+        // Nobody has claimed yet — this device is first, claim it
+        const newToken = Date.now().toString(36)+"_"+Math.random().toString(36).slice(2,6);
+        localStorage.setItem(localKey, newToken);
+        isWriter.current = true;
+        await claimWriterToken(newToken);
+
+      } else if(myLocalToken && myLocalToken === sbToken){
+        // This device's token matches Supabase — it's the real captain (refresh case)
+        isWriter.current = true;
+
+      } else {
+        // Different device — read-only
+        isWriter.current = false;
+        setReadOnlyMode(true);
+      }
     }
 
+    initWriter();
     startSubscription();
     startPolling();
 
     // ── iOS visibility reconnect ───────────────────────────────────────────
-    // When the phone wakes from sleep/background, rebuild the WS connection
     function handleVisibility(){
       if(document.visibilityState === "visible"){
         setConnStatus("connecting");
         startSubscription();
-        // Also flush any pending scores that may not have saved before sleep
         if(pendingTeams.current) flushSave(pendingTeams.current);
       }
     }
@@ -151,13 +187,11 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
       if(subRef.current) sb.removeChannel(subRef.current);
       if(pollTimer.current) clearInterval(pollTimer.current);
       document.removeEventListener("visibilitychange", handleVisibility);
-      // Release writer lock when captain leaves the scoring screen
-      if(isWriter.current) localStorage.removeItem(writerKey);
     };
   },[tourney.id, teamIdx]);
 
   async function flushSave(teamsToSave){
-    if(!isWriter.current) return;  // read-only device — never write to DB
+    if(!isWriter.current) return;  // read-only — never write
     try{
       const{data:current}=await sb.from("team_tournaments").select("teams").eq("id",tourney.id).single();
       const dbTeams=current?.teams||teamsToSave;
@@ -325,17 +359,24 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
           const myRank=myRankObj?allScores.indexOf(myRankObj)+1:null;
           const totalTeams=(tourney.teams||[]).length;
 
-          // Read-only mode — director or second device opened this captain link
+          // Read-only mode: different device, or captain refreshed and lost localStorage
           if(readOnlyMode){
             return(
-              <div style={{background:"rgba(232,184,75,0.12)",border:"2px solid rgba(232,184,75,0.5)",borderRadius:10,padding:"12px 16px"}}>
-                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:4}}>
-                  <div style={{width:14,height:14,borderRadius:"50%",background:C.gold,flexShrink:0}}/>
-                  <div style={{fontWeight:800,fontSize:14,color:C.gold}}>VIEW ONLY — Scores locked to captain's device</div>
+              <div style={{background:"rgba(232,184,75,0.1)",border:"2px solid rgba(232,184,75,0.5)",borderRadius:10,padding:"14px 16px"}}>
+                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:6}}>
+                  <div style={{width:12,height:12,borderRadius:"50%",background:C.gold,flexShrink:0}}/>
+                  <div style={{fontWeight:800,fontSize:14,color:C.gold}}>VIEW ONLY</div>
                 </div>
-                <div style={{fontSize:12,color:"rgba(232,184,75,0.8)",lineHeight:1.5}}>
-                  This captain link is already open on another device. Scores can only be entered there. You can watch scores update live here.
+                <div style={{fontSize:12,color:"rgba(232,184,75,0.85)",lineHeight:1.6,marginBottom:12}}>
+                  This captain link is active on another device. Scores sync here live but can only be entered on the original device.
                 </div>
+                <div style={{fontSize:11,color:C.muted,marginBottom:12}}>
+                  Are you the captain? If you refreshed or switched devices, tap below to reclaim scoring access.
+                </div>
+                <button onClick={reclaimWriter} disabled={claiming}
+                  style={{width:"100%",padding:"12px",background:claiming?"#1a2a1a":C.gold,color:claiming?C.muted:"#0a1a0f",border:"none",borderRadius:10,fontSize:14,fontWeight:800,cursor:claiming?"not-allowed":"pointer",opacity:claiming?0.6:1}}>
+                  {claiming?"Reclaiming...":"Reclaim Scoring Access"}
+                </button>
               </div>
             );
           }
