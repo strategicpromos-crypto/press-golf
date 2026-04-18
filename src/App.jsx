@@ -672,14 +672,15 @@ export default function App(){
   const roundParam  = urlParams.get("round");
   const playerParam = urlParams.get("player");
 
-  const [tourneyView,       setTourneyView]       = useState(null);
+  // Initialize from URL directly so captain links work on first render
+  const [tourneyView,       setTourneyView]       = useState(()=>tourneyId?"join":null);
   const [tourneyData,       setTourneyData]       = useState(null);
   const [tourneyCaptainIdx, setTourneyCaptainIdx] = useState(null);
   const [captainLoading,    setCaptainLoading]    = useState(false);
 
   // On startup: restore captain session from localStorage if no URL params
   useEffect(()=>{
-    if(tourneyId) { setTourneyView("join"); return; }
+    if(tourneyId) { return; } // already set to "join" by useState initializer
     // Check if captain has a saved session
     try {
       const saved = localStorage.getItem("press_captain_session");
@@ -757,14 +758,6 @@ export default function App(){
     }
   }
 
-  if(loading)return(<div style={{background:C.bg,minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:16}}><div style={{fontSize:46,fontWeight:800,color:C.green,letterSpacing:-2}}>Press</div><Spinner/></div>);
-  if(showPrivacy)return <PrivacyPolicy onBack={()=>setShowPrivacy(false)}/>;
-  if(showPaywall)return <ProPaywall onBack={()=>setShowPaywall(false)} onUpgrade={handleUpgrade} saving={stripeSaving}/>;
-  if(showProInfo)return <ProInfo onBack={()=>setShowProInfo(false)} isPro={isPro} onUpgrade={()=>{setShowProInfo(false);setShowPaywall(true);}}/>;
-
-  // Opponent score entry — no login required, anyone with the link can score
-  if(roundParam && playerParam) return <OpponentScoreEntry roundId={roundParam} playerId={playerParam} onBack={()=>window.location.href="/"}/>;
-
   // Captain/Spectator links -- NO LOGIN REQUIRED (no account needed)
   // Must be above the auth wall so captains don't need a Press account
   if(tourneyView==="join"){
@@ -791,6 +784,14 @@ export default function App(){
     return <TourneySpectator tourney={tourneyData}
       onBack={()=>{setTourneyView(null);window.history.replaceState({},"","/");}}/>;
   }
+
+  if(loading)return(<div style={{background:C.bg,minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:16}}><div style={{fontSize:46,fontWeight:800,color:C.green,letterSpacing:-2}}>Press</div><Spinner/></div>);
+  if(showPrivacy)return <PrivacyPolicy onBack={()=>setShowPrivacy(false)}/>;
+  if(showPaywall)return <ProPaywall onBack={()=>setShowPaywall(false)} onUpgrade={handleUpgrade} saving={stripeSaving}/>;
+  if(showProInfo)return <ProInfo onBack={()=>setShowProInfo(false)} isPro={isPro} onUpgrade={()=>{setShowProInfo(false);setShowPaywall(true);}}/>;
+
+  // Opponent score entry — no login required, anyone with the link can score
+  if(roundParam && playerParam) return <OpponentScoreEntry roundId={roundParam} playerId={playerParam} onBack={()=>window.location.href="/"}/>;
 
   if(!user)return <AuthScreen onAuth={setUser} onPrivacy={()=>setShowPrivacy(true)}/>;
 
