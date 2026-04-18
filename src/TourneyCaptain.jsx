@@ -64,6 +64,12 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
   const pendingTeams= useRef(null);  // flush on Next Hole
   const [connStatus, setConnStatus] = useState("connecting"); // connecting|online|offline
 
+  // ── Writer lock — only the first device to open this captain link can write ─
+  // Key is per-tourney per-team so 9 different teams all get their own lock
+  const writerKey = `press_writer_${initialTourney.id}_${teamIdx}`;
+  const isWriter  = useRef(false);
+  const [readOnlyMode, setReadOnlyMode] = useState(false);
+
   const ctpEnabled  = tourney.ctp_enabled===true;
   const ctpHoles    = tourney.ctp_holes||[];
   const ctpLeaders  = tourney.ctp_leaders||{};
@@ -112,15 +118,46 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
   }
 
   useEffect(()=>{
+    // ── Claim writer lock ──────────────────────────────────────────────────
+    // First device to open this captain link claims the write token.
+    // Any other device (e.g. director peeking) gets read-only mode.
+    const existing = localStorage.getItem(writerKey);
+    const myToken  = Date.now().toString();
+    if(!existing){
+      localStorage.setItem(writerKey, myToken);
+      isWriter.current = true;
+    } else {
+      // Token already claimed on another device — read-only
+      isWriter.current = false;
+      setReadOnlyMode(true);
+    }
+
     startSubscription();
     startPolling();
+
+    // ── iOS visibility reconnect ───────────────────────────────────────────
+    // When the phone wakes from sleep/background, rebuild the WS connection
+    function handleVisibility(){
+      if(document.visibilityState === "visible"){
+        setConnStatus("connecting");
+        startSubscription();
+        // Also flush any pending scores that may not have saved before sleep
+        if(pendingTeams.current) flushSave(pendingTeams.current);
+      }
+    }
+    document.addEventListener("visibilitychange", handleVisibility);
+
     return()=>{
       if(subRef.current) sb.removeChannel(subRef.current);
       if(pollTimer.current) clearInterval(pollTimer.current);
+      document.removeEventListener("visibilitychange", handleVisibility);
+      // Release writer lock when captain leaves the scoring screen
+      if(isWriter.current) localStorage.removeItem(writerKey);
     };
   },[tourney.id, teamIdx]);
 
   async function flushSave(teamsToSave){
+    if(!isWriter.current) return;  // read-only device — never write to DB
     try{
       const{data:current}=await sb.from("team_tournaments").select("teams").eq("id",tourney.id).single();
       const dbTeams=current?.teams||teamsToSave;
@@ -287,6 +324,21 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
           const myRankObj=allScores.find(x=>x.i===teamIdx);
           const myRank=myRankObj?allScores.indexOf(myRankObj)+1:null;
           const totalTeams=(tourney.teams||[]).length;
+
+          // Read-only mode — director or second device opened this captain link
+          if(readOnlyMode){
+            return(
+              <div style={{background:"rgba(232,184,75,0.12)",border:"2px solid rgba(232,184,75,0.5)",borderRadius:10,padding:"12px 16px"}}>
+                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:4}}>
+                  <div style={{width:14,height:14,borderRadius:"50%",background:C.gold,flexShrink:0}}/>
+                  <div style={{fontWeight:800,fontSize:14,color:C.gold}}>VIEW ONLY — Scores locked to captain's device</div>
+                </div>
+                <div style={{fontSize:12,color:"rgba(232,184,75,0.8)",lineHeight:1.5}}>
+                  This captain link is already open on another device. Scores can only be entered there. You can watch scores update live here.
+                </div>
+              </div>
+            );
+          }
 
           if(connStatus==="offline"){
             return(
@@ -577,14 +629,14 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
                 </div>
               </div>
               <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:8 }}>
-                <button onClick={()=>setPlayerScore(j,currentHole,score!==null?Math.max(1,score-1):effPar-1)}
-                  style={{ width:56,height:56,borderRadius:"50%",background:C.dim,border:`1px solid ${C.border}`,color:C.text,fontSize:30,fontWeight:700,cursor:"pointer" }}>−</button>
+                <button onClick={()=>!readOnlyMode&&setPlayerScore(j,currentHole,score!==null?Math.max(1,score-1):effPar-1)}
+                  style={{ width:56,height:56,borderRadius:"50%",background:C.dim,border:`1px solid ${C.border}`,color:readOnlyMode?C.dim:C.text,fontSize:30,fontWeight:700,cursor:readOnlyMode?"not-allowed":"pointer",opacity:readOnlyMode?0.4:1 }}>−</button>
                 <div style={{ flex:1,textAlign:"center" }}>
                   <div style={{ fontSize:56,fontWeight:800,color:score!==null?C.text:C.muted,lineHeight:1 }}>{score!==null?score:"--"}</div>
-                  {score===null&&<div style={{ fontSize:11,color:C.muted,marginTop:4 }}>tap + to enter</div>}
+                  {score===null&&<div style={{ fontSize:11,color:C.muted,marginTop:4 }}>{readOnlyMode?"view only":"tap + to enter"}</div>}
                 </div>
-                <button onClick={()=>setPlayerScore(j,currentHole,score!==null?score+1:effPar)}
-                  style={{ width:56,height:56,borderRadius:"50%",background:C.dim,border:`1px solid ${C.border}`,color:C.text,fontSize:30,fontWeight:700,cursor:"pointer" }}>+</button>
+                <button onClick={()=>!readOnlyMode&&setPlayerScore(j,currentHole,score!==null?score+1:effPar)}
+                  style={{ width:56,height:56,borderRadius:"50%",background:C.dim,border:`1px solid ${C.border}`,color:readOnlyMode?C.dim:C.text,fontSize:30,fontWeight:700,cursor:readOnlyMode?"not-allowed":"pointer",opacity:readOnlyMode?0.4:1 }}>+</button>
               </div>
             </div>
           );
