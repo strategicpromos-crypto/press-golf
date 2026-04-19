@@ -58,11 +58,12 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
   const [ctpPopup,     setCtpPopup]     = useState(false); // simple open/close
   const [ctpName,      setCtpName]      = useState("");
   const [ctpDist,      setCtpDist]      = useState("");
-  const saveTimer   = useRef(null);
-  const subRef      = useRef(null);
-  const pollTimer   = useRef(null);
-  const pendingTeams= useRef(null);
-  const [connStatus,   setConnStatus]   = useState("connecting"); // connecting|online|offline
+  const saveTimer      = useRef(null);
+  const subRef         = useRef(null);
+  const pollTimer      = useRef(null);
+  const pendingTeams   = useRef(null);
+  const lastConfirmed  = useRef(null); // timestamp of last successful DB write
+  const [connStatus,   setConnStatus]   = useState("connecting"); // connecting|online|offline|syncing
   const isWriter       = useRef(false);
   const [readOnlyMode, setReadOnlyMode] = useState(false);
   const [claiming,     setClaiming]     = useState(false); // reclaim in progress
@@ -96,10 +97,19 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
       .on("postgres_changes",{event:"UPDATE",schema:"public",table:"team_tournaments",filter:"id=eq."+tourney.id},
         payload=>{ if(payload.new) setTourney(prev=>mergeTourneyUpdate(payload.new,prev)); })
       .subscribe(status=>{
-        if(status==="SUBSCRIBED") setConnStatus("online");
-        else if(status==="CLOSED"||status==="CHANNEL_ERROR"||status==="TIMED_OUT"){
+        if(status==="SUBSCRIBED"){
+          // WebSocket up — but only mark online once any pending scores are flushed
+          if(pendingTeams.current){
+            setConnStatus("syncing"); // amber — reconnected but scores not confirmed yet
+            flushSave(pendingTeams.current); // flushSave sets "online" on success
+          } else {
+            setConnStatus("online");
+          }
+        } else if(status==="CLOSED"||status==="CHANNEL_ERROR"||status==="TIMED_OUT"){
           setConnStatus("offline");
-          setTimeout(()=>startSubscription(), 3000);
+          // Reconnect — use longer delay if we have pending scores to avoid hammering
+          const delay = pendingTeams.current ? 2000 : 3000;
+          setTimeout(()=>startSubscription(), delay);
         }
       });
   }
@@ -198,9 +208,16 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
       const safeTeams=dbTeams.map((t,i)=>i===teamIdx?teamsToSave[i]:t);
       await sb.from("team_tournaments").update({teams:safeTeams,updated_at:new Date().toISOString()}).eq("id",tourney.id);
       pendingTeams.current=null;
+      lastConfirmed.current=Date.now();
+      // Only NOW mark as online — scores are confirmed in the database
+      setConnStatus("online");
       setSaveStatus("saved");
       setTimeout(()=>setSaveStatus(""),2000);
-    }catch(e){ setConnStatus("offline"); }
+    }catch(e){
+      // Write failed — stay offline, will retry on next reconnect
+      setConnStatus("offline");
+      setTimeout(()=>startSubscription(), 3000);
+    }
   }
 
   function scheduleSync(updatedTeams) {
@@ -381,41 +398,58 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
             );
           }
 
+          // OFFLINE — persistent, readable, tap to reconnect
           if(connStatus==="offline"){
             return(
-              <div onClick={()=>startSubscription()}
-                style={{background:"rgba(224,80,80,0.18)",border:"2px solid rgba(224,80,80,0.6)",borderRadius:10,padding:"12px 16px",cursor:"pointer"}}>
-                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:4}}>
-                  <div style={{width:14,height:14,borderRadius:"50%",background:C.red,flexShrink:0,boxShadow:"0 0 8px "+C.red}}/>
-                  <div style={{fontWeight:800,fontSize:14,color:C.red}}>OFFLINE — Scores not syncing</div>
-                </div>
-                <div style={{fontSize:12,color:"rgba(224,80,80,0.8)",marginBottom:6}}>
-                  Your scores are saved locally. Tap this bar to reconnect.
-                </div>
-                <div style={{fontSize:11,color:C.muted}}>
-                  If this persists: close the app, reopen your captain link, and scores will re-appear.
+              <div onClick={()=>{setConnStatus("connecting");startSubscription();}}
+                style={{background:"rgba(224,80,80,0.15)",border:"2px solid rgba(224,80,80,0.7)",borderRadius:10,padding:"12px 16px",cursor:"pointer"}}>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:10}}>
+                    <div style={{width:12,height:12,borderRadius:"50%",background:C.red,flexShrink:0}}/>
+                    <div>
+                      <div style={{fontWeight:800,fontSize:14,color:C.red}}>Scores not uploading</div>
+                      <div style={{fontSize:11,color:"rgba(224,80,80,0.8)",marginTop:2}}>Saved on your phone. Tap to reconnect.</div>
+                    </div>
+                  </div>
+                  <div style={{background:C.red,color:"#fff",fontSize:12,fontWeight:800,padding:"6px 12px",borderRadius:8,flexShrink:0}}>Reconnect</div>
                 </div>
               </div>
             );
           }
+          // SYNCING — reconnected but pending scores not yet confirmed in DB
+          if(connStatus==="syncing"){
+            return(
+              <div style={{background:"rgba(232,184,75,0.12)",border:"2px solid rgba(232,184,75,0.6)",borderRadius:10,padding:"10px 14px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                <div style={{display:"flex",alignItems:"center",gap:10}}>
+                  <div style={{width:12,height:12,borderRadius:"50%",background:C.gold,flexShrink:0}}/>
+                  <div>
+                    <div style={{fontSize:13,fontWeight:800,color:C.gold}}>Uploading scores...</div>
+                    <div style={{fontSize:11,color:"rgba(232,184,75,0.7)",marginTop:2}}>Do not close the app</div>
+                  </div>
+                </div>
+                <div style={{fontSize:11,color:C.gold,opacity:0.7}}>Please wait</div>
+              </div>
+            );
+          }
+          // CONNECTING — initial load or manual reconnect
           if(connStatus==="connecting"){
             return(
-              <div style={{background:"rgba(232,184,75,0.1)",border:"1px solid rgba(232,184,75,0.3)",borderRadius:10,padding:"10px 14px",display:"flex",alignItems:"center",gap:10}}>
+              <div style={{background:"rgba(232,184,75,0.08)",border:"1px solid rgba(232,184,75,0.3)",borderRadius:10,padding:"10px 14px",display:"flex",alignItems:"center",gap:10}}>
                 <div style={{width:10,height:10,borderRadius:"50%",background:C.gold,flexShrink:0}}/>
-                <div style={{fontSize:12,color:C.gold,fontWeight:600}}>Connecting to live leaderboard...</div>
+                <div style={{fontSize:12,color:C.gold,fontWeight:600}}>Connecting...</div>
               </div>
             );
           }
-          // Online — show score status
+          // ONLINE — confirmed live, scores in DB
           const myScObj=allScores.find(x=>x.i===teamIdx);
           const myTot=myScObj?myScObj.tot:null;
           const myPlayed=myScObj?myScObj.played:0;
           return(
             <div style={{background:"rgba(123,180,80,0.08)",border:"1px solid rgba(123,180,80,0.25)",borderRadius:10,padding:"10px 14px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <div style={{display:"flex",alignItems:"center",gap:8}}>
-                <div style={{width:10,height:10,borderRadius:"50%",background:saveStatus==="saving"?C.gold:C.green,flexShrink:0,boxShadow:saveStatus==="saving"?"0 0 6px "+C.gold:"0 0 6px "+C.green}}/>
+                <div style={{width:10,height:10,borderRadius:"50%",background:saveStatus==="saving"?C.gold:C.green,flexShrink:0}}/>
                 <div style={{fontSize:12,color:saveStatus==="saving"?C.gold:C.green,fontWeight:600}}>
-                  {saveStatus==="saving"?"Saving scores...":saveStatus==="saved"?"Scores saved":"Live - scores syncing"}
+                  {saveStatus==="saving"?"Saving...":saveStatus==="saved"?"Saved ✓":"Live"}
                 </div>
               </div>
               {myRank&&(
@@ -621,7 +655,11 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
           {course.holes.map(h=>{
             const scored=Object.values(team.scores||{}).some(ps=>ps?.[h.hole]!==undefined);
             return(
-              <button key={h.hole} onClick={()=>setCurrentHole(h.hole)} style={{
+              <button key={h.hole} onClick={async()=>{
+                if(saveTimer.current) clearTimeout(saveTimer.current);
+                if(pendingTeams.current) await flushSave(pendingTeams.current);
+                setCurrentHole(h.hole);
+              }} style={{
                 flexShrink:0,width:36,height:36,borderRadius:"50%",fontSize:12,fontWeight:700,cursor:"pointer",
                 background:h.hole===currentHole?C.gold:scored?"rgba(123,180,80,0.15)":C.dim,
                 color:h.hole===currentHole?"#0a1a0f":scored?C.green:C.muted,
@@ -712,12 +750,15 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
           fontSize:15,fontWeight:700,cursor:"pointer",marginBottom:10
         }}>📊 Leaderboard</button>
 
-        <button onClick={()=>{
-          // Fix 3: flush any pending scores immediately before advancing hole
+        <button onClick={async()=>{
+          // Hard flush before advancing — guaranteed write, no debounce
+          if(saveTimer.current) clearTimeout(saveTimer.current);
           if(pendingTeams.current){
-            clearTimeout(saveTimer.current);
-            flushSave(pendingTeams.current);
+            setConnStatus("syncing");
+            await flushSave(pendingTeams.current);
           }
+          // Rebuild subscription if connection dropped mid-hole
+          if(connStatus==="offline"||connStatus==="syncing") startSubscription();
           if(!isLastHole) setCurrentHole(h=>h+1);
         }} disabled={isLastHole} style={{
           width:"100%",padding:"18px",background:isLastHole?"#1a2a1a":C.green,
