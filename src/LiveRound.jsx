@@ -611,7 +611,7 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
   if (resuming) return (
     <div style={{fontFamily:"'Georgia',serif",minHeight:"100vh",background:C.bg,color:C.text,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:24}}>
       <div style={{fontSize:48,marginBottom:16}}>⛳</div>
-      <div style={{fontWeight:700,fontSize:22,marginBottom:8,textAlign:"center"}}>Round In Progress</div>
+      <div style={{fontWeight:700,fontSize:22,marginBottom:8,textAlign:"center"}}>Individual Round In Progress</div>
       <div style={{fontSize:14,color:C.muted,marginBottom:8,textAlign:"center"}}>{COURSES[courseId]?.name}</div>
       <div style={{fontSize:13,color:C.gold,marginBottom:28,textAlign:"center"}}>
         Hole {currentHole} - {opponents.map(o=>o.name).join(", ")}
@@ -638,7 +638,7 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
         <button onClick={onBack} style={{background:"rgba(123,180,80,0.15)",border:"1px solid "+C.green,color:C.green,fontSize:14,cursor:"pointer",padding:"8px 16px",borderRadius:20,display:"flex",alignItems:"center",gap:6,fontWeight:700,marginBottom:20}}>‹ Back</button>
         <div style={{textAlign:"center"}}>
           <div style={{fontSize:36}}>⛳</div>
-          <div style={{fontSize:24,fontWeight:800,marginBottom:4}}>Start Live Round</div>
+          <div style={{fontSize:24,fontWeight:800,marginBottom:4}}>Start Individual Round</div>
         </div>
       </div>
 
@@ -913,7 +913,7 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
 
         {/* Tabs */}
         <div style={{display:"flex",borderBottom:"1px solid "+C.border,background:"rgba(0,0,0,0.2)"}}>
-          {[["score","Score"],["match","Match"]].map(([id,lbl])=>(
+          {[["score","Score"],["match","Match"],["summary","Summary"]].map(([id,lbl])=>(
             <button key={id} onClick={()=>setLiveTab(id)} style={{flex:1,padding:"12px",fontSize:13,fontWeight:liveTab===id?700:500,background:"transparent",color:liveTab===id?C.green:C.muted,border:"none",borderBottom:liveTab===id?"2px solid "+C.green:"2px solid transparent",cursor:"pointer"}}>{lbl}</button>
           ))}
         </div>
@@ -928,7 +928,11 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
               {course.holes.map(h=>{
                 const scored = getScore("me",h.hole)!==null;
                 return(
-                  <button key={h.hole} onClick={()=>setCurrentHole(h.hole)} style={{
+                  <button key={h.hole} onClick={async()=>{
+                    if(saveTimerRef.current) clearTimeout(saveTimerRef.current);
+                    if(pendingScores.current) await flushScores(pendingScores.current.scores, pendingScores.current.currentHole);
+                    setCurrentHole(h.hole);
+                  }} style={{
                     flexShrink:0,width:36,height:36,borderRadius:"50%",fontSize:12,fontWeight:700,cursor:"pointer",
                     background:h.hole===currentHole?C.gold:scored?"rgba(123,180,80,0.15)":C.dim,
                     color:h.hole===currentHole?"#0a1a0f":scored?C.green:C.muted,
@@ -1078,6 +1082,61 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
               })}
             </div>
           )}
+
+          {/* ── SUMMARY TAB — live money breakdown mid-round ── */}
+          {liveTab==="summary"&&(()=>{
+            const results=opponents.map(opp=>({...opp,tally:getTally(scores,course,opp,courseId)}));
+            const grandTotal=results.reduce((s,r)=>s+r.tally.total,0);
+            const holesPlayed=Object.keys(scores["me"]||{}).length;
+            return(
+              <div>
+                {holesPlayed===0&&(
+                  <div style={{textAlign:"center",padding:"30px 20px",color:C.muted}}>
+                    <div style={{fontSize:28,marginBottom:8}}>💰</div>
+                    <div style={{fontSize:14}}>Money summary will appear as you enter scores.</div>
+                  </div>
+                )}
+                {holesPlayed>0&&(
+                  <>
+                    <div style={{background:C.card,border:"2px solid "+(grandTotal>=0?C.green:C.red),borderRadius:14,padding:"16px",marginBottom:12,textAlign:"center"}}>
+                      <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:4}}>Overall · thru {holesPlayed}</div>
+                      <div style={{fontSize:44,fontWeight:800,color:grandTotal>=0?C.green:C.red,letterSpacing:-2}}>
+                        {grandTotal>=0?"+":"-"}${Math.abs(grandTotal).toFixed(2)}
+                      </div>
+                      <div style={{fontSize:12,color:C.muted,marginTop:2}}>{grandTotal>=0?"You collect":"You owe"}</div>
+                    </div>
+                    {results.map(r=>(
+                      <div key={r.playerId} style={{background:C.card,border:"1px solid "+C.border,borderRadius:14,padding:"14px",marginBottom:10}}>
+                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+                          <div style={{fontWeight:700,fontSize:15}}>{r.name}</div>
+                          <div style={{fontSize:20,fontWeight:800,color:r.tally.total>=0?C.green:C.red}}>
+                            {r.tally.total>=0?"+":"-"}${Math.abs(r.tally.total).toFixed(2)}
+                          </div>
+                        </div>
+                        <div style={{fontSize:11,color:C.muted,marginBottom:6}}>
+                          {r.betType==="match"?"Match Play $"+r.betAmount+"/hole"
+                            :r.betType==="nassau"?"Nassau $"+r.betAmount
+                            :r.betType==="nassau-press"?"Nassau - Auto Press "+(r.pressDown||2)+"D $"+r.betAmount
+                            :"Skins $"+r.betAmount}
+                          {" · "}{r.strokes===0?"Even":r.strokes>0?"You give "+(r.strokes/2)+"/side":"You get "+(Math.abs(r.strokes)/2)+"/side"}
+                        </div>
+                        {r.tally.front!==undefined&&(
+                          <div style={{display:"flex",gap:8}}>
+                            {[["F9",r.tally.front],["B9",r.tally.back],["Tot",r.tally.total]].map(([lbl,val])=>(
+                              val!==undefined&&<div key={lbl} style={{flex:1,background:"rgba(0,0,0,0.2)",borderRadius:8,padding:"8px",textAlign:"center"}}>
+                                <div style={{fontSize:10,color:C.muted,marginBottom:2}}>{lbl}</div>
+                                <div style={{fontSize:14,fontWeight:800,color:val>=0?C.green:C.red}}>{val>=0?"+":"-"}${Math.abs(val).toFixed(2)}</div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </>
+                )}
+              </div>
+            );
+          })()}
 
         </div>
 
