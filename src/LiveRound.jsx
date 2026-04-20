@@ -335,14 +335,28 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
   const effPar   = holeData ? (holePars[currentHole] ?? holeData.par) : 4;
   const saveTimer = useRef(null);
 
-  // -- Load specific round (from home screen Resume) or show setup ----------
+  // -- Load round on mount: specific ID from home screen, or most recent active ─
   useEffect(() => {
     async function checkExisting() {
-      if(!resumeRoundId) return; // no specific round — show setup fresh
-      const { data } = await sb.from("live_rounds")
-        .select("*")
-        .eq("id", resumeRoundId)
-        .single();
+      let data = null;
+      if(resumeRoundId){
+        // Home screen Resume button — load specific round by ID
+        const { data: d } = await sb.from("live_rounds")
+          .select("*")
+          .eq("id", resumeRoundId)
+          .single();
+        data = d;
+      } else {
+        // No specific round — auto-load most recent active round if one exists
+        const { data: d } = await sb.from("live_rounds")
+          .select("*")
+          .eq("owner_id", user.id)
+          .eq("status", "active")
+          .order("updated_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        data = d;
+      }
       if (data) {
         const validCourseId = COURSES[data.course_id] ? data.course_id : "south-toledo";
         setLiveRoundId(data.id);
@@ -350,7 +364,6 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
         setOpponents(data.opponents || []);
         setScores(data.scores || {});
         setCurrentHole(data.current_hole || 1);
-        // Restore back9 adjustments if saved
         if(data.back9_adjustments) setBack9Adjustments(data.back9_adjustments);
         setResuming(true);
       }
