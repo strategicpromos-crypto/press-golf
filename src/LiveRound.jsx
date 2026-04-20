@@ -437,12 +437,17 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
     }
     document.addEventListener("visibilitychange", handleVisibility);
 
+    // Summary shortcut — fired by home screen Summary button
+    function handleShowSummary() { setStep("summary"); }
+    window.addEventListener("press_show_summary", handleShowSummary);
+
     return () => {
       if (realtimeSub.current) {
         sb.removeChannel(realtimeSub.current);
         realtimeSub.current = null;
       }
       document.removeEventListener("visibilitychange", handleVisibility);
+      window.removeEventListener("press_show_summary", handleShowSummary);
     };
   }, [liveRoundId, step]);
 
