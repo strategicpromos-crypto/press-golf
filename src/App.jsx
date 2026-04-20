@@ -3,7 +3,7 @@ import { sb } from "./supabase.js";
 import { loadStripe } from "https://esm.sh/@stripe/stripe-js@2";
 import LiveRound from "./LiveRound.jsx";
 import TeamTournament from "./TeamTournament.jsx";
-import { TourneyLoader } from "./TourneyJoin.jsx";
+import TourneyJoin, { TourneyLoader } from "./TourneyJoin.jsx";
 import TourneyCaptain from "./TourneyCaptain.jsx";
 import TourneySpectator from "./TourneySpectator.jsx";
 import OpponentScoreEntry from "./OpponentScoreEntry.jsx";
@@ -1378,6 +1378,15 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
     );
   }
 
+  // ── JOIN TOURNEY (spectator code entry with back button) ─────────────────
+  if(view==="joinTourney") return(
+    <TourneyCodeEntry
+      onBack={()=>setView("roster")}
+      onCaptain={(t,idx)=>{setTourneyData(t);setTourneyCaptainIdx(idx);setTourneyView("captain");}}
+      onSpectator={(t)=>{setTourneyData(t);setTourneyView("spectator");}}
+    />
+  );
+
   if(view==="tournament") return(
     <TeamTournament user={user} onBack={()=>setView("roster")} onDelete={()=>setActiveTourney(null)}/>
   );
@@ -1437,6 +1446,11 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
           </div>
         </button>
 
+        {/* ── JOIN ── */}
+        <button onClick={()=>setView("joinTourney")} style={{width:"100%",maxWidth:360,background:"transparent",border:`1.5px solid ${C.green}55`,color:C.green,padding:"10px 18px",borderRadius:14,fontSize:13,fontWeight:700,cursor:"pointer",marginBottom:12,textAlign:"left"}}>
+          🔑 Join a Tournament &nbsp;<span style={{fontSize:11,fontWeight:400,opacity:0.6}}>— got a code or link?</span>
+        </button>
+
         <div style={{display:"flex",background:"rgba(0,0,0,0.35)",border:`1px solid ${C.border}`,borderRadius:14,overflow:"hidden",maxWidth:360,margin:"0 auto"}}>
           {[{l:"Rounds",v:sRound},{l:"Side Bets",v:sBet},{l:"Season Bank",v:sBank}].map((item,i,arr)=>(<div key={i} style={{flex:1,textAlign:"center",padding:"13px 4px",borderRight:i<arr.length-1?`1px solid ${C.border}`:"none"}}><Money value={item.v} size={15}/><div style={{fontSize:8,color:C.muted,letterSpacing:1.5,textTransform:"uppercase",marginTop:3}}>{item.l}</div></div>))}
         </div>
@@ -1472,7 +1486,7 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
             <div>
               <div style={{fontWeight:700,fontSize:14,color:C.green,marginBottom:2}}>⛳ Round In Progress</div>
               <div style={{fontSize:12,color:C.muted}}>{activeRound.course_name} · Hole {activeRound.current_hole}</div>
-              <div style={{fontSize:11,color:C.dim,marginTop:1}}>{(activeRound.opponents||[]).map(o=>o.name).join(", ")}</div>
+              <div style={{fontSize:12,color:C.text,fontWeight:600,marginTop:2}}>{(activeRound.opponents||[]).map(o=>o.name).join(", ")}</div>
             </div>
             <button onClick={()=>setView("liveround")} style={{background:C.green,border:"none",color:"#0a1a0f",padding:"10px 16px",borderRadius:12,fontSize:13,fontWeight:800,cursor:"pointer",flexShrink:0}}>
               Resume →
