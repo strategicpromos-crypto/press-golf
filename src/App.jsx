@@ -3,7 +3,7 @@ import { sb } from "./supabase.js";
 import { loadStripe } from "https://esm.sh/@stripe/stripe-js@2";
 import LiveRound from "./LiveRound.jsx";
 import TeamTournament from "./TeamTournament.jsx";
-import TourneyJoin, { TourneyLoader } from "./TourneyJoin.jsx";
+import { TourneyLoader } from "./TourneyJoin.jsx";
 import TourneyCaptain from "./TourneyCaptain.jsx";
 import TourneySpectator from "./TourneySpectator.jsx";
 import OpponentScoreEntry from "./OpponentScoreEntry.jsx";
@@ -870,8 +870,7 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
   const [saving,setSaving]=useState(false);
   const [toast,setToast]=useState({msg:"",error:false});
   const [view,setView]=useState("roster"); // roster | profile | liveround | tournament
-  const [activeRounds,  setActiveRounds]  = useState([]); // ALL active buddy rounds
-  const [resumeRoundId, setResumeRoundId] = useState(null); // which specific round to resume
+  const [activeRound,   setActiveRound]   = useState(null);
   const [opponentRound, setOpponentRound] = useState(null); // rounds where user is a linked opponent
   const [activeTourney, setActiveTourney]=useState(null); // active team tournament
   const [pid,setPid]=useState(null);
@@ -961,8 +960,10 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
         .eq("owner_id",user.id)
         .eq("status","active")
         .order("updated_at",{ascending:false})
-        .limit(10);
-      setActiveRounds(data||[]);
+        .limit(1)
+        .maybeSingle();
+      if(data)setActiveRound(data);
+      else setActiveRound(null);
 
       // Rounds I'm a linked opponent in (Ken's view after creating account)
       try {
@@ -1377,15 +1378,6 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
     );
   }
 
-  // ── JOIN TOURNEY (spectator code entry with back button) ─────────────────
-  if(view==="joinTourney") return(
-    <TourneyCodeEntry
-      onBack={()=>setView("roster")}
-      onCaptain={(t,idx)=>{setTourneyData(t);setTourneyCaptainIdx(idx);setTourneyView("captain");}}
-      onSpectator={(t)=>{setTourneyData(t);setTourneyView("spectator");}}
-    />
-  );
-
   if(view==="tournament") return(
     <TeamTournament user={user} onBack={()=>setView("roster")} onDelete={()=>setActiveTourney(null)}/>
   );
@@ -1394,9 +1386,8 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
     <LiveRound
       user={user}
       players={players}
-      resumeRoundId={resumeRoundId}
-      onBack={()=>{setResumeRoundId(null);setView("roster");}}
-      onPostToLedger={async()=>{setResumeRoundId(null);await loadAll();setView("roster");t2("Results posted to ledger! ⛳");}}
+      onBack={()=>setView("roster")}
+      onPostToLedger={async()=>{await loadAll();setView("roster");t2("Results posted to ledger! ⛳");}}
     />
   );
 
@@ -1446,11 +1437,6 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
           </div>
         </button>
 
-        {/* ── JOIN ── */}
-        <button onClick={()=>setView("joinTourney")} style={{width:"100%",maxWidth:360,background:"transparent",border:`1.5px solid ${C.green}55`,color:C.green,padding:"10px 18px",borderRadius:14,fontSize:13,fontWeight:700,cursor:"pointer",marginBottom:12,textAlign:"left"}}>
-          🔑 Join a Tournament &nbsp;<span style={{fontSize:11,fontWeight:400,opacity:0.6}}>— got a code or link?</span>
-        </button>
-
         <div style={{display:"flex",background:"rgba(0,0,0,0.35)",border:`1px solid ${C.border}`,borderRadius:14,overflow:"hidden",maxWidth:360,margin:"0 auto"}}>
           {[{l:"Rounds",v:sRound},{l:"Side Bets",v:sBet},{l:"Season Bank",v:sBank}].map((item,i,arr)=>(<div key={i} style={{flex:1,textAlign:"center",padding:"13px 4px",borderRight:i<arr.length-1?`1px solid ${C.border}`:"none"}}><Money value={item.v} size={15}/><div style={{fontSize:8,color:C.muted,letterSpacing:1.5,textTransform:"uppercase",marginTop:3}}>{item.l}</div></div>))}
         </div>
@@ -1480,24 +1466,19 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
           </div>
         )}
 
-        {/* Resume Round banners — one per active buddy round */}
-        {activeRounds.map(round=>(
-          <div key={round.id} style={{background:`linear-gradient(135deg,rgba(123,180,80,0.15),rgba(123,180,80,0.05))`,border:`1px solid ${C.green}44`,borderRadius:14,padding:"14px 16px",marginBottom:10,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-            <div style={{flex:1,minWidth:0}}>
+        {/* Resume Round banner */}
+        {activeRound&&(
+          <div style={{background:`linear-gradient(135deg,rgba(123,180,80,0.15),rgba(123,180,80,0.05))`,border:`1px solid ${C.green}44`,borderRadius:14,padding:"14px 16px",marginBottom:14,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <div>
               <div style={{fontWeight:700,fontSize:14,color:C.green,marginBottom:2}}>⛳ Round In Progress</div>
-              <div style={{fontSize:12,color:C.muted}}>{round.course_name} · Hole {round.current_hole}</div>
-              <div style={{fontSize:12,color:C.text,fontWeight:600,marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{(round.opponents||[]).map(o=>o.name).join(", ")}</div>
+              <div style={{fontSize:12,color:C.muted}}>{activeRound.course_name} · Hole {activeRound.current_hole}</div>
+              <div style={{fontSize:11,color:C.dim,marginTop:1}}>{(activeRound.opponents||[]).map(o=>o.name).join(", ")}</div>
             </div>
-            <div style={{display:"flex",flexDirection:"column",gap:6,flexShrink:0,marginLeft:12}}>
-              <button onClick={()=>{setResumeRoundId(round.id);setView("liveround");}} style={{background:C.green,border:"none",color:"#0a1a0f",padding:"10px 16px",borderRadius:12,fontSize:13,fontWeight:800,cursor:"pointer",whiteSpace:"nowrap"}}>
-                Resume →
-              </button>
-              <button onClick={()=>{setResumeRoundId(round.id);setView("liveround");setTimeout(()=>window.dispatchEvent(new CustomEvent("press_show_summary")),400);}} style={{background:"transparent",border:"1px solid "+C.green+"66",color:C.green,padding:"7px 12px",borderRadius:10,fontSize:11,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap",textAlign:"center"}}>
-                📊 Summary
-              </button>
-            </div>
+            <button onClick={()=>setView("liveround")} style={{background:C.green,border:"none",color:"#0a1a0f",padding:"10px 16px",borderRadius:12,fontSize:13,fontWeight:800,cursor:"pointer",flexShrink:0}}>
+              Resume →
+            </button>
           </div>
-        ))}
+        )}
 
         {/* Opponent round banner — shows when user has linked their account */}
         {opponentRound&&(()=>{
