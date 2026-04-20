@@ -300,7 +300,7 @@ function getTally(scores, course, opp, courseId) {
 }
 
 // -- MAIN COMPONENT ------------------------------------------------------------
-export default function LiveRound({ user, players, onBack, onPostToLedger }) {
+export default function LiveRound({ user, players, resumeRoundId, onBack, onPostToLedger }) {
   const [step,        setStep]        = useState("setup");
   const [courseId,    setCourseId]    = useState("south-toledo");
   const [opponents,   setOpponents]   = useState([]);
@@ -316,7 +316,10 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
   const [showShareRound,    setShowShareRound]    = useState(false);
   const [back9Adjustments,  setBack9Adjustments]  = useState({});
   const [holePars,          setHolePars]          = useState({});
-  const realtimeSub = useRef(null);
+  const realtimeSub   = useRef(null);
+  const saveTimerRef  = useRef(null); // named ref to avoid collision with saveTimer state
+  const pendingScores = useRef(null); // scores waiting to flush if connection dropped
+  const [connStatus,  setConnStatus]  = useState("connecting"); // connecting|online|syncing|offline
 
   // Add opponent form
   const [addOppId,       setAddOppId]       = useState("");
@@ -332,17 +335,14 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
   const effPar   = holeData ? (holePars[currentHole] ?? holeData.par) : 4;
   const saveTimer = useRef(null);
 
-  // -- Check for existing active round on mount ------------------------------
+  // -- Load specific round (from home screen Resume) or show setup ----------
   useEffect(() => {
     async function checkExisting() {
+      if(!resumeRoundId) return; // no specific round — show setup fresh
       const { data } = await sb.from("live_rounds")
         .select("*")
-        .eq("owner_id", user.id)
-        .eq("status", "active")
-        .order("updated_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
+        .eq("id", resumeRoundId)
+        .single();
       if (data) {
         const validCourseId = COURSES[data.course_id] ? data.course_id : "south-toledo";
         setLiveRoundId(data.id);
@@ -350,31 +350,47 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
         setOpponents(data.opponents || []);
         setScores(data.scores || {});
         setCurrentHole(data.current_hole || 1);
+        // Restore back9 adjustments if saved
+        if(data.back9_adjustments) setBack9Adjustments(data.back9_adjustments);
         setResuming(true);
       }
     }
     checkExisting();
-  }, [user.id]);
+  }, [resumeRoundId, user.id]);
+
+  // -- Flush pending scores to Supabase (hard save, no debounce) -----------
+  async function flushScores(scoresToSave, hole) {
+    try {
+      await sb.from("live_rounds").update({
+        scores: scoresToSave,
+        current_hole: hole,
+        back9_adjustments: back9Adjustments,
+        updated_at: new Date().toISOString(),
+      }).eq("id", liveRoundId);
+      pendingScores.current = null;
+      setConnStatus("online");
+    } catch(e) {
+      setConnStatus("offline");
+    }
+  }
 
   // -- Auto-save scores to Supabase whenever scores change ------------------
   useEffect(() => {
     if (!liveRoundId || step !== "playing") return;
-    if (saveTimer.current) clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(async () => {
-      await sb.from("live_rounds").update({
-        scores,
-        current_hole: currentHole,
-        updated_at: new Date().toISOString(),
-      }).eq("id", liveRoundId);
-    }, 800); // save 0.8s after last change
-    return () => clearTimeout(saveTimer.current);
-  }, [scores, currentHole, liveRoundId, step]);
+    pendingScores.current = { scores, currentHole }; // always track latest
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    setConnStatus(prev => prev === "online" ? "online" : prev); // don't flicker
+    saveTimerRef.current = setTimeout(async () => {
+      await flushScores(scores, currentHole);
+    }, 800);
+    return () => clearTimeout(saveTimerRef.current);
+  }, [scores, currentHole, back9Adjustments, liveRoundId, step]);
 
-  // -- Real-time: sync opponent scores into our state ----------------------
-  useEffect(() => {
-    if (!liveRoundId || step !== "playing") return;
+  // -- Real-time: sync opponent scores + connection resilience --------------
+  function startLiveRoundSub() {
+    if (realtimeSub.current) sb.removeChannel(realtimeSub.current);
     realtimeSub.current = sb
-      .channel("live_round_" + liveRoundId)
+      .channel("live_round_" + liveRoundId + "_" + Date.now())
       .on("postgres_changes", {
         event: "UPDATE", schema: "public",
         table: "live_rounds", filter: "id=eq." + liveRoundId,
@@ -388,12 +404,45 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
           });
         }
       })
-      .subscribe();
+      .subscribe(status => {
+        if (status === "SUBSCRIBED") {
+          // Flush any pending scores before declaring online
+          if (pendingScores.current) {
+            setConnStatus("syncing");
+            flushScores(pendingScores.current.scores, pendingScores.current.currentHole);
+          } else {
+            setConnStatus("online");
+          }
+        } else if (status === "CLOSED" || status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+          setConnStatus("offline");
+          setTimeout(() => startLiveRoundSub(), 3000);
+        }
+      });
+  }
+
+  useEffect(() => {
+    if (!liveRoundId || step !== "playing") return;
+
+    startLiveRoundSub();
+
+    // iOS visibility reconnect — rebuild WS when phone wakes
+    function handleVisibility() {
+      if (document.visibilityState === "visible") {
+        setConnStatus("connecting");
+        startLiveRoundSub();
+        if (pendingScores.current) {
+          flushScores(pendingScores.current.scores, pendingScores.current.currentHole);
+        }
+      }
+    }
+    document.addEventListener("visibilitychange", handleVisibility);
+
     return () => {
       if (realtimeSub.current) {
         sb.removeChannel(realtimeSub.current);
         realtimeSub.current = null;
       }
+      document.removeEventListener("visibilitychange", handleVisibility);
     };
   }, [liveRoundId, step]);
 
@@ -831,6 +880,32 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
           );
         })()}
 
+        {/* Connection status banner */}
+        {connStatus==="offline"&&(
+          <div onClick={()=>{setConnStatus("connecting");startLiveRoundSub();}}
+            style={{background:"rgba(224,80,80,0.15)",border:"2px solid rgba(224,80,80,0.7)",margin:"0 12px 10px",borderRadius:10,padding:"10px 14px",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+            <div style={{display:"flex",alignItems:"center",gap:10}}>
+              <div style={{width:10,height:10,borderRadius:"50%",background:"#e05050",flexShrink:0}}/>
+              <div>
+                <div style={{fontWeight:800,fontSize:13,color:"#e05050"}}>Scores not uploading</div>
+                <div style={{fontSize:11,color:"rgba(224,80,80,0.8)",marginTop:2}}>Saved on phone. Tap to reconnect.</div>
+              </div>
+            </div>
+            <div style={{background:"#e05050",color:"#fff",fontSize:11,fontWeight:800,padding:"5px 10px",borderRadius:8,flexShrink:0}}>Reconnect</div>
+          </div>
+        )}
+        {connStatus==="syncing"&&(
+          <div style={{background:"rgba(232,184,75,0.12)",border:"2px solid rgba(232,184,75,0.6)",margin:"0 12px 10px",borderRadius:10,padding:"10px 14px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+            <div style={{display:"flex",alignItems:"center",gap:10}}>
+              <div style={{width:10,height:10,borderRadius:"50%",background:"#e8b84b",flexShrink:0}}/>
+              <div>
+                <div style={{fontSize:13,fontWeight:800,color:"#e8b84b"}}>Uploading scores...</div>
+                <div style={{fontSize:11,color:"rgba(232,184,75,0.7)",marginTop:2}}>Do not close the app</div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Tabs */}
         <div style={{display:"flex",borderBottom:"1px solid "+C.border,background:"rgba(0,0,0,0.2)"}}>
           {[["score","Score"],["match","Match"]].map(([id,lbl])=>(
@@ -923,11 +998,23 @@ export default function LiveRound({ user, players, onBack, onPostToLedger }) {
               );
             })}
 
-            <button onClick={()=>isLastHole?setStep("summary"):setCurrentHole(h=>h+1)} disabled={!canAdvance}
+            <button onClick={async()=>{
+              // Hard flush before advancing — guaranteed write, no debounce
+              if(saveTimerRef.current) clearTimeout(saveTimerRef.current);
+              if(pendingScores.current||true){
+                setConnStatus("syncing");
+                await flushScores(scores, currentHole);
+              }
+              if(connStatus==="offline"||connStatus==="syncing") startLiveRoundSub();
+              if(isLastHole) setStep("summary");
+              else setCurrentHole(h=>h+1);
+            }} disabled={!canAdvance}
               style={{width:"100%",padding:"16px",background:!canAdvance?"#333":isLastHole?C.gold:C.green,color:!canAdvance?C.muted:"#0a1a0f",border:"none",borderRadius:12,fontSize:15,fontWeight:700,cursor:!canAdvance?"not-allowed":"pointer",marginTop:8}}>
               {!canAdvance?"Enter your score to continue":isLastHole?"Finish Round":"Next - Hole "+(currentHole+1)}
             </button>
-            <div style={{textAlign:"center",fontSize:11,color:C.dim,marginTop:8}}>Auto-saving · Round is safe if you close the app</div>
+            <div style={{textAlign:"center",fontSize:11,color:connStatus==="offline"?"rgba(224,80,80,0.8)":connStatus==="syncing"?"rgba(232,184,75,0.8)":C.dim,marginTop:8}}>
+              {connStatus==="offline"?"Scores saved locally — tap Next Hole to retry":connStatus==="syncing"?"Uploading...":"Scores saved · safe to close"}
+            </div>
           </>)}
 
           {/* ── MATCH TAB ── */}
