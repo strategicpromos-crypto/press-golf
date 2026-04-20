@@ -635,9 +635,9 @@ export default function TeamTournament({onBack, user, onDelete}){
               </div>
 
               {[
-                {icon:"[D]",title:"Director",desc:"Creates the tournament, sets teams and players, shares codes. Can edit any score."},
-                {icon:"[C]",title:"Team Captain",desc:"Gets a private code + PIN. Enters their team's scores hole by hole. Can fix any hole anytime."},
-                {icon:"[S]",title:"Spectator",desc:"Uses the public code to watch the live leaderboard. No account needed. Pull down to refresh."},
+                {icon:"[D]",title:"Director",desc:"Creates the tournament, sets teams and players, sends captain links. Can edit any score at any time."},
+                {icon:"[C]",title:"Team Captain",desc:"Gets a direct link texted to their phone. Tap the link to enter scores hole by hole. Can fix any hole anytime."},
+                {icon:"[S]",title:"Spectator",desc:"Gets a direct link to watch the live leaderboard. No account needed. Updates in real time."},
               ].map((r,i)=>(
                 <div key={i} style={{background:C.card,border:"1px solid "+C.border,borderRadius:12,padding:"14px",marginBottom:10}}>
                   <div style={{fontSize:13,fontWeight:700,marginBottom:4}}>{r.icon} {r.title}</div>
@@ -645,14 +645,13 @@ export default function TeamTournament({onBack, user, onDelete}){
                 </div>
               ))}
 
-              <div style={{fontSize:11,color:C.green,letterSpacing:1.5,textTransform:"uppercase",margin:"16px 0 8px",fontWeight:600}}>Codes</div>
+              <div style={{fontSize:11,color:C.green,letterSpacing:1.5,textTransform:"uppercase",margin:"16px 0 8px",fontWeight:600}}>How Links Work</div>
               {[
-                {code:"WEDS48-ABC",label:"Public code",desc:"Announce to everyone. Spectators use this to watch. Unique to your tournament."},
-                {code:"WEDS48-ABC-T1",label:"Captain code",desc:"Send privately to Team 1 captain along with their 4-digit PIN."},
+                {label:"Captain link",desc:"Each captain gets their own unique link. Tap it and you go straight into scoring — no login, no code needed."},
+                {label:"Spectator link",desc:"Anyone with the spectator link can watch the live leaderboard. Share it in your group chat before teeing off."},
               ].map((r,i)=>(
                 <div key={i} style={{background:C.card,border:"1px solid "+C.border,borderRadius:12,padding:"14px",marginBottom:8}}>
-                  <div style={{fontFamily:"monospace",fontSize:16,fontWeight:800,color:C.gold,marginBottom:4}}>{r.code}</div>
-                  <div style={{fontSize:12,color:C.green,fontWeight:600,marginBottom:2}}>{r.label}</div>
+                  <div style={{fontSize:12,color:C.green,fontWeight:700,marginBottom:4}}>{r.label}</div>
                   <div style={{fontSize:12,color:C.muted}}>{r.desc}</div>
                 </div>
               ))}
