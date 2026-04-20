@@ -1486,11 +1486,16 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
             <div style={{flex:1,minWidth:0}}>
               <div style={{fontWeight:700,fontSize:14,color:C.green,marginBottom:2}}>⛳ Round In Progress</div>
               <div style={{fontSize:12,color:C.muted}}>{round.course_name} · Hole {round.current_hole}</div>
-              <div style={{fontSize:11,color:C.dim,marginTop:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{(round.opponents||[]).map(o=>o.name).join(", ")}</div>
+              <div style={{fontSize:12,color:C.text,fontWeight:600,marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{(round.opponents||[]).map(o=>o.name).join(", ")}</div>
             </div>
-            <button onClick={()=>{setResumeRoundId(round.id);setView("liveround");}} style={{background:C.green,border:"none",color:"#0a1a0f",padding:"10px 16px",borderRadius:12,fontSize:13,fontWeight:800,cursor:"pointer",flexShrink:0,marginLeft:12}}>
-              Resume →
-            </button>
+            <div style={{display:"flex",flexDirection:"column",gap:6,flexShrink:0,marginLeft:12}}>
+              <button onClick={()=>{setResumeRoundId(round.id);setView("liveround");}} style={{background:C.green,border:"none",color:"#0a1a0f",padding:"10px 16px",borderRadius:12,fontSize:13,fontWeight:800,cursor:"pointer",whiteSpace:"nowrap"}}>
+                Resume →
+              </button>
+              <button onClick={()=>{setResumeRoundId(round.id);setView("liveround");setTimeout(()=>window.dispatchEvent(new CustomEvent("press_show_summary")),400);}} style={{background:"transparent",border:"1px solid "+C.green+"66",color:C.green,padding:"7px 12px",borderRadius:10,fontSize:11,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap",textAlign:"center"}}>
+                📊 Summary
+              </button>
+            </div>
           </div>
         ))}
 
