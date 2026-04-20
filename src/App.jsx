@@ -777,11 +777,7 @@ export default function App(){
       teamIdx={tourneyTeam!==null&&tourneyTeam!==undefined?parseInt(tourneyTeam):null}
       isSpectator={spectate==="1"}
       onBack={()=>{
-        // Clear stale link params so PWA doesn't loop back to the same broken screen
-        try{
-          localStorage.removeItem("press_link_params");
-          localStorage.removeItem("press_captain_session");
-        }catch(e){}
+        // If URL has tourney params, we have nowhere to go back to — just reload clean
         window.location.href="/";
       }}
       onCaptain={(t,idx)=>{
@@ -874,7 +870,8 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
   const [saving,setSaving]=useState(false);
   const [toast,setToast]=useState({msg:"",error:false});
   const [view,setView]=useState("roster"); // roster | profile | liveround | tournament
-  const [activeRound,   setActiveRound]   = useState(null);
+  const [activeRounds,  setActiveRounds]  = useState([]); // ALL active buddy rounds
+  const [resumeRoundId, setResumeRoundId] = useState(null); // which specific round to resume
   const [opponentRound, setOpponentRound] = useState(null); // rounds where user is a linked opponent
   const [activeTourney, setActiveTourney]=useState(null); // active team tournament
   const [pid,setPid]=useState(null);
@@ -964,10 +961,8 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
         .eq("owner_id",user.id)
         .eq("status","active")
         .order("updated_at",{ascending:false})
-        .limit(1)
-        .maybeSingle();
-      if(data)setActiveRound(data);
-      else setActiveRound(null);
+        .limit(10);
+      setActiveRounds(data||[]);
 
       // Rounds I'm a linked opponent in (Ken's view after creating account)
       try {
@@ -1399,8 +1394,9 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
     <LiveRound
       user={user}
       players={players}
-      onBack={()=>setView("roster")}
-      onPostToLedger={async()=>{await loadAll();setView("roster");t2("Results posted to ledger! ⛳");}}
+      resumeRoundId={resumeRoundId}
+      onBack={()=>{setResumeRoundId(null);setView("roster");}}
+      onPostToLedger={async()=>{setResumeRoundId(null);await loadAll();setView("roster");t2("Results posted to ledger! ⛳");}}
     />
   );
 
@@ -1484,19 +1480,19 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
           </div>
         )}
 
-        {/* Resume Round banner */}
-        {activeRound&&(
-          <div style={{background:`linear-gradient(135deg,rgba(123,180,80,0.15),rgba(123,180,80,0.05))`,border:`1px solid ${C.green}44`,borderRadius:14,padding:"14px 16px",marginBottom:14,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-            <div>
+        {/* Resume Round banners — one per active buddy round */}
+        {activeRounds.map(round=>(
+          <div key={round.id} style={{background:`linear-gradient(135deg,rgba(123,180,80,0.15),rgba(123,180,80,0.05))`,border:`1px solid ${C.green}44`,borderRadius:14,padding:"14px 16px",marginBottom:10,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <div style={{flex:1,minWidth:0}}>
               <div style={{fontWeight:700,fontSize:14,color:C.green,marginBottom:2}}>⛳ Round In Progress</div>
-              <div style={{fontSize:12,color:C.muted}}>{activeRound.course_name} · Hole {activeRound.current_hole}</div>
-              <div style={{fontSize:11,color:C.dim,marginTop:1}}>{(activeRound.opponents||[]).map(o=>o.name).join(", ")}</div>
+              <div style={{fontSize:12,color:C.muted}}>{round.course_name} · Hole {round.current_hole}</div>
+              <div style={{fontSize:11,color:C.dim,marginTop:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{(round.opponents||[]).map(o=>o.name).join(", ")}</div>
             </div>
-            <button onClick={()=>setView("liveround")} style={{background:C.green,border:"none",color:"#0a1a0f",padding:"10px 16px",borderRadius:12,fontSize:13,fontWeight:800,cursor:"pointer",flexShrink:0}}>
+            <button onClick={()=>{setResumeRoundId(round.id);setView("liveround");}} style={{background:C.green,border:"none",color:"#0a1a0f",padding:"10px 16px",borderRadius:12,fontSize:13,fontWeight:800,cursor:"pointer",flexShrink:0,marginLeft:12}}>
               Resume →
             </button>
           </div>
-        )}
+        ))}
 
         {/* Opponent round banner — shows when user has linked their account */}
         {opponentRound&&(()=>{
