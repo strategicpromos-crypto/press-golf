@@ -969,7 +969,17 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
 
             {/* My score */}
             <div style={{background:C.card,border:"2px solid "+C.green,borderRadius:14,padding:"16px",marginBottom:12}}>
-              <div style={{fontSize:11,color:C.green,letterSpacing:2,textTransform:"uppercase",marginBottom:12,fontWeight:600}}>⛳ Your Score</div>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+                <div style={{fontSize:11,color:C.green,letterSpacing:2,textTransform:"uppercase",fontWeight:600}}>⛳ Your Score</div>
+                {opponents.filter(o=>o.sameGroup).map(opp=>{
+                  if(opp.betType!=="nassau"&&opp.betType!=="nassau-press") return null;
+                  const t=getTally(scores,course,opp,courseId);
+                  const alreadyPressed=(opp.manualPresses||[]).some(p=>p.hole===currentHole);
+                  if(alreadyPressed) return <button key={opp.playerId} disabled style={{background:"#555",border:"none",color:"#aaa",padding:"5px 12px",borderRadius:8,fontSize:11,fontWeight:700,cursor:"not-allowed"}}>Pressed ✓</button>;
+                  if(t.total<0) return <button key={opp.playerId} onClick={()=>callManualPress(opp.playerId)} style={{background:C.red,border:"none",color:"#fff",padding:"6px 14px",borderRadius:8,fontSize:12,fontWeight:800,cursor:"pointer"}}>Press!</button>;
+                  return null;
+                })}
+              </div>
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
                 <ScoreButton label="-" size={60} onClick={()=>setScore("me",currentHole,(myScore!==null?myScore:effPar)-1)}/>
                 <div style={{flex:1,textAlign:"center"}}>
@@ -995,14 +1005,7 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
                       {getsStroke&&<div style={{fontSize:11,color:C.gold,marginTop:2}}>⭐ {opp.name} gets a stroke</div>}
                       {iGetStroke&&<div style={{fontSize:11,color:C.green,marginTop:2}}>⭐ You get a stroke</div>}
                     </div>
-                    <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4}}>
-                      <div style={{fontSize:13,fontWeight:700,color:tally.label==="Even"?C.muted:tally.label?.includes("Up")?C.green:C.red}}>{tally.label||"-"}</div>
-                      {(opp.betType==="nassau"||opp.betType==="nassau-press")&&(
-                        (opp.manualPresses||[]).some(p=>p.hole===currentHole)
-                          ?<button disabled style={{background:"#555",border:"none",color:"#aaa",padding:"5px 9px",borderRadius:8,fontSize:11,fontWeight:700,cursor:"not-allowed"}}>Pressed</button>
-                          :tally.total<0&&<button onClick={()=>callManualPress(opp.playerId)} style={{background:C.red,border:"none",color:"#fff",padding:"5px 9px",borderRadius:8,fontSize:11,fontWeight:700,cursor:"pointer"}}>Press!</button>
-                      )}
-                    </div>
+                    <div style={{fontSize:13,fontWeight:700,color:tally.label==="Even"?C.muted:tally.label?.includes("Up")?C.green:C.red}}>{tally.label||"-"}</div>
                   </div>
                   <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
                     <ScoreButton label="-" size={52} onClick={()=>setScore(opp.playerId,currentHole,(oppScore!==null?oppScore:effPar)-1)}/>
