@@ -1063,17 +1063,133 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
                 const strokeHoles=getStrokeHoles(courseId,absStrokes);
                 return(
                   <div key={opp.playerId} style={{marginBottom:20}}>
-                    <div style={{background:C.card,border:"1px solid "+C.border,borderRadius:12,padding:"12px 16px",marginBottom:10}}>
-                      <div style={{fontSize:11,color:C.green,letterSpacing:1.5,textTransform:"uppercase",marginBottom:6,fontWeight:600}}>Bet — {opp.name}</div>
-                      <div style={{fontSize:14,fontWeight:700}}>
-                        {opp.betType==="nassau"?"Nassau":opp.betType==="nassau-press"?"Nassau + Auto Press":opp.betType==="match"?"Match Play":"Skins"} · ${opp.betAmount}
+                    <div style={{background:C.card,border:"1px solid "+C.border,borderRadius:12,padding:"14px 16px",marginBottom:10}}>
+                      {/* Header */}
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12}}>
+                        <div>
+                          <div style={{fontSize:11,color:C.green,letterSpacing:1.5,textTransform:"uppercase",fontWeight:600,marginBottom:3}}>Bet — {opp.name}</div>
+                          <div style={{fontSize:14,fontWeight:700}}>
+                            {opp.betType==="nassau"?"Nassau":opp.betType==="nassau-press"?"Nassau + Auto Press":opp.betType==="match"?"Match Play":"Skins"} · ${opp.betAmount}
+                          </div>
+                          <div style={{fontSize:11,color:C.muted,marginTop:2}}>
+                            {opp.strokes===0?"Even":opp.strokes>0?"You give "+(opp.strokes/2)+"/side":"You get "+(Math.abs(opp.strokes)/2)+"/side"}
+                          </div>
+                        </div>
+                        <div style={{textAlign:"right"}}>
+                          <div style={{fontSize:11,color:C.muted,marginBottom:2}}>Running</div>
+                          <div style={{fontSize:20,fontWeight:800,color:tally.total===0?C.muted:tally.total>0?C.green:C.red}}>
+                            {tally.total===0?"$0":tally.total>0?"+$"+tally.total.toFixed(2):"-$"+Math.abs(tally.total).toFixed(2)}
+                          </div>
+                        </div>
                       </div>
-                      <div style={{fontSize:12,color:C.muted,marginTop:4}}>
-                        {opp.strokes===0?"Even":opp.strokes>0?"You give "+(opp.strokes/2)+" strokes/side":"You get "+(Math.abs(opp.strokes)/2)+" strokes/side"}
-                      </div>
-                      <div style={{marginTop:8,fontSize:13,fontWeight:800,color:tally.total===0?C.muted:tally.total>0?C.green:C.red}}>
-                        Running: {tally.total===0?"Even":tally.total>0?"+$"+tally.total.toFixed(2):"-$"+Math.abs(tally.total).toFixed(2)}
-                      </div>
+
+                      {/* Bet breakdown — Nassau press */}
+                      {(opp.betType==="nassau-press"||opp.betType==="nassau")&&tally.pressDetail&&(()=>{
+                        function betRow(b, betAmt) {
+                          const standing = b.diff===0?"E":b.diff>0?(b.diff+" UP"):(Math.abs(b.diff)+" DN");
+                          const standColor = b.diff>0?C.green:b.diff<0?C.red:C.muted;
+                          const amtColor = b.amount>0?C.green:b.amount<0?C.red:C.muted;
+                          const amtStr = b.amount===0?"$0":b.amount>0?("+$"+b.amount.toFixed(2)):("-$"+Math.abs(b.amount).toFixed(2));
+                          const isPress = b.label!=="Original";
+                          return(
+                            <div key={b.startHole+b.label} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"5px 0",borderBottom:"1px solid rgba(255,255,255,0.04)"}}>
+                              <div style={{flex:1}}>
+                                <span style={{fontSize:12,color:isPress?C.muted:C.text,fontWeight:isPress?400:600}}>
+                                  {b.label==="Original"?"Original $"+betAmt:b.label.replace("Auto Press","Auto Press")+" (H"+b.startHole+")"}
+                                </span>
+                              </div>
+                              <div style={{fontSize:12,fontWeight:700,color:standColor,minWidth:48,textAlign:"center"}}>{standing}</div>
+                              <div style={{fontSize:12,fontWeight:800,color:amtColor,minWidth:52,textAlign:"right"}}>{amtStr}</div>
+                            </div>
+                          );
+                        }
+
+                        function sideTotal(side) {
+                          if(!side?.bets?.length) return null;
+                          const t = side.total;
+                          return(
+                            <div style={{display:"flex",justifyContent:"space-between",padding:"5px 0 2px",marginTop:2}}>
+                              <span style={{fontSize:11,color:C.muted,fontWeight:600,letterSpacing:0.5}}>Side total</span>
+                              <span style={{fontSize:13,fontWeight:800,color:t===0?C.muted:t>0?C.green:C.red}}>
+                                {t===0?"$0":t>0?"+$"+t.toFixed(2):"-$"+Math.abs(t).toFixed(2)}
+                              </span>
+                            </div>
+                          );
+                        }
+
+                        const pd = tally.pressDetail;
+                        const holesPlayed18 = course.holes.filter(h=>{
+                          const my=getScore("me",h.hole); const op=getScore(opp.playerId,h.hole);
+                          return my!==null&&op!==null;
+                        }).length;
+
+                        return(
+                          <div>
+                            {/* Front 9 */}
+                            {pd.front?.bets?.length>0&&(
+                              <div style={{marginBottom:10}}>
+                                <div style={{fontSize:10,color:C.green,letterSpacing:1.5,textTransform:"uppercase",fontWeight:700,marginBottom:4}}>Front 9</div>
+                                {pd.front.bets.map(b=>betRow(b,opp.betAmount))}
+                                {sideTotal(pd.front)}
+                              </div>
+                            )}
+                            {/* Back 9 */}
+                            {pd.back?.bets?.length>0&&(
+                              <div style={{marginBottom:10}}>
+                                <div style={{fontSize:10,color:C.green,letterSpacing:1.5,textTransform:"uppercase",fontWeight:700,marginBottom:4}}>Back 9</div>
+                                {pd.back.bets.map(b=>betRow(b,opp.betAmount))}
+                                {sideTotal(pd.back)}
+                              </div>
+                            )}
+                            {/* 18-hole total */}
+                            <div style={{borderTop:"1px solid rgba(255,255,255,0.08)",paddingTop:8,marginTop:4,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                              <div>
+                                <div style={{fontSize:12,color:C.muted}}>18-hole total</div>
+                                <div style={{fontSize:10,color:C.dim}}>{holesPlayed18<18?"settles after hole 18":"final"}</div>
+                              </div>
+                              <div style={{fontSize:13,fontWeight:800,color:pd.total===0?C.muted:pd.total>0?C.green:C.red}}>
+                                {holesPlayed18<18?"TBD":pd.total===0?"$0":pd.total>0?"+$"+pd.total.toFixed(2):"-$"+Math.abs(pd.total).toFixed(2)}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })()}
+
+                      {/* Match Play simple breakdown */}
+                      {opp.betType==="match"&&(()=>{
+                        const ud = tally.upDown||0;
+                        const standing = ud===0?"All Square":ud>0?(ud+" Up"):(Math.abs(ud)+" Down");
+                        return(
+                          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 0"}}>
+                            <div style={{fontSize:13,color:C.muted}}>Match Play ${opp.betAmount}/hole · {opp.played||0} holes</div>
+                            <div style={{fontSize:15,fontWeight:800,color:ud===0?C.muted:ud>0?C.green:C.red}}>{standing}</div>
+                          </div>
+                        );
+                      })()}
+
+                      {/* Nassau simple (no press) */}
+                      {opp.betType==="nassau"&&!tally.pressDetail&&(()=>{
+                        const front=tally.front||0; const back=tally.back||0;
+                        return(
+                          <div>
+                            {[["Front 9",front],["Back 9",back],["18-hole",tally.total]].map(([lbl,amt])=>(
+                              <div key={lbl} style={{display:"flex",justifyContent:"space-between",padding:"4px 0",borderBottom:"1px solid rgba(255,255,255,0.04)"}}>
+                                <span style={{fontSize:12,color:C.muted}}>{lbl} · ${opp.betAmount}</span>
+                                <span style={{fontSize:12,fontWeight:800,color:amt===0?C.muted:amt>0?C.green:C.red}}>
+                                  {amt===0?"$0":amt>0?"+$"+amt.toFixed(2):"-$"+Math.abs(amt).toFixed(2)}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      })()}
+
+                      {/* Skins */}
+                      {opp.betType==="skins"&&(
+                        <div style={{fontSize:13,color:C.muted,paddingTop:4}}>
+                          See Skins tab for hole-by-hole results
+                        </div>
+                      )}
                     </div>
                     <div style={{background:C.card,border:"1px solid "+C.border,borderRadius:12,padding:"14px",overflowX:"auto"}}>
                       <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>Scorecard</div>
@@ -1116,6 +1232,8 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
             const results=opponents.map(opp=>({...opp,tally:getTally(scores,course,opp,courseId)}));
             const grandTotal=results.reduce((s,r)=>s+r.tally.total,0);
             const holesPlayed=Object.keys(scores["me"]||{}).length;
+            const fmtAmt=v=>v>=0?"+$"+v.toFixed(2):"-$"+Math.abs(v).toFixed(2);
+
             return(
               <div>
                 {holesPlayed===0&&(
@@ -1126,40 +1244,137 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
                 )}
                 {holesPlayed>0&&(
                   <>
+                    {/* Grand total card */}
                     <div style={{background:C.card,border:"2px solid "+(grandTotal>=0?C.green:C.red),borderRadius:14,padding:"16px",marginBottom:12,textAlign:"center"}}>
-                      <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:4}}>Overall · thru {holesPlayed}</div>
+                      <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:4}}>Running Total · thru {holesPlayed}</div>
                       <div style={{fontSize:44,fontWeight:800,color:grandTotal>=0?C.green:C.red,letterSpacing:-2}}>
-                        {grandTotal>=0?"+":"-"}${Math.abs(grandTotal).toFixed(2)}
+                        {fmtAmt(grandTotal)}
                       </div>
                       <div style={{fontSize:12,color:C.muted,marginTop:2}}>{grandTotal>=0?"You collect":"You owe"}</div>
                     </div>
-                    {results.map(r=>(
-                      <div key={r.playerId} style={{background:C.card,border:"1px solid "+C.border,borderRadius:14,padding:"14px",marginBottom:10}}>
-                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
-                          <div style={{fontWeight:700,fontSize:15}}>{r.name}</div>
-                          <div style={{fontSize:20,fontWeight:800,color:r.tally.total>=0?C.green:C.red}}>
-                            {r.tally.total>=0?"+":"-"}${Math.abs(r.tally.total).toFixed(2)}
+
+                    {/* Per opponent — full bet breakdown */}
+                    {results.map(r=>{
+                      const pd=r.tally.pressDetail;
+                      return(
+                        <div key={r.playerId} style={{background:C.card,border:"1px solid "+C.border,borderRadius:14,padding:"14px",marginBottom:10}}>
+
+                          {/* Header */}
+                          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+                            <div style={{fontWeight:800,fontSize:15}}>{r.name}</div>
+                            <div style={{fontSize:20,fontWeight:800,color:r.tally.total>=0?C.green:C.red}}>{fmtAmt(r.tally.total)}</div>
                           </div>
-                        </div>
-                        <div style={{fontSize:11,color:C.muted,marginBottom:6}}>
-                          {r.betType==="match"?"Match Play $"+r.betAmount+"/hole"
-                            :r.betType==="nassau"?"Nassau $"+r.betAmount
-                            :r.betType==="nassau-press"?"Nassau - Auto Press "+(r.pressDown||2)+"D $"+r.betAmount
-                            :"Skins $"+r.betAmount}
-                          {" · "}{r.strokes===0?"Even":r.strokes>0?"You give "+(r.strokes/2)+"/side":"You get "+(Math.abs(r.strokes)/2)+"/side"}
-                        </div>
-                        {r.tally.front!==undefined&&(
-                          <div style={{display:"flex",gap:8}}>
-                            {[["F9",r.tally.front],["B9",r.tally.back],["Tot",r.tally.total]].map(([lbl,val])=>(
-                              val!==undefined&&<div key={lbl} style={{flex:1,background:"rgba(0,0,0,0.2)",borderRadius:8,padding:"8px",textAlign:"center"}}>
-                                <div style={{fontSize:10,color:C.muted,marginBottom:2}}>{lbl}</div>
-                                <div style={{fontSize:14,fontWeight:800,color:val>=0?C.green:C.red}}>{val>=0?"+":"-"}${Math.abs(val).toFixed(2)}</div>
+                          <div style={{fontSize:11,color:C.muted,marginBottom:10}}>
+                            {r.betType==="match"?"Match Play $"+r.betAmount+"/hole"
+                              :r.betType==="nassau"?"Nassau $"+r.betAmount
+                              :r.betType==="nassau-press"?"Nassau + Auto Press "+(r.pressDown||2)+"D · $"+r.betAmount
+                              :"Skins $"+r.betAmount}
+                            {r.strokes!==0&&(" · "+(r.strokes>0?"You give "+(r.strokes/2)+"/side":"You get "+(Math.abs(r.strokes)/2)+"/side"))}
+                          </div>
+
+                          {/* Nassau + Auto Press — full breakdown */}
+                          {(r.betType==="nassau-press"||r.betType==="nassau")&&pd&&(
+                            <div style={{background:"rgba(0,0,0,0.25)",borderRadius:10,padding:"10px 12px"}}>
+
+                              {/* Front 9 */}
+                              {pd.front?.bets?.length>0&&(
+                                <div style={{marginBottom:8}}>
+                                  <div style={{fontSize:10,color:C.green,letterSpacing:1.5,textTransform:"uppercase",fontWeight:700,marginBottom:6}}>Front 9</div>
+                                  {pd.front.bets.map((b,i)=>(
+                                    <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",paddingBottom:4,marginBottom:4,borderBottom:i<pd.front.bets.length-1?"1px solid rgba(255,255,255,0.05)":"none"}}>
+                                      <div>
+                                        <div style={{fontSize:12,color:C.text,fontWeight:600}}>
+                                          {i===0?"Original $"+r.betAmount:(b.label||"Press")+" · hole "+b.startHole}
+                                        </div>
+                                        <div style={{fontSize:10,color:C.muted,marginTop:1}}>
+                                          {b.diff===0?"All Square":b.diff>0?b.diff+" hole"+(b.diff>1?"s":"")+' up':Math.abs(b.diff)+" hole"+(Math.abs(b.diff)>1?"s":"")+" dn"}
+                                        </div>
+                                      </div>
+                                      <div style={{fontSize:14,fontWeight:800,color:b.amount>=0?C.green:b.amount<0?C.red:C.muted}}>
+                                        {b.amount===0?"$0":fmtAmt(b.amount)}
+                                      </div>
+                                    </div>
+                                  ))}
+                                  <div style={{display:"flex",justifyContent:"space-between",fontSize:12,fontWeight:800,marginTop:4,paddingTop:4,borderTop:"1px solid rgba(255,255,255,0.1)"}}>
+                                    <span style={{color:C.muted}}>Front subtotal</span>
+                                    <span style={{color:pd.front.total>=0?C.green:pd.front.total<0?C.red:C.muted}}>{fmtAmt(pd.front.total)}</span>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Back 9 */}
+                              {pd.back?.bets?.length>0&&(
+                                <div style={{marginBottom:8,paddingTop:pd.front?.bets?.length>0?8:0,borderTop:pd.front?.bets?.length>0?"1px solid rgba(255,255,255,0.08)":"none"}}>
+                                  <div style={{fontSize:10,color:C.green,letterSpacing:1.5,textTransform:"uppercase",fontWeight:700,marginBottom:6}}>Back 9</div>
+                                  {pd.back.bets.map((b,i)=>(
+                                    <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",paddingBottom:4,marginBottom:4,borderBottom:i<pd.back.bets.length-1?"1px solid rgba(255,255,255,0.05)":"none"}}>
+                                      <div>
+                                        <div style={{fontSize:12,color:C.text,fontWeight:600}}>
+                                          {i===0?"Original $"+r.betAmount:(b.label||"Press")+" · hole "+b.startHole}
+                                        </div>
+                                        <div style={{fontSize:10,color:C.muted,marginTop:1}}>
+                                          {b.diff===0?"All Square":b.diff>0?b.diff+" hole"+(b.diff>1?"s":"")+' up':Math.abs(b.diff)+" hole"+(Math.abs(b.diff)>1?"s":"")+" dn"}
+                                        </div>
+                                      </div>
+                                      <div style={{fontSize:14,fontWeight:800,color:b.amount>=0?C.green:b.amount<0?C.red:C.muted}}>
+                                        {b.amount===0?"$0":fmtAmt(b.amount)}
+                                      </div>
+                                    </div>
+                                  ))}
+                                  <div style={{display:"flex",justifyContent:"space-between",fontSize:12,fontWeight:800,marginTop:4,paddingTop:4,borderTop:"1px solid rgba(255,255,255,0.1)"}}>
+                                    <span style={{color:C.muted}}>Back subtotal</span>
+                                    <span style={{color:pd.back.total>=0?C.green:pd.back.total<0?C.red:C.muted}}>{fmtAmt(pd.back.total)}</span>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* 18-hole total */}
+                              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",paddingTop:8,marginTop:4,borderTop:"1px solid rgba(255,255,255,0.12)"}}>
+                                <div>
+                                  <div style={{fontSize:12,color:C.text,fontWeight:600}}>18-hole total</div>
+                                  <div style={{fontSize:10,color:C.muted,marginTop:1}}>No press · paid at end</div>
+                                </div>
+                                <div style={{fontSize:14,fontWeight:800,color:pd.total>=0?C.green:pd.total<0?C.red:C.muted}}>
+                                  {pd.total===0?"$0 (in progress)":fmtAmt(pd.total)}
+                                </div>
                               </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    ))}
+                            </div>
+                          )}
+
+                          {/* Match Play breakdown */}
+                          {r.betType==="match"&&(()=>{
+                            let holesWon=0,holesLost=0,halved=0;
+                            for(const h of course.holes){
+                              const my=scores["me"]?.[h.hole]; const op=scores[r.playerId]?.[h.hole];
+                              if(my===undefined||op===undefined) continue;
+                              const myN=myStrokeHoles?.includes?.(h.hole)?my-1:my;
+                              const opN=oppStrokeHoles?.includes?.(h.hole)?op-1:op;
+                              if(myN<opN) holesWon++; else if(myN>opN) holesLost++; else halved++;
+                            }
+                            return(
+                              <div style={{background:"rgba(0,0,0,0.25)",borderRadius:10,padding:"10px 12px"}}>
+                                {[["Holes won",holesWon,"+"+(holesWon*r.betAmount).toFixed(2),C.green],["Holes lost",holesLost,"-"+(holesLost*r.betAmount).toFixed(2),C.red],["Halved",halved,"$0",C.muted]].map(([lbl,ct,amt,clr])=>(
+                                  ct>0&&<div key={lbl} style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:4}}>
+                                    <span style={{color:C.muted}}>{lbl} ({ct})</span>
+                                    <span style={{color:clr,fontWeight:700}}>{amt}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            );
+                          })()}
+
+                          {/* Skins breakdown */}
+                          {r.betType==="skins"&&(()=>{
+                            return(
+                              <div style={{background:"rgba(0,0,0,0.25)",borderRadius:10,padding:"10px 12px"}}>
+                                <div style={{fontSize:12,color:C.muted}}>See Match tab for hole-by-hole skins detail</div>
+                              </div>
+                            );
+                          })()}
+
+                        </div>
+                      );
+                    })}
                   </>
                 )}
               </div>
