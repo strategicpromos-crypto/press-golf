@@ -118,19 +118,22 @@ function calcMatchPlayTotal(scores, course, myStrokeHoles, oppStrokeHoles, betPe
 }
 
 function calcNassauTotal(scores, course, myStrokeHoles, oppStrokeHoles, betAmount) {
+  // Nassau is match play — winner of each side is whoever wins more holes, not fewest strokes
   function side(holes) {
-    let myT = 0, oppT = 0, ok = false;
+    let holesWon = 0, played = 0;
     for (const h of holes) {
       const my  = safeInt(scores["me"]?.[h.hole], -1);
       const opp = safeInt(scores["opp"]?.[h.hole], -1);
       if (my < 0 || opp < 0) continue;
-      ok = true;
-      myT  += myStrokeHoles.includes(h.hole)  ? my  - 1 : my;
-      oppT += oppStrokeHoles.includes(h.hole) ? opp - 1 : opp;
+      played++;
+      const myNet  = myStrokeHoles.includes(h.hole)  ? my  - 1 : my;
+      const oppNet = oppStrokeHoles.includes(h.hole) ? opp - 1 : opp;
+      if (myNet < oppNet) holesWon++;
+      else if (myNet > oppNet) holesWon--;
     }
-    if (!ok) return 0;
-    if (myT < oppT)  return  betAmount;
-    if (myT > oppT)  return -betAmount;
+    if (played === 0) return 0;
+    if (holesWon > 0)  return  betAmount;
+    if (holesWon < 0)  return -betAmount;
     return 0;
   }
   const front = side(course.holes.filter(h=>h.side==="front"));
@@ -207,16 +210,20 @@ function getTally(scores, course, opp, courseId) {
     }
 
     function sideDiff(holes) {
-      let myT = 0, oppT = 0, played = 0;
+      // Match play: count holes won/lost, not stroke totals
+      let holesUp = 0, played = 0;
       for (const h of holes) {
         const my = safeInt(myScores[h.hole],  -1);
         const op = safeInt(oppScores[h.hole], -1);
         if (my < 0 || op < 0) continue;
         played++;
-        myT  += myStrokeHoles.includes(h.hole)  ? my - 1 : my;
-        oppT += oppStrokeHoles.includes(h.hole) ? op - 1 : op;
+        const myNet  = myStrokeHoles.includes(h.hole)  ? my - 1 : my;
+        const oppNet = oppStrokeHoles.includes(h.hole) ? op - 1 : op;
+        if (myNet < oppNet) holesUp++;
+        else if (myNet > oppNet) holesUp--;
       }
-      return { diff: myT - oppT, played };
+      // negative diff = holesUp (matches standingLabel: diff<0 → Up)
+      return { diff: -holesUp, played };
     }
     const front = sideDiff(course.holes.filter(h=>h.side==="front"));
     const back  = sideDiff(course.holes.filter(h=>h.side==="back"));
@@ -335,26 +342,19 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
   const effPar   = holeData ? (holePars[currentHole] ?? holeData.par) : 4;
   const saveTimer = useRef(null);
 
-  // -- Load round on mount: specific ID from home screen, or most recent active ─
+  // -- Load specific round (from home screen Resume) or show setup ----------
   useEffect(() => {
     async function checkExisting() {
       let data = null;
       if(resumeRoundId){
-        // Home screen Resume button — load specific round by ID
-        const { data: d } = await sb.from("live_rounds")
-          .select("*")
-          .eq("id", resumeRoundId)
-          .single();
+        // Home screen Resume — load specific round by ID
+        const { data: d } = await sb.from("live_rounds").select("*").eq("id", resumeRoundId).single();
         data = d;
       } else {
         // No specific round — auto-load most recent active round if one exists
         const { data: d } = await sb.from("live_rounds")
-          .select("*")
-          .eq("owner_id", user.id)
-          .eq("status", "active")
-          .order("updated_at", { ascending: false })
-          .limit(1)
-          .maybeSingle();
+          .select("*").eq("owner_id", user.id).eq("status", "active")
+          .order("updated_at", { ascending: false }).limit(1).maybeSingle();
         data = d;
       }
       if (data) {
@@ -637,7 +637,17 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
             discardRound();
           }
         }} color={C.red}>Discard Round</GhostBtn>
-        <GhostBtn onClick={()=>{setResuming(false);setLiveRoundId(null);setStep("setup");}}>Start New Round</GhostBtn>
+        <GhostBtn onClick={()=>{
+          // Clear local state only — existing round stays active in Supabase
+          // It will appear as a separate card on the home screen
+          setResuming(false);
+          setLiveRoundId(null);
+          setOpponents([]);
+          setScores({});
+          setCurrentHole(1);
+          setBack9Adjustments({});
+          setStep("setup");
+        }}>+ Start Another Round</GhostBtn>
       </div>
     </div>
   );
@@ -868,18 +878,20 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
           const strokeHoles = getStrokeHoles(courseId, absStrokes);
           const myS = scores["me"]||{};
           const oppS = scores[opp.playerId]||{};
+          // Match play: count holes won/lost per side, not stroke totals
           let front=0, back=0;
           for(const h of course.holes){
             const my=safeInt(myS[h.hole],-1), op=safeInt(oppS[h.hole],-1);
             if(my<0||op<0) continue;
             const myNet = opp.strokes<0&&strokeHoles.includes(h.hole)?my-1:my;
             const opNet = opp.strokes>0&&strokeHoles.includes(h.hole)?op-1:op;
-            const d = myNet-opNet;
-            if(h.side==="front") front+=d; else back+=d;
+            const result = myNet<opNet ? 1 : myNet>opNet ? -1 : 0;
+            if(h.side==="front") front+=result; else back+=result;
           }
           const tot=front+back;
-          const fmt=v=>v===0?"A/S":v<0?Math.abs(v)+" UP":Math.abs(v)+" DN";
-          const clr=v=>v<0?C.green:v>0?C.red:C.muted;
+          // Positive = holes up (winning)
+          const fmt=v=>v===0?"A/S":v>0?Math.abs(v)+" UP":Math.abs(v)+" DN";
+          const clr=v=>v>0?C.green:v<0?C.red:C.muted;
           return(
             <div style={{background:C.card,borderBottom:"1px solid "+C.border,padding:"10px 16px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <div>
