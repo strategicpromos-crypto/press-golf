@@ -445,21 +445,23 @@ export function calcAutoPressNassau(scores, holeData, myStrokeHoles, oppStrokeHo
   const front = calcSideWithPress(frontHoles);
   const back  = calcSideWithPress(backHoles);
 
-  // 18-hole total — NEVER pressed, flat bet based on total score
+  // 18-hole total — NEVER pressed, flat bet based on most holes won (match play)
   function calcTotal() {
-    let myT = 0, oppT = 0, holesPlayed = 0;
+    let holesWon = 0, holesPlayed = 0;
     for (const h of holeData) {
       const myScore  = scores.me[h.hole];
       const oppScore = scores.opp[h.hole];
       if (myScore === undefined || myScore === null) continue;
       if (oppScore === undefined || oppScore === null) continue;
       holesPlayed++;
-      myT  += myStrokeHoles.includes(h.hole)  ? myScore  - 1 : myScore;
-      oppT += oppStrokeHoles.includes(h.hole) ? oppScore - 1 : oppScore;
+      const myNet  = myStrokeHoles.includes(h.hole)  ? myScore  - 1 : myScore;
+      const oppNet = oppStrokeHoles.includes(h.hole) ? oppScore - 1 : oppScore;
+      if (myNet < oppNet) holesWon++;
+      else if (myNet > oppNet) holesWon--;
     }
     if (holesPlayed === 0) return 0;
-    if (myT < oppT)  return  betAmount;
-    if (myT > oppT)  return -betAmount;
+    if (holesWon > 0)  return  betAmount;  // won more holes — collect
+    if (holesWon < 0)  return -betAmount;  // lost more holes — pay
     return 0;
   }
 
