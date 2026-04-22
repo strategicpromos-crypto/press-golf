@@ -308,7 +308,6 @@ function getTally(scores, course, opp, courseId) {
 
 // -- MAIN COMPONENT ------------------------------------------------------------
 export default function LiveRound({ user, players, roundData, onBack, onRoundSaved, onPostToLedger, onDelete }) {
-  // Initialize from roundData if provided (resume) or defaults (new round)
   const [step,        setStep]        = useState(roundData ? "playing" : "setup");
   const [courseId,    setCourseId]    = useState(roundData?.course_id || "south-toledo");
   const [opponents,   setOpponents]   = useState(roundData?.opponents || []);
@@ -343,7 +342,7 @@ export default function LiveRound({ user, players, roundData, onBack, onRoundSav
   const effPar   = holeData ? (holePars[currentHole] ?? holeData.par) : 4;
   const saveTimer = useRef(null);
 
-  // Session managed by App.jsx — no internal loading needed.
+  // Session managed by App.jsx.
 
 
   // -- Flush pending scores — never touches connStatus on success -----------
@@ -385,7 +384,7 @@ export default function LiveRound({ user, players, roundData, onBack, onRoundSav
 
     // Build a stable channel name once per round — never changes on re-render
     if (!channelName.current) {
-      channelName.current = "live_round_" + liveRoundId + "_" + teamIdx;
+      channelName.current = "live_round_" + liveRoundId;
     }
 
     function buildSub() {
@@ -479,7 +478,7 @@ export default function LiveRound({ user, players, roundData, onBack, onRoundSav
         newId = data.id;
         setLiveRoundId(data.id);
         if(safeCourseId !== courseId) setCourseId(safeCourseId);
-        if(onRoundSaved) onRoundSaved(data); // App saves session + switches to scoring view
+        if(onRoundSaved) onRoundSaved(data);
       }
     } catch(e) {
       console.warn("live_rounds insert failed:", e);
@@ -628,22 +627,9 @@ export default function LiveRound({ user, players, roundData, onBack, onRoundSav
   // ==========================================================================
   // -- RESUME PROMPT ---------------------------------------------------------
   // ==========================================================================
-  // Resume screen handled by App.
+  // Resume handled by App.jsx
 
-    // If roundData provided by App, never show setup — go straight to scoring
-  // This matches TourneyCaptain pattern exactly
-  if (step === "setup" && roundData) {
-    // roundData exists but step is setup — force to playing
-    // This handles any edge case where state gets out of sync
-    setTimeout(() => setStep("playing"), 0);
-    return (
-      <div style={{minHeight:"100vh",background:C.bg,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"Georgia,serif"}}>
-        <div style={{color:C.muted,fontSize:14}}>Loading round...</div>
-      </div>
-    );
-  }
-
-  if (step === "setup") return (
+    if (step === "setup") return (
     <div style={{fontFamily:"'Georgia',serif",minHeight:"100vh",background:C.bg,color:C.text,paddingBottom:60}}>
       <div style={{background:"linear-gradient(180deg,"+C.card+" 0%,transparent 100%)",padding:"44px 20px 20px"}}>
         <button onClick={onBack} style={{background:"rgba(123,180,80,0.15)",border:"1px solid "+C.green,color:C.green,fontSize:14,cursor:"pointer",padding:"8px 16px",borderRadius:20,display:"flex",alignItems:"center",gap:6,fontWeight:700,marginBottom:20}}>‹ Back</button>
@@ -912,7 +898,7 @@ export default function LiveRound({ user, players, roundData, onBack, onRoundSav
 
         {/* Connection status banner */}
         {connStatus==="offline"&&(
-          <div onClick={()=>{setConnStatus("connecting");startLiveRoundSub();}}
+          <div onClick={()=>{setConnStatus("connecting");}}
             style={{background:"rgba(224,80,80,0.15)",border:"2px solid rgba(224,80,80,0.7)",margin:"0 12px 10px",borderRadius:10,padding:"10px 14px",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
             <div style={{display:"flex",alignItems:"center",gap:10}}>
               <div style={{width:10,height:10,borderRadius:"50%",background:"#e05050",flexShrink:0}}/>
@@ -1042,7 +1028,7 @@ export default function LiveRound({ user, players, roundData, onBack, onRoundSav
                 setConnStatus("syncing");
                 await flushScores(scores, currentHole);
               }
-              if(connStatus==="offline"||connStatus==="syncing") startLiveRoundSub();
+              if(connStatus==="offline"||connStatus==="syncing") buildSub?.();
               if(isLastHole) setStep("summary");
               else setCurrentHole(h=>h+1);
             }} disabled={!canAdvance}
