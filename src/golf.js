@@ -404,12 +404,16 @@ export function calcAutoPressNassau(scores, holeData, myStrokeHoles, oppStrokeHo
       }
 
       // Check for AUTO press triggers (±pressDown)
-      const isLastHole = h.hole === sideHoles[sideHoles.length - 1].hole;
+      const isLastHole     = h.hole === sideHoles[sideHoles.length - 1].hole;
+      const isSecondToLast = h.hole === sideHoles[sideHoles.length - 2]?.hole;
+      // A press needs at least 2 holes to be meaningful.
+      // Block if triggered on last OR second-to-last hole — only 0 or 1 hole would remain.
+      const canPress = !isLastHole && !isSecondToLast;
       for (let i = 0; i < betsThisHole; i++) {
         const bet = bets[i];
         if (bet.startHole <= h.hole && (bet.diff === pressDown || bet.diff === -pressDown) && !bet.pressed) {
           bet.pressed = true;
-          if (!isLastHole) {
+          if (canPress) {
             bets.push({ startHole: h.hole + 1, diff: 0, pressed: false, label: `Auto Press` });
           }
         }
@@ -420,7 +424,7 @@ export function calcAutoPressNassau(scores, holeData, myStrokeHoles, oppStrokeHo
       for (const mp of manualThisHole) {
         // Manual press starts on the current hole (already scored above)
         // so new bet starts next hole to not double-count
-        if (!isLastHole) {
+        if (canPress) {
           bets.push({ startHole: h.hole + 1, diff: 0, pressed: false, label: `Pissed Press h${h.hole}` });
         }
       }
