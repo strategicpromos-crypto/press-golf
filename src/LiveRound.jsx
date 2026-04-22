@@ -307,21 +307,21 @@ function getTally(scores, course, opp, courseId) {
 }
 
 // -- MAIN COMPONENT ------------------------------------------------------------
-export default function LiveRound({ user, players, roundData, onBack, onRoundSaved, onPostToLedger, onDelete }) {
-  const [step,        setStep]        = useState(roundData ? "playing" : "setup");
-  const [courseId,    setCourseId]    = useState(roundData?.course_id || "south-toledo");
-  const [opponents,   setOpponents]   = useState(roundData?.opponents || []);
-  const [scores,      setScores]      = useState(roundData?.scores || {});
-  const [currentHole, setCurrentHole] = useState(roundData?.current_hole || 1);
+export default function LiveRound({ user, players, resumeRoundId, onBack, onPostToLedger }) {
+  const [step,        setStep]        = useState("setup");
+  const [courseId,    setCourseId]    = useState("south-toledo");
+  const [opponents,   setOpponents]   = useState([]);
+  const [scores,      setScores]      = useState({});
+  const [currentHole, setCurrentHole] = useState(1);
   const [sheet,       setSheet]       = useState(null);
   const [myName,      setMyName]      = useState("");
   const [posting,     setPosting]     = useState(false);
-  const [liveRoundId, setLiveRoundId] = useState(roundData?.id || null);
+  const [liveRoundId, setLiveRoundId] = useState(null);
   const [resuming,    setResuming]    = useState(false);
   const [liveTab,     setLiveTab]     = useState("score");
   const [showRoundSettings, setShowRoundSettings] = useState(false);
   const [showShareRound,    setShowShareRound]    = useState(false);
-  const [back9Adjustments,  setBack9Adjustments]  = useState(roundData?.back9_adjustments||{});
+  const [back9Adjustments,  setBack9Adjustments]  = useState({});
   const [holePars,          setHolePars]          = useState({});
   const realtimeSub   = useRef(null);
   const saveTimerRef  = useRef(null); // named ref to avoid collision with saveTimer state
@@ -342,8 +342,36 @@ export default function LiveRound({ user, players, roundData, onBack, onRoundSav
   const effPar   = holeData ? (holePars[currentHole] ?? holeData.par) : 4;
   const saveTimer = useRef(null);
 
-  // Session managed by App.jsx.
+  // -- Load specific round (from home screen Resume) or show setup ----------
+  // freshStart ref — prevents checkExisting from reloading after intentional clear
+  const freshStart = useRef(false);
 
+  useEffect(() => {
+    if(freshStart.current) return; // user cleared state intentionally — stay on setup
+    async function checkExisting() {
+      let data = null;
+      if(resumeRoundId){
+        const { data: d } = await sb.from("live_rounds").select("*").eq("id", resumeRoundId).single();
+        data = d;
+      } else {
+        const { data: d } = await sb.from("live_rounds")
+          .select("*").eq("owner_id", user.id).eq("status", "active")
+          .order("updated_at", { ascending: false }).limit(1).maybeSingle();
+        data = d;
+      }
+      if (data) {
+        const validCourseId = COURSES[data.course_id] ? data.course_id : "south-toledo";
+        setLiveRoundId(data.id);
+        setCourseId(validCourseId);
+        setOpponents(data.opponents || []);
+        setScores(data.scores || {});
+        setCurrentHole(data.current_hole || 1);
+        if(data.back9_adjustments) setBack9Adjustments(data.back9_adjustments);
+        setResuming(true);
+      }
+    }
+    checkExisting();
+  }, [resumeRoundId, user.id]);
 
   // -- Flush pending scores — never touches connStatus on success -----------
   // connStatus only changes on genuine connection failure, not normal saves
@@ -478,7 +506,8 @@ export default function LiveRound({ user, players, roundData, onBack, onRoundSav
         newId = data.id;
         setLiveRoundId(data.id);
         if(safeCourseId !== courseId) setCourseId(safeCourseId);
-        if(onRoundSaved) onRoundSaved(data);
+        // Hand off to IndividualRound via App
+        if(onRoundCreated) { onRoundCreated(data); return; }
       }
     } catch(e) {
       console.warn("live_rounds insert failed:", e);
@@ -619,17 +648,54 @@ export default function LiveRound({ user, players, roundData, onBack, onRoundSav
   // -- Discard round ---------------------------------------------------------
   async function discardRound() {
     if (liveRoundId) {
-      await sb.from("live_rounds").delete().eq("id", liveRoundId);
+      await sb.from("live_rounds").update({ status: "complete" }).eq("id", liveRoundId);
     }
-    if(onDelete) onDelete();
+    // Mark intentional clear — prevents checkExisting from reloading another active round
+    freshStart.current = true;
+    channelName.current = null;
+    setLiveRoundId(null); setOpponents([]); setScores({});
+    setCurrentHole(1); setStep("setup"); setResuming(false);
   }
 
   // ==========================================================================
   // -- RESUME PROMPT ---------------------------------------------------------
   // ==========================================================================
-  // Resume handled by App.jsx
+  if (resuming) return (
+    <div style={{fontFamily:"'Georgia',serif",minHeight:"100vh",background:C.bg,color:C.text,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:24}}>
+      <div style={{fontSize:48,marginBottom:16}}>⛳</div>
+      <div style={{fontWeight:700,fontSize:22,marginBottom:8,textAlign:"center"}}>Individual Round In Progress</div>
+      <div style={{fontSize:14,color:C.muted,marginBottom:8,textAlign:"center"}}>{COURSES[courseId]?.name}</div>
+      <div style={{fontSize:13,color:C.gold,marginBottom:28,textAlign:"center"}}>
+        Hole {currentHole} - {opponents.map(o=>o.name).join(", ")}
+      </div>
+      <div style={{width:"100%",maxWidth:340,display:"flex",flexDirection:"column",gap:10}}>
+        <BigBtn onClick={()=>{setResuming(false);setStep("playing");}}>Resume Round</BigBtn>
+        <GhostBtn onClick={()=>{setResuming(false);setStep("summary");}}>Go to Summary</GhostBtn>
+        <GhostBtn onClick={()=>{
+          if(window.confirm("Are you sure you want to discard this round? All scores will be lost and cannot be recovered.")) {
+            discardRound();
+          }
+        }} color={C.red}>Discard Round</GhostBtn>
+        <GhostBtn onClick={()=>{
+          // Mark as intentional clear — prevents checkExisting from reloading old round
+          freshStart.current = true;
+          setResuming(false);
+          setLiveRoundId(null);
+          setOpponents([]);
+          setScores({});
+          setCurrentHole(1);
+          setBack9Adjustments({});
+          channelName.current = null; // reset channel so new round gets fresh subscription
+          setStep("setup");
+        }}>+ Start Another Round</GhostBtn>
+      </div>
+    </div>
+  );
 
-    if (step === "setup") return (
+  // ==========================================================================
+  // -- SETUP SCREEN ----------------------------------------------------------
+  // ==========================================================================
+  if (step === "setup") return (
     <div style={{fontFamily:"'Georgia',serif",minHeight:"100vh",background:C.bg,color:C.text,paddingBottom:60}}>
       <div style={{background:"linear-gradient(180deg,"+C.card+" 0%,transparent 100%)",padding:"44px 20px 20px"}}>
         <button onClick={onBack} style={{background:"rgba(123,180,80,0.15)",border:"1px solid "+C.green,color:C.green,fontSize:14,cursor:"pointer",padding:"8px 16px",borderRadius:20,display:"flex",alignItems:"center",gap:6,fontWeight:700,marginBottom:20}}>‹ Back</button>
@@ -898,7 +964,7 @@ export default function LiveRound({ user, players, roundData, onBack, onRoundSav
 
         {/* Connection status banner */}
         {connStatus==="offline"&&(
-          <div onClick={()=>{setConnStatus("connecting");}}
+          <div onClick={()=>setConnStatus("connecting")}
             style={{background:"rgba(224,80,80,0.15)",border:"2px solid rgba(224,80,80,0.7)",margin:"0 12px 10px",borderRadius:10,padding:"10px 14px",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
             <div style={{display:"flex",alignItems:"center",gap:10}}>
               <div style={{width:10,height:10,borderRadius:"50%",background:"#e05050",flexShrink:0}}/>
@@ -1028,7 +1094,7 @@ export default function LiveRound({ user, players, roundData, onBack, onRoundSav
                 setConnStatus("syncing");
                 await flushScores(scores, currentHole);
               }
-              if(connStatus==="offline"||connStatus==="syncing") buildSub?.();
+              
               if(isLastHole) setStep("summary");
               else setCurrentHole(h=>h+1);
             }} disabled={!canAdvance}
