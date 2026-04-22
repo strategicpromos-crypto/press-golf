@@ -342,24 +342,54 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
   const effPar   = holeData ? (holePars[currentHole] ?? holeData.par) : 4;
   const saveTimer = useRef(null);
 
-  // -- Load specific round (from home screen Resume) or show setup ----------
-  // freshStart ref — prevents checkExisting from reloading after intentional clear
+  // ── localStorage key for active round — isolated, no overlap with tournament keys
+  const LS_KEY = "press_live_round_" + user.id; // per-user so multi-user devices work
+
+  // freshStart ref — set true when user intentionally starts a new round
   const freshStart = useRef(false);
 
+  // ── Load round on mount ──────────────────────────────────────────────────
+  // Priority: 1) resumeRoundId prop (home screen card tap)
+  //           2) localStorage saved ID (navigation back/forward, page refresh)
+  //           3) Auto-load most recent active round
+  //           4) Show setup fresh
   useEffect(() => {
-    if(freshStart.current) return; // user cleared state intentionally — stay on setup
-    async function checkExisting() {
+    if(freshStart.current && !resumeRoundId) return; // intentional new round — show setup
+
+    async function loadRound() {
+      // Determine which round ID to load
+      let targetId = resumeRoundId || null;
+      if(!targetId) {
+        try {
+          const saved = localStorage.getItem(LS_KEY);
+          if(saved) {
+            const { id, userId } = JSON.parse(saved);
+            if(userId === user.id) targetId = id; // only restore if same user
+          }
+        } catch(e) {}
+      }
+
       let data = null;
-      if(resumeRoundId){
-        const { data: d } = await sb.from("live_rounds").select("*").eq("id", resumeRoundId).single();
+      if(targetId) {
+        // Load specific round by ID
+        const { data: d } = await sb.from("live_rounds")
+          .select("*").eq("id", targetId).eq("owner_id", user.id).maybeSingle();
         data = d;
-      } else {
+        // If not found (deleted), clear the stale localStorage entry
+        if(!data) {
+          try { localStorage.removeItem(LS_KEY); } catch(e) {}
+        }
+      }
+
+      // If no specific round found, try most recent active round
+      if(!data) {
         const { data: d } = await sb.from("live_rounds")
           .select("*").eq("owner_id", user.id).eq("status", "active")
           .order("updated_at", { ascending: false }).limit(1).maybeSingle();
         data = d;
       }
-      if (data) {
+
+      if(data) {
         const validCourseId = COURSES[data.course_id] ? data.course_id : "south-toledo";
         setLiveRoundId(data.id);
         setCourseId(validCourseId);
@@ -367,10 +397,13 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
         setScores(data.scores || {});
         setCurrentHole(data.current_hole || 1);
         if(data.back9_adjustments) setBack9Adjustments(data.back9_adjustments);
+        // Save to localStorage so navigation/refresh restores this round
+        try { localStorage.setItem(LS_KEY, JSON.stringify({ id: data.id, userId: user.id })); } catch(e) {}
         setResuming(true);
       }
+      // No round found — show setup (freshStart not needed, just no data)
     }
-    checkExisting();
+    loadRound();
   }, [resumeRoundId, user.id]);
 
   // -- Flush pending scores — never touches connStatus on success -----------
@@ -516,6 +549,8 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
       setPosting(false);
       return; // Don't advance if we got no ID back
     }
+    // Save to localStorage — survives navigation and page refresh
+    try { localStorage.setItem(LS_KEY, JSON.stringify({ id: newId, userId: user.id })); } catch(e) {}
     channelName.current = null; // fresh channel for new round
     setScores({});
     setCurrentHole(1);
@@ -646,9 +681,10 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
   // -- Discard round ---------------------------------------------------------
   async function discardRound() {
     if (liveRoundId) {
-      // DELETE from DB entirely — round disappears from home screen
       await sb.from("live_rounds").delete().eq("id", liveRoundId);
     }
+    // Clear localStorage so this round doesn't auto-restore on next mount
+    try { localStorage.removeItem(LS_KEY); } catch(e) {}
     freshStart.current = true;
     channelName.current = null;
     setLiveRoundId(null); setOpponents([]); setScores({});
@@ -682,6 +718,8 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
         <GhostBtn onClick={()=>{setResuming(false);setStep("summary");}}>📊 View Summary</GhostBtn>
         <div style={{height:10}}/>
         <GhostBtn onClick={()=>{
+          // Clear localStorage — new round will save its own ID on creation
+          try { localStorage.removeItem(LS_KEY); } catch(e) {}
           freshStart.current = true;
           channelName.current = null;
           setResuming(false);
