@@ -1491,7 +1491,10 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
                   <div style={{fontSize:12,color:C.muted}}>Hole {round.current_hole} · {new Date(round.updated_at).toLocaleDateString("en-US",{month:"short",day:"numeric"})}</div>
                   <div style={{fontSize:12,color:C.text,fontWeight:600,marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{(round.opponents||[]).map(o=>o.name).join(", ")}</div>
                 </div>
-                <button onClick={()=>{setResumeRoundId(round.id);setView("liveround");}} style={{background:C.green,border:"none",color:"#0a1a0f",padding:"10px 16px",borderRadius:12,fontSize:13,fontWeight:800,cursor:"pointer",flexShrink:0,marginLeft:12}}>
+                <button onClick={()=>{
+                  setResumeRoundId(round.id);
+                  setView("liveround");
+                }} style={{background:C.green,border:"none",color:"#0a1a0f",padding:"10px 16px",borderRadius:12,fontSize:13,fontWeight:800,cursor:"pointer",flexShrink:0,marginLeft:12}}>
                   Resume →
                 </button>
               </div>
