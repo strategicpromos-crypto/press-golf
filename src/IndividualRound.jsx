@@ -156,6 +156,18 @@ export default function IndividualRound({ user, players, roundData: initialRound
   const effPar    = holeData ? (holePars[currentHole] ?? holeData.par) : 4;
   const isLastHole= currentHole === (course?.holes?.length || 18);
 
+  // Back 9 stroke adjustment — adds/removes strokes on holes 10-18 for each opponent
+  // back9Adj = { [playerId]: +1 | -1 | 0 }  positive = they get extra strokes, negative = you get extra
+  function getEffectiveStrokes(opp, hole) {
+    const base = opp.strokes || 0;
+    const adj  = back9Adj[opp.playerId] || 0;
+    const isBack9 = course?.holes?.find(h=>h.hole===hole)?.side === "back";
+    if(!isBack9 || adj === 0) return base;
+    // adj is per-side so multiply by 2 for total — but apply proportionally via stroke holes
+    // Simpler: just add adj directly to strokes for back 9 stroke hole calculation
+    return base + (adj * 2); // adj is per-side strokes, *2 = total strokes adjustment
+  }
+
   // ── Writer lock — per round (not per team) ─────────────────────────────────
   const localKey = "press_individual_" + initialRound.id;
 
@@ -777,17 +789,64 @@ export default function IndividualRound({ user, players, roundData: initialRound
               <div style={{fontSize:20,fontWeight:800}}>⚙️ Edit Round</div>
               <button onClick={()=>setShowSettings(false)} style={{background:C.dim,border:"none",color:C.muted,width:34,height:34,borderRadius:"50%",fontSize:16,cursor:"pointer"}}>✕</button>
             </div>
-            {opponents.map((opp,i)=>(
+            {opponents.map((opp,i)=>{
+              const b9 = back9Adj[opp.playerId] || 0;
+              const basePerSide = Math.abs(opp.strokes||0) / 2;
+              const adjPerSide = b9;
+              const effPerSide = basePerSide + adjPerSide;
+              return(
               <div key={opp.playerId} style={{background:C.card,border:"1px solid "+C.border,borderRadius:14,padding:"16px",marginBottom:12}}>
                 <div style={{fontSize:11,color:C.green,letterSpacing:1.5,textTransform:"uppercase",marginBottom:8,fontWeight:600}}>Player {i+1}</div>
+
+                {/* Player name */}
                 <input value={opp.name} onChange={e=>{
                   const newOpps=opponents.map(o=>o.playerId===opp.playerId?{...o,name:e.target.value}:o);
                   const updated={...round,opponents:newOpps};
                   setRound(updated);
                   scheduleSync({scores,opponents:newOpps,current_hole:currentHole});
-                }} style={{width:"100%",padding:"12px",background:C.surface,border:"1px solid "+C.border,borderRadius:8,color:C.text,fontSize:16,fontWeight:600,outline:"none",boxSizing:"border-box"}}/>
+                }} style={{width:"100%",padding:"12px",background:C.surface,border:"1px solid "+C.border,borderRadius:8,color:C.text,fontSize:16,fontWeight:600,outline:"none",boxSizing:"border-box",marginBottom:12}}/>
+
+                {/* Back 9 Stroke Adjustment */}
+                <div style={{background:"rgba(232,184,75,0.06)",border:"1px solid rgba(232,184,75,0.25)",borderRadius:10,padding:"12px 14px"}}>
+                  <div style={{fontWeight:700,fontSize:13,color:C.gold,marginBottom:4}}>⛳ Back 9 Stroke Adjustment</div>
+                  <div style={{fontSize:11,color:C.muted,marginBottom:10,lineHeight:1.5}}>
+                    Agree mid-round to adjust strokes on the back 9. Affects hole selection only — does not change the original bet.
+                  </div>
+                  <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:8}}>
+                    <button onClick={()=>{
+                      const newAdj={...back9Adj,[opp.playerId]:(b9||0)-1};
+                      setBack9Adj(newAdj);
+                      scheduleSync({scores,opponents,current_hole:currentHole});
+                    }} style={{width:40,height:40,borderRadius:"50%",background:C.dim,border:"1px solid "+C.border,color:C.text,fontSize:22,fontWeight:700,cursor:"pointer",flexShrink:0}}>−</button>
+                    <div style={{flex:1,textAlign:"center"}}>
+                      <div style={{fontSize:20,fontWeight:800,color:b9===0?C.muted:C.gold}}>
+                        {b9===0?"No adjustment":b9>0?"+"+b9+" stroke"+(Math.abs(b9)>1?"s":"")+" per side to "+opp.name:Math.abs(b9)+" stroke"+(Math.abs(b9)>1?"s":"")+" per side to You"}
+                      </div>
+                      {b9!==0&&(
+                        <div style={{fontSize:11,color:C.muted,marginTop:4}}>
+                          Back 9 effective: {effPerSide===0?"Even":opp.strokes>=0?"You give "+effPerSide+"/side":"You get "+Math.abs(effPerSide)+"/side"}
+                        </div>
+                      )}
+                    </div>
+                    <button onClick={()=>{
+                      const newAdj={...back9Adj,[opp.playerId]:(b9||0)+1};
+                      setBack9Adj(newAdj);
+                      scheduleSync({scores,opponents,current_hole:currentHole});
+                    }} style={{width:40,height:40,borderRadius:"50%",background:C.dim,border:"1px solid "+C.border,color:C.text,fontSize:22,fontWeight:700,cursor:"pointer",flexShrink:0}}>+</button>
+                  </div>
+                  {b9!==0&&(
+                    <button onClick={()=>{
+                      const newAdj={...back9Adj,[opp.playerId]:0};
+                      setBack9Adj(newAdj);
+                      scheduleSync({scores,opponents,current_hole:currentHole});
+                    }} style={{width:"100%",padding:"8px",background:"transparent",color:C.muted,border:"1px solid "+C.border,borderRadius:8,fontSize:12,cursor:"pointer"}}>
+                      Reset to original strokes
+                    </button>
+                  )}
+                </div>
               </div>
-            ))}
+              );
+            })}
             <button onClick={()=>setShowSettings(false)}
               style={{width:"100%",padding:"16px",background:C.green,color:"#0a1a0f",border:"none",borderRadius:12,fontSize:15,fontWeight:800,cursor:"pointer",marginTop:8,fontFamily:"Georgia,serif"}}>
               ✓ Done
