@@ -307,8 +307,8 @@ function getTally(scores, course, opp, courseId) {
 }
 
 // -- MAIN COMPONENT ------------------------------------------------------------
-export default function LiveRound({ user, players, roundData, onRoundDataChange, onBack, onPostToLedger, onDelete }) {
-  // If roundData is provided by App, initialize from it — no internal loading needed
+export default function LiveRound({ user, players, roundData, onBack, onRoundSaved, onPostToLedger, onDelete }) {
+  // Initialize from roundData if provided (resume) or defaults (new round)
   const [step,        setStep]        = useState(roundData ? "playing" : "setup");
   const [courseId,    setCourseId]    = useState(roundData?.course_id || "south-toledo");
   const [opponents,   setOpponents]   = useState(roundData?.opponents || []);
@@ -343,9 +343,8 @@ export default function LiveRound({ user, players, roundData, onRoundDataChange,
   const effPar   = holeData ? (holePars[currentHole] ?? holeData.par) : 4;
   const saveTimer = useRef(null);
 
-  // Session management lives in App.jsx (mirrors tournament captain pattern).
-  // roundData prop is pre-loaded by App — no internal Supabase loading needed.
-  // For new rounds (roundData=null), step="setup" and user fills in opponents.
+  // Session managed by App.jsx — no internal loading needed.
+
 
   // -- Flush pending scores — never touches connStatus on success -----------
   // connStatus only changes on genuine connection failure, not normal saves
@@ -480,8 +479,7 @@ export default function LiveRound({ user, players, roundData, onRoundDataChange,
         newId = data.id;
         setLiveRoundId(data.id);
         if(safeCourseId !== courseId) setCourseId(safeCourseId);
-        // Notify App so it can save session to localStorage
-        if(onRoundDataChange) onRoundDataChange(data);
+        if(onRoundSaved) onRoundSaved(data); // App saves session + switches to scoring view
       }
     } catch(e) {
       console.warn("live_rounds insert failed:", e);
@@ -624,14 +622,13 @@ export default function LiveRound({ user, players, roundData, onRoundDataChange,
     if (liveRoundId) {
       await sb.from("live_rounds").delete().eq("id", liveRoundId);
     }
-    // Tell App to clear session and remove from home screen
     if(onDelete) onDelete();
   }
 
   // ==========================================================================
   // -- RESUME PROMPT ---------------------------------------------------------
   // ==========================================================================
-  // Resume screen handled by App.jsx (mirrors captain_resume pattern).
+  // Resume screen handled by App.
 
     if (step === "setup") return (
     <div style={{fontFamily:"'Georgia',serif",minHeight:"100vh",background:C.bg,color:C.text,paddingBottom:60}}>
@@ -830,18 +827,6 @@ export default function LiveRound({ user, players, roundData, onRoundDataChange,
   }
 
   if (step === "playing" && holeData) {
-    // Safety: if we have roundData but opponents didn't load, something corrupted
-    // Show a clear error instead of crashing silently
-    if(roundData && opponents.length === 0) {
-      return(
-        <div style={{minHeight:"100vh",background:C.bg,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:16,fontFamily:"Georgia,serif",padding:24}}>
-          <div style={{fontSize:32}}>⚠️</div>
-          <div style={{fontSize:16,fontWeight:700,color:C.gold,textAlign:"center"}}>Round data incomplete</div>
-          <div style={{fontSize:13,color:C.muted,textAlign:"center"}}>Opponents didn't load correctly. Try going back and resuming again.</div>
-          <button onClick={onBack} style={{background:C.green,border:"none",color:"#0a1a0f",padding:"14px 28px",borderRadius:12,fontSize:14,fontWeight:800,cursor:"pointer"}}>← Back</button>
-        </div>
-      );
-    }
     const myScore   = getScore("me", currentHole);
     const canAdvance = myScore !== null;
     const isLastHole = currentHole === course.holes.length;
