@@ -132,6 +132,7 @@ export default function IndividualRound({ user, players, roundData: initialRound
   const [saveStatus,  setSaveStatus]  = useState("");
   const [posting,     setPosting]     = useState(false);
   const [showSettings,setShowSettings]= useState(false);
+  const [showShare,   setShowShare]    = useState(false);
   const [back9Adj,    setBack9Adj]    = useState(initialRound.back9_adjustments || {});
 
   // ── TourneyCaptain-identical refs and connection state ─────────────────────
@@ -375,8 +376,10 @@ export default function IndividualRound({ user, players, roundData: initialRound
               style={{background:"rgba(123,180,80,0.15)",border:"1px solid "+C.green,color:C.green,fontSize:11,cursor:"pointer",padding:"5px 10px",borderRadius:12,fontWeight:700}}>🏠 Home</button>
             <button onClick={()=>setShowSettings(true)}
               style={{background:"rgba(232,184,75,0.15)",border:"1px solid "+C.gold,color:C.gold,fontSize:11,cursor:"pointer",padding:"5px 10px",borderRadius:12,fontWeight:700}}>⚙️ Edit</button>
-            <button onClick={deleteRound}
-              style={{background:"rgba(224,80,80,0.15)",border:"1px solid rgba(224,80,80,0.4)",color:C.red,fontSize:11,cursor:"pointer",padding:"5px 10px",borderRadius:12,fontWeight:700}}>🗑 Delete</button>
+            {opponents.some(o=>!o.sameGroup)&&(
+              <button onClick={()=>setShowShare(true)}
+                style={{background:"rgba(123,180,80,0.15)",border:"1px solid "+C.green,color:C.green,fontSize:11,cursor:"pointer",padding:"5px 10px",borderRadius:12,fontWeight:700}}>🔗 Share</button>
+            )}
           </div>
         </div>
         <div style={{display:"flex",gap:2}}>
@@ -526,6 +529,20 @@ export default function IndividualRound({ user, players, roundData: initialRound
           })}
 
           {/* Next Hole button — hard flush before advancing */}
+                    {/* Different-group opponents — read-only live score */}
+          {opponents.filter(o=>!o.sameGroup).map(opp=>{
+            const oppScore=getScore(opp.playerId,currentHole);
+            return(
+              <div key={opp.playerId} style={{background:C.card,border:"1px solid "+C.border,borderRadius:12,padding:"12px 16px",marginBottom:10,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <div>
+                  <div style={{fontSize:13,fontWeight:700}}>{opp.name}</div>
+                  <div style={{fontSize:11,color:C.muted}}>Different group · live score</div>
+                </div>
+                <div style={{fontSize:36,fontWeight:800,color:oppScore!==null?scoreColor(oppScore,effPar):C.dim}}>{oppScore!==null?oppScore:"--"}</div>
+              </div>
+            );
+          })}
+
           <button onClick={advanceHole} disabled={!canAdvance}
             style={{width:"100%",padding:"16px",background:!canAdvance?"#333":isLastHole?C.gold:C.green,color:!canAdvance?C.muted:"#0a1a0f",border:"none",borderRadius:12,fontSize:15,fontWeight:700,cursor:!canAdvance?"not-allowed":"pointer",marginTop:8,fontFamily:"Georgia,serif"}}>
             {!canAdvance?"Enter your score to continue":isLastHole?"Finish Round":"Next - Hole "+(currentHole+1)}
@@ -707,7 +724,52 @@ export default function IndividualRound({ user, players, roundData: initialRound
 
       </div>
 
-      {/* Settings overlay */}
+      {/* Share overlay — generates opponent links */}
+      {showShare&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.92)",zIndex:800,overflowY:"auto",fontFamily:"Georgia,serif"}}>
+          <div style={{padding:"50px 20px 40px",maxWidth:480,margin:"0 auto"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+              <div style={{fontSize:20,fontWeight:800,color:C.text}}>🔗 Share Round</div>
+              <button onClick={()=>setShowShare(false)} style={{background:C.dim,border:"none",color:C.muted,width:34,height:34,borderRadius:"50%",fontSize:16,cursor:"pointer"}}>✕</button>
+            </div>
+            <div style={{fontSize:13,color:C.muted,marginBottom:20,lineHeight:1.6}}>
+              Send each player in a different group their own link. They enter their scores on their phone — your screen updates instantly.
+            </div>
+            {opponents.filter(o=>!o.sameGroup).map(opp=>{
+              const link="https://press-golf.vercel.app?round="+round.id+"&player="+opp.playerId;
+              const sms=encodeURIComponent("Hey "+opp.name+" - enter your scores here as we play:\n"+link+"\n\nYour scores sync to my round in real time. - Press Golf");
+              return(
+                <div key={opp.playerId} style={{background:C.card,border:"1px solid "+C.border,borderRadius:14,padding:"16px",marginBottom:12}}>
+                  <div style={{fontWeight:800,fontSize:16,marginBottom:4}}>{opp.name}</div>
+                  <div style={{fontSize:12,color:C.muted,marginBottom:12}}>
+                    {opp.betType==="nassau"?"Nassau $"+opp.betAmount:opp.betType==="nassau-press"?"Nassau+Press $"+opp.betAmount:opp.betType==="match"?"Match Play $"+opp.betAmount+"/hole":"Skins $"+opp.betAmount}
+                    {" - "}{opp.strokes===0?"Even":opp.strokes>0?"You give "+(opp.strokes/2)+"/side":"You get "+(Math.abs(opp.strokes)/2)+"/side"}
+                  </div>
+                  <div style={{display:"flex",gap:8}}>
+                    <button onClick={()=>window.open("sms:?&body="+sms)}
+                      style={{flex:2,padding:"12px",background:C.green,color:"#0a1a0f",border:"none",borderRadius:10,fontSize:14,fontWeight:800,cursor:"pointer",fontFamily:"Georgia,serif"}}>
+                      📱 Text {opp.name.split(" ")[0]}
+                    </button>
+                    <button onClick={()=>{try{navigator.clipboard.writeText(link);}catch(e){}}}
+                      style={{flex:1,padding:"12px",background:"transparent",color:C.muted,border:"1px solid "+C.border,borderRadius:10,fontSize:12,fontWeight:600,cursor:"pointer"}}>
+                      📋 Copy
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+            <div style={{marginTop:12,background:"rgba(232,184,75,0.08)",border:"1px solid rgba(232,184,75,0.3)",borderRadius:10,padding:"12px 14px",fontSize:12,color:C.gold,lineHeight:1.6}}>
+              ⚠️ Send links before teeing off. Links are permanent for this round — scores update live as you play.
+            </div>
+            <button onClick={()=>setShowShare(false)}
+              style={{width:"100%",padding:"16px",background:C.green,color:"#0a1a0f",border:"none",borderRadius:12,fontSize:15,fontWeight:800,cursor:"pointer",marginTop:16,fontFamily:"Georgia,serif"}}>
+              ✓ Done
+            </button>
+          </div>
+        </div>
+      )}
+
+            {/* Settings overlay */}
       {showSettings&&(
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.92)",zIndex:800,overflowY:"auto",fontFamily:"Georgia,serif"}}>
           <div style={{padding:"50px 20px 40px",maxWidth:480,margin:"0 auto"}}>
@@ -729,6 +791,11 @@ export default function IndividualRound({ user, players, roundData: initialRound
             <button onClick={()=>setShowSettings(false)}
               style={{width:"100%",padding:"16px",background:C.green,color:"#0a1a0f",border:"none",borderRadius:12,fontSize:15,fontWeight:800,cursor:"pointer",marginTop:8,fontFamily:"Georgia,serif"}}>
               ✓ Done
+            </button>
+            <div style={{height:10}}/>
+            <button onClick={()=>{setShowSettings(false);deleteRound();}}
+              style={{width:"100%",padding:"14px",background:"transparent",color:C.red,border:"1px solid rgba(224,80,80,0.4)",borderRadius:12,fontSize:14,fontWeight:600,cursor:"pointer",fontFamily:"Georgia,serif"}}>
+              🗑 Delete Round
             </button>
           </div>
         </div>
