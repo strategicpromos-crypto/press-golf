@@ -191,7 +191,7 @@ export default function IndividualRound({ user, players, roundData: initialRound
     if(subRef.current) sb.removeChannel(subRef.current);
     subRef.current = sb
       .channel("individual_" + (round?.id||"none"))
-      .on("postgres_changes", {event:"UPDATE", schema:"public", table:"live_rounds", filter:"id=eq."+round.id},
+      .on("postgres_changes", {event:"UPDATE", schema:"public", table:"live_rounds", filter:"id=eq."+(round?.id||"none")},
         payload => { if(payload.new) setRound(prev => ({...prev, ...payload.new, scores: payload.new.scores || prev.scores})); })
       .subscribe(status => {
         if(status === "SUBSCRIBED") {
@@ -205,10 +205,11 @@ export default function IndividualRound({ user, players, roundData: initialRound
   }
 
   function startPolling() {
+    if(!round?.id) return; // no round yet
     if(pollTimer.current) clearInterval(pollTimer.current);
     pollTimer.current = setInterval(async () => {
       try {
-        const{data} = await sb.from("live_rounds").select("*").eq("id", round.id).single();
+        const{data} = await sb.from("live_rounds").select("*").eq("id", round?.id).single();
         if(data) setRound(prev => ({...prev, ...data, scores: data.scores || prev.scores}));
         setConnStatus("online");
       } catch(e) { setConnStatus("offline"); }
@@ -217,7 +218,7 @@ export default function IndividualRound({ user, players, roundData: initialRound
 
   // ── Writer token — identical pattern to TourneyCaptain ────────────────────
   async function claimWriterToken(token) {
-    const{error} = await sb.from("live_rounds").update({writer_token: token, updated_at: new Date().toISOString()}).eq("id", round.id);
+    const{error} = await sb.from("live_rounds").update({writer_token: token, updated_at: new Date().toISOString()}).eq("id", round?.id);
     return !error;
   }
 
@@ -234,7 +235,7 @@ export default function IndividualRound({ user, players, roundData: initialRound
     if(!round?.id) return; // no round yet — skip writer init and subscription
     async function initWriter() {
       const myLocalToken = localStorage.getItem(localKey);
-      const{data} = await sb.from("live_rounds").select("writer_token").eq("id", round.id).single();
+      const{data} = await sb.from("live_rounds").select("writer_token").eq("id", round?.id).single();
       const sbToken = data?.writer_token || null;
 
       if(!sbToken) {
@@ -267,7 +268,7 @@ export default function IndividualRound({ user, players, roundData: initialRound
       if(pollTimer.current) clearInterval(pollTimer.current);
       document.removeEventListener("visibilitychange", handleVisibility);
     };
-  }, [round.id]);
+  }, [round?.id]);
 
   // ── flushSave — identical to TourneyCaptain ───────────────────────────────
   async function flushSave(dataToSave) {
@@ -351,7 +352,7 @@ export default function IndividualRound({ user, players, roundData: initialRound
         bank: (player.bank||0)+tally.total,
       }).eq("id", opp.playerId);
     }
-    await sb.from("live_rounds").update({status:"complete"}).eq("id", round.id);
+    await sb.from("live_rounds").update({status:"complete"}).eq("id", round?.id);
     localStorage.removeItem(localKey);
     setPosting(false);
     onPostToLedger();
@@ -359,7 +360,7 @@ export default function IndividualRound({ user, players, roundData: initialRound
 
   async function deleteRound() {
     if(window.confirm("Delete this round? All scores will be permanently removed.")) {
-      await sb.from("live_rounds").delete().eq("id", round.id);
+      await sb.from("live_rounds").delete().eq("id", round?.id);
       localStorage.removeItem(localKey);
       if(onDelete) onDelete();
     }
@@ -949,7 +950,7 @@ export default function IndividualRound({ user, players, roundData: initialRound
               Send each player in a different group their own link. They enter their scores on their phone — your screen updates instantly.
             </div>
             {opponents.filter(o=>!o.sameGroup).map(opp=>{
-              const link="https://press-golf.vercel.app?round="+round.id+"&player="+opp.playerId;
+              const link="https://press-golf.vercel.app?round="+(round?.id||"")+"&player="+opp.playerId;
               const sms=encodeURIComponent("Hey "+opp.name+" - enter your scores here as we play:\n"+link+"\n\nYour scores sync to my round in real time. - Press Golf");
               return(
                 <div key={opp.playerId} style={{background:C.card,border:"1px solid "+C.border,borderRadius:14,padding:"16px",marginBottom:12}}>
