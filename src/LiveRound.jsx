@@ -307,21 +307,22 @@ function getTally(scores, course, opp, courseId) {
 }
 
 // -- MAIN COMPONENT ------------------------------------------------------------
-export default function LiveRound({ user, players, resumeRoundId, onBack, onPostToLedger }) {
-  const [step,        setStep]        = useState("setup");
-  const [courseId,    setCourseId]    = useState("south-toledo");
-  const [opponents,   setOpponents]   = useState([]);
-  const [scores,      setScores]      = useState({});
-  const [currentHole, setCurrentHole] = useState(1);
+export default function LiveRound({ user, players, roundData, onRoundDataChange, onBack, onPostToLedger, onDelete }) {
+  // If roundData is provided by App, initialize from it — no internal loading needed
+  const [step,        setStep]        = useState(roundData ? "playing" : "setup");
+  const [courseId,    setCourseId]    = useState(roundData?.course_id || "south-toledo");
+  const [opponents,   setOpponents]   = useState(roundData?.opponents || []);
+  const [scores,      setScores]      = useState(roundData?.scores || {});
+  const [currentHole, setCurrentHole] = useState(roundData?.current_hole || 1);
   const [sheet,       setSheet]       = useState(null);
   const [myName,      setMyName]      = useState("");
   const [posting,     setPosting]     = useState(false);
-  const [liveRoundId, setLiveRoundId] = useState(null);
+  const [liveRoundId, setLiveRoundId] = useState(roundData?.id || null);
   const [resuming,    setResuming]    = useState(false);
   const [liveTab,     setLiveTab]     = useState("score");
   const [showRoundSettings, setShowRoundSettings] = useState(false);
   const [showShareRound,    setShowShareRound]    = useState(false);
-  const [back9Adjustments,  setBack9Adjustments]  = useState({});
+  const [back9Adjustments,  setBack9Adjustments]  = useState(roundData?.back9_adjustments||{});
   const [holePars,          setHolePars]          = useState({});
   const realtimeSub   = useRef(null);
   const saveTimerRef  = useRef(null); // named ref to avoid collision with saveTimer state
@@ -342,69 +343,9 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
   const effPar   = holeData ? (holePars[currentHole] ?? holeData.par) : 4;
   const saveTimer = useRef(null);
 
-  // ── localStorage key for active round — isolated, no overlap with tournament keys
-  const LS_KEY = "press_live_round_" + user.id; // per-user so multi-user devices work
-
-  // freshStart ref — set true when user intentionally starts a new round
-  const freshStart = useRef(false);
-
-  // ── Load round on mount ──────────────────────────────────────────────────
-  // Priority: 1) resumeRoundId prop (home screen card tap)
-  //           2) localStorage saved ID (navigation back/forward, page refresh)
-  //           3) Auto-load most recent active round
-  //           4) Show setup fresh
-  useEffect(() => {
-    if(freshStart.current && !resumeRoundId) return; // intentional new round — show setup
-
-    async function loadRound() {
-      // Determine which round ID to load
-      let targetId = resumeRoundId || null;
-      if(!targetId) {
-        try {
-          const saved = localStorage.getItem(LS_KEY);
-          if(saved) {
-            const { id, userId } = JSON.parse(saved);
-            if(userId === user.id) targetId = id; // only restore if same user
-          }
-        } catch(e) {}
-      }
-
-      let data = null;
-      if(targetId) {
-        // Load specific round by ID
-        const { data: d } = await sb.from("live_rounds")
-          .select("*").eq("id", targetId).eq("owner_id", user.id).maybeSingle();
-        data = d;
-        // If not found (deleted), clear the stale localStorage entry
-        if(!data) {
-          try { localStorage.removeItem(LS_KEY); } catch(e) {}
-        }
-      }
-
-      // If no specific round found, try most recent active round
-      if(!data) {
-        const { data: d } = await sb.from("live_rounds")
-          .select("*").eq("owner_id", user.id).eq("status", "active")
-          .order("updated_at", { ascending: false }).limit(1).maybeSingle();
-        data = d;
-      }
-
-      if(data) {
-        const validCourseId = COURSES[data.course_id] ? data.course_id : "south-toledo";
-        setLiveRoundId(data.id);
-        setCourseId(validCourseId);
-        setOpponents(data.opponents || []);
-        setScores(data.scores || {});
-        setCurrentHole(data.current_hole || 1);
-        if(data.back9_adjustments) setBack9Adjustments(data.back9_adjustments);
-        // Save to localStorage so navigation/refresh restores this round
-        try { localStorage.setItem(LS_KEY, JSON.stringify({ id: data.id, userId: user.id })); } catch(e) {}
-        setResuming(true);
-      }
-      // No round found — show setup (freshStart not needed, just no data)
-    }
-    loadRound();
-  }, [resumeRoundId, user.id]);
+  // Session management lives in App.jsx (mirrors tournament captain pattern).
+  // roundData prop is pre-loaded by App — no internal Supabase loading needed.
+  // For new rounds (roundData=null), step="setup" and user fills in opponents.
 
   // -- Flush pending scores — never touches connStatus on success -----------
   // connStatus only changes on genuine connection failure, not normal saves
@@ -539,6 +480,8 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
         newId = data.id;
         setLiveRoundId(data.id);
         if(safeCourseId !== courseId) setCourseId(safeCourseId);
+        // Notify App so it can save session to localStorage
+        if(onRoundDataChange) onRoundDataChange(data);
       }
     } catch(e) {
       console.warn("live_rounds insert failed:", e);
@@ -549,8 +492,6 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
       setPosting(false);
       return; // Don't advance if we got no ID back
     }
-    // Save to localStorage — survives navigation and page refresh
-    try { localStorage.setItem(LS_KEY, JSON.stringify({ id: newId, userId: user.id })); } catch(e) {}
     channelName.current = null; // fresh channel for new round
     setScores({});
     setCurrentHole(1);
@@ -683,67 +624,16 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
     if (liveRoundId) {
       await sb.from("live_rounds").delete().eq("id", liveRoundId);
     }
-    // Clear localStorage so this round doesn't auto-restore on next mount
-    try { localStorage.removeItem(LS_KEY); } catch(e) {}
-    freshStart.current = true;
-    channelName.current = null;
-    setLiveRoundId(null); setOpponents([]); setScores({});
-    setCurrentHole(1); setStep("setup"); setResuming(false);
+    // Tell App to clear session and remove from home screen
+    if(onDelete) onDelete();
   }
 
   // ==========================================================================
   // -- RESUME PROMPT ---------------------------------------------------------
   // ==========================================================================
-  if (resuming) return (
-    <div style={{fontFamily:"'Georgia',serif",minHeight:"100vh",background:C.bg,color:C.text,paddingBottom:40}}>
-      <div style={{background:`linear-gradient(180deg,${C.card} 0%,transparent 100%)`,padding:"50px 20px 20px"}}>
-        <button onClick={onBack} style={{background:"rgba(123,180,80,0.15)",border:`1px solid ${C.green}`,color:C.green,fontSize:13,cursor:"pointer",padding:"8px 16px",borderRadius:20,fontWeight:700,marginBottom:16}}>‹ Home</button>
-        <div style={{textAlign:"center"}}>
-          <div style={{fontSize:32,marginBottom:6}}>⛳</div>
-          <div style={{fontSize:22,fontWeight:800}}>Individual Round</div>
-          <div style={{fontSize:13,color:C.muted,marginTop:4}}>{COURSES[courseId]?.name}</div>
-        </div>
-      </div>
+  // Resume screen handled by App.jsx (mirrors captain_resume pattern).
 
-      <div style={{padding:"0 20px"}}>
-        {/* Round card — matches tournament In Progress style */}
-        <div style={{background:"rgba(123,180,80,0.08)",border:`1px solid ${C.green}44`,borderRadius:14,padding:"16px",marginBottom:16}}>
-          <div style={{fontWeight:800,fontSize:16,color:C.green,marginBottom:4}}>▶ In Progress · Hole {currentHole}</div>
-          <div style={{fontSize:13,color:C.text,fontWeight:600,marginBottom:2}}>{opponents.map(o=>o.name).join(", ")}</div>
-          <div style={{fontSize:11,color:C.muted}}>{opponents.map(o=>o.betType==="nassau-press"?"Nassau + Auto Press":"Nassau" ).join(" · ")} · ${opponents[0]?.betAmount||0}</div>
-        </div>
-
-        <BigBtn onClick={()=>{setResuming(false);setStep("playing");}}>Resume Scoring</BigBtn>
-        <div style={{height:10}}/>
-        <GhostBtn onClick={()=>{setResuming(false);setStep("summary");}}>📊 View Summary</GhostBtn>
-        <div style={{height:10}}/>
-        <GhostBtn onClick={()=>{
-          // Clear localStorage — new round will save its own ID on creation
-          try { localStorage.removeItem(LS_KEY); } catch(e) {}
-          freshStart.current = true;
-          channelName.current = null;
-          setResuming(false);
-          setLiveRoundId(null);
-          setOpponents([]);
-          setScores({});
-          setCurrentHole(1);
-          setBack9Adjustments({});
-          setStep("setup");
-        }}>+ Start New Round</GhostBtn>
-        <div style={{height:10}}/>
-        <GhostBtn onClick={()=>{
-          if(window.confirm("Delete this round? All scores will be permanently removed.")) {
-            discardRound();
-          }
-        }} color={C.red}>🗑 Delete Round</GhostBtn>
-      </div>
-    </div>
-  );
-
-  // ==========================================================================
-  // -- SETUP SCREEN ----------------------------------------------------------
-  // ==========================================================================
-  if (step === "setup") return (
+    if (step === "setup") return (
     <div style={{fontFamily:"'Georgia',serif",minHeight:"100vh",background:C.bg,color:C.text,paddingBottom:60}}>
       <div style={{background:"linear-gradient(180deg,"+C.card+" 0%,transparent 100%)",padding:"44px 20px 20px"}}>
         <button onClick={onBack} style={{background:"rgba(123,180,80,0.15)",border:"1px solid "+C.green,color:C.green,fontSize:14,cursor:"pointer",padding:"8px 16px",borderRadius:20,display:"flex",alignItems:"center",gap:6,fontWeight:700,marginBottom:20}}>‹ Back</button>
