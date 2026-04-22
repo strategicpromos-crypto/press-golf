@@ -870,7 +870,8 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
   const [saving,setSaving]=useState(false);
   const [toast,setToast]=useState({msg:"",error:false});
   const [view,setView]=useState("roster"); // roster | profile | liveround | tournament
-  const [activeRound,   setActiveRound]   = useState(null);
+  const [activeRounds,  setActiveRounds]  = useState([]); // ALL active individual rounds
+  const [resumeRoundId, setResumeRoundId] = useState(null); // specific round to resume
   const [opponentRound, setOpponentRound] = useState(null); // rounds where user is a linked opponent
   const [activeTourney, setActiveTourney]=useState(null); // active team tournament
   const [pid,setPid]=useState(null);
@@ -960,10 +961,8 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
         .eq("owner_id",user.id)
         .eq("status","active")
         .order("updated_at",{ascending:false})
-        .limit(1)
-        .maybeSingle();
-      if(data)setActiveRound(data);
-      else setActiveRound(null);
+        .limit(20);
+      setActiveRounds(data||[]);
 
       // Rounds I'm a linked opponent in (Ken's view after creating account)
       try {
@@ -1395,8 +1394,9 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
     <LiveRound
       user={user}
       players={players}
-      onBack={()=>setView("roster")}
-      onPostToLedger={async()=>{await loadAll();setView("roster");t2("Results posted to ledger! ⛳");}}
+      resumeRoundId={resumeRoundId}
+      onBack={()=>{setResumeRoundId(null);setView("roster");}}
+      onPostToLedger={async()=>{setResumeRoundId(null);await loadAll();setView("roster");t2("Results posted to ledger! ⛳");}}
     />
   );
 
@@ -1480,17 +1480,22 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
           </div>
         )}
 
-        {/* Resume Round banner */}
-        {activeRound&&(
-          <div style={{background:`linear-gradient(135deg,rgba(123,180,80,0.15),rgba(123,180,80,0.05))`,border:`1px solid ${C.green}44`,borderRadius:14,padding:"14px 16px",marginBottom:14,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-            <div>
-              <div style={{fontWeight:700,fontSize:14,color:C.green,marginBottom:2}}>⛳ Round In Progress</div>
-              <div style={{fontSize:12,color:C.muted}}>{activeRound.course_name} · Hole {activeRound.current_hole}</div>
-              <div style={{fontSize:12,color:C.text,fontWeight:600,marginTop:2}}>{(activeRound.opponents||[]).map(o=>o.name).join(", ")}</div>
-            </div>
-            <button onClick={()=>setView("liveround")} style={{background:C.green,border:"none",color:"#0a1a0f",padding:"10px 16px",borderRadius:12,fontSize:13,fontWeight:800,cursor:"pointer",flexShrink:0}}>
-              Resume →
-            </button>
+        {/* Individual Round banners — one per active round, matching tournament card style */}
+        {activeRounds.length>0&&(
+          <div style={{marginBottom:14}}>
+            <div style={{fontSize:11,color:C.green,letterSpacing:1.5,textTransform:"uppercase",marginBottom:10,fontWeight:600}}>⛳ Individual Rounds In Progress</div>
+            {activeRounds.map(round=>(
+              <div key={round.id} style={{background:"rgba(123,180,80,0.08)",border:`1px solid ${C.green}44`,borderRadius:14,padding:"14px 16px",marginBottom:8,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontWeight:700,fontSize:14,color:C.green,marginBottom:2}}>{round.course_name||"Individual Round"}</div>
+                  <div style={{fontSize:12,color:C.muted}}>Hole {round.current_hole} · {new Date(round.updated_at).toLocaleDateString("en-US",{month:"short",day:"numeric"})}</div>
+                  <div style={{fontSize:12,color:C.text,fontWeight:600,marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{(round.opponents||[]).map(o=>o.name).join(", ")}</div>
+                </div>
+                <button onClick={()=>{setResumeRoundId(round.id);setView("liveround");}} style={{background:C.green,border:"none",color:"#0a1a0f",padding:"10px 16px",borderRadius:12,fontSize:13,fontWeight:800,cursor:"pointer",flexShrink:0,marginLeft:12}}>
+                  Resume →
+                </button>
+              </div>
+            ))}
           </div>
         )}
 
