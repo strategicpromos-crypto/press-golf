@@ -486,8 +486,12 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
   }, [liveRoundId, step]);
 
   // -- Start round - only advances to playing after confirmed DB insert ------
+  const creatingRef = useRef(false); // prevents double-tap before React state updates
+
   async function startRound() {
     if (opponents.length === 0) return;
+    if (creatingRef.current) return; // already creating — ignore tap
+    creatingRef.current = true;
     setPosting(true);
     let newId = null;
     try {
