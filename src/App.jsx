@@ -873,7 +873,7 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
   const [activeRounds,  setActiveRounds]  = useState([]);
   const [activeRound,   setActiveRound]   = useState(null);
   const [opponentRound, setOpponentRound] = useState(null);
-  const [liveSession,   setLiveSession]   = useState(null); // {view:"resume"|"scoring"|"new", data:roundRow} // rounds where user is a linked opponent
+  const [liveSession,   setLiveSession]   = useState(null); // rounds where user is a linked opponent
   const [activeTourney, setActiveTourney]=useState(null); // active team tournament
   const [pid,setPid]=useState(null);
   const [ptab,setPtab]=useState("overview");
@@ -953,19 +953,16 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
 
   useEffect(()=>{loadAll();},[loadAll]);
 
-  // Live round session key — isolated from tournament keys
   const LIVE_KEY = "press_live_" + user.id;
 
   useEffect(()=>{
     async function checkActiveRound(){
-      // Load ALL active rounds for home screen cards
       const{data:all}=await sb.from("live_rounds")
         .select("id,course_name,opponents,current_hole,updated_at")
         .eq("owner_id",user.id).eq("status","active")
         .order("updated_at",{ascending:false}).limit(20);
       setActiveRounds(all||[]);
 
-      // Restore saved session — same pattern as press_captain_session
       if(!liveSession){
         try{
           const saved=localStorage.getItem(LIVE_KEY);
@@ -982,7 +979,6 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
         }catch(e){localStorage.removeItem(LIVE_KEY);}
       }
 
-      // Opponent rounds
       try{
         const{data:oppData}=await sb.from("live_rounds")
           .select("id,course_name,opponents,current_hole,updated_at")
@@ -1402,13 +1398,13 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
     <TeamTournament user={user} onBack={()=>setView("roster")} onDelete={()=>setActiveTourney(null)}/>
   );
 
-  // ── Live round: resume prompt (mirrors captain_resume exactly) ─────────────
-  if(liveSession?.view==="resume"){
+  // ── Live round: resume prompt ───────────────────────────────────────────────
+  if(liveSession?.view==="resume"&&liveSession?.data){
     const d=liveSession.data;
     return(
       <div style={{fontFamily:"Georgia,serif",minHeight:"100vh",background:"#080f0a",color:"#e8f0e9",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:24}}>
         <div style={{fontSize:48,marginBottom:16}}>⛳</div>
-        <div style={{fontSize:22,fontWeight:800,marginBottom:6,textAlign:"center"}}>Individual Round In Progress</div>
+        <div style={{fontSize:22,fontWeight:800,marginBottom:6,textAlign:"center"}}>Individual Round</div>
         <div style={{fontSize:14,color:"#6b7f6d",marginBottom:4,textAlign:"center"}}>{d.course_name}</div>
         <div style={{fontSize:13,color:"#e8b84b",marginBottom:32,textAlign:"center"}}>{(d.opponents||[]).map(o=>o.name).join(", ")} · Hole {d.current_hole||1}</div>
         <div style={{width:"100%",maxWidth:320,display:"flex",flexDirection:"column",gap:10}}>
@@ -1481,27 +1477,10 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
           setLiveSession(null);
           await loadAll();setView("roster");t2("Results posted to ledger! ⛳");
         }}
-        onDelete={()=>{
-          localStorage.removeItem(LIVE_KEY);
-          setLiveSession(null);
-        }}
+        onDelete={()=>{localStorage.removeItem(LIVE_KEY);setLiveSession(null);}}
       />
     );
   }
-
-  // Legacy path — should not be reached but kept as safety net
-  if(view==="liveround") return(
-    <LiveRound
-      key="legacy"
-      user={user}
-      players={players}
-      roundData={null}
-      onBack={()=>setView("roster")}
-      onRoundSaved={()=>{}}
-      onPostToLedger={async()=>{await loadAll();setView("roster");t2("Results posted to ledger! ⛳");}}
-      onDelete={()=>setView("roster")}
-    />
-  );
 
   // ── ROSTER ──────────────────────────────────────────────────────────────────
   if(view==="roster") return(
@@ -1583,7 +1562,7 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
           </div>
         )}
 
-        {/* Individual round cards — one per active round */}
+        {/* Individual round cards */}
         {activeRounds.map(round=>(
           <div key={round.id} style={{background:`linear-gradient(135deg,rgba(123,180,80,0.15),rgba(123,180,80,0.05))`,border:`1px solid ${C.green}44`,borderRadius:14,padding:"14px 16px",marginBottom:10,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
             <div style={{flex:1,minWidth:0}}>
@@ -1593,10 +1572,7 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
             </div>
             <button onClick={async()=>{
               const{data}=await sb.from("live_rounds").select("*").eq("id",round.id).maybeSingle();
-              if(data){
-                localStorage.setItem(LIVE_KEY,JSON.stringify({id:data.id,savedAt:Date.now()}));
-                setLiveSession({view:"resume",data});
-              }
+              if(data){localStorage.setItem(LIVE_KEY,JSON.stringify({id:data.id,savedAt:Date.now()}));setLiveSession({view:"resume",data});}
             }} style={{background:C.green,border:"none",color:"#0a1a0f",padding:"10px 16px",borderRadius:12,fontSize:13,fontWeight:800,cursor:"pointer",flexShrink:0,marginLeft:12}}>
               Resume →
             </button>
