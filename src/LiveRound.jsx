@@ -485,37 +485,42 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
     };
   }, [liveRoundId, step]);
 
-  // -- Start round - saves to DB immediately ---------------------------------
+  // -- Start round - only advances to playing after confirmed DB insert ------
   async function startRound() {
     if (opponents.length === 0) return;
     setPosting(true);
+    let newId = null;
     try {
+      const safeCourseId = COURSES[courseId] ? courseId : "south-toledo";
       const { data } = await sb.from("live_rounds").insert({
         owner_id: user.id,
-        course_id: courseId,
-        course_name: course?.name || courseId,
+        course_id: safeCourseId,
+        course_name: COURSES[safeCourseId]?.name || safeCourseId,
         owner_name: myName.trim() || "Partner",
         opponents,
         scores: {},
         current_hole: 1,
         status: "active",
       }).select().single();
-      if (data) setLiveRoundId(data.id);
+      if (data) {
+        newId = data.id;
+        setLiveRoundId(data.id);
+        if(safeCourseId !== courseId) setCourseId(safeCourseId);
+      }
     } catch(e) {
       console.warn("live_rounds insert failed:", e);
+      setPosting(false);
+      return; // Don't advance to playing if insert failed
     }
-    setPosting(false);
+    if(!newId) {
+      setPosting(false);
+      return; // Don't advance if we got no ID back
+    }
+    channelName.current = null; // fresh channel for new round
     setScores({});
     setCurrentHole(1);
-    // Guard: only go to playing if course is valid — prevents black screen
-    if(COURSES[courseId]) {
-      channelName.current = null; // fresh channel for new round
-      setStep("playing");
-    } else {
-      setCourseId("south-toledo");
-      channelName.current = null;
-      setStep("playing");
-    }
+    setPosting(false);
+    setStep("playing");
   }
 
   // -- Score setter - always uses safe integers ------------------------------
@@ -872,6 +877,18 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
   // ==========================================================================
   // -- PLAYING SCREEN --------------------------------------------------------
   // ==========================================================================
+  // Safety net: if step=playing but course/hole data isn't ready yet, show loading
+  if (step === "playing" && !holeData) {
+    return (
+      <div style={{minHeight:"100vh",background:C.bg,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:16,fontFamily:"Georgia,serif"}}>
+        <div style={{width:40,height:40,border:"3px solid "+C.dim,borderTop:"3px solid "+C.green,borderRadius:"50%",animation:"spin 0.8s linear infinite"}}/>
+        <style>{"@keyframes spin{to{transform:rotate(360deg)}}"}</style>
+        <div style={{color:C.muted,fontSize:14}}>Starting round...</div>
+        <button onClick={()=>setStep("setup")} style={{marginTop:16,background:"transparent",border:"1px solid "+C.border,color:C.muted,padding:"8px 16px",borderRadius:10,fontSize:12,cursor:"pointer"}}>← Back to Setup</button>
+      </div>
+    );
+  }
+
   if (step === "playing" && holeData) {
     const myScore   = getScore("me", currentHole);
     const canAdvance = myScore !== null;
@@ -1698,5 +1715,11 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
     );
   }
 
-  return null;
+  // Final fallback — should never reach here but prevents black screen
+  return (
+    <div style={{minHeight:"100vh",background:C.bg,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:16,fontFamily:"Georgia,serif"}}>
+      <div style={{color:C.muted,fontSize:14}}>Something went wrong loading this screen.</div>
+      <button onClick={()=>setStep("setup")} style={{background:C.green,border:"none",color:"#0a1a0f",padding:"12px 24px",borderRadius:12,fontSize:14,fontWeight:800,cursor:"pointer"}}>← Back to Setup</button>
+    </div>
+  );
 }
