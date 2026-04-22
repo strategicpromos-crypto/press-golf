@@ -487,6 +487,7 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
 
   // -- Start round - only advances to playing after confirmed DB insert ------
   const creatingRef = useRef(false); // prevents double-tap before React state updates
+  const [navigating, setNavigating] = useState(false); // shows loading after Tee It Up
 
   async function startRound() {
     if (opponents.length === 0) return;
@@ -510,8 +511,8 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
         newId = data.id;
         setLiveRoundId(data.id);
         if(safeCourseId !== courseId) setCourseId(safeCourseId);
-        // Hand off to IndividualRound via App
-        if(onRoundCreated) { onRoundCreated(data); return; }
+        // Show loading screen immediately, then hand off to App
+        if(onRoundCreated) { setNavigating(true); onRoundCreated(data); return; }
       }
     } catch(e) {
       console.warn("live_rounds insert failed:", e);
@@ -693,6 +694,15 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
           setStep("setup");
         }}>+ Start Another Round</GhostBtn>
       </div>
+    </div>
+  );
+
+  // Show loading immediately after Tee It Up — prevents user seeing setup screen
+  if (navigating) return (
+    <div style={{minHeight:"100vh",background:C.bg,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:16,fontFamily:"Georgia,serif"}}>
+      <div style={{width:48,height:48,border:"3px solid "+C.dim,borderTop:"3px solid "+C.green,borderRadius:"50%",animation:"spin 0.8s linear infinite"}}/>
+      <style>{"@keyframes spin{to{transform:rotate(360deg)}}"}</style>
+      <div style={{color:C.green,fontSize:16,fontWeight:700}}>Starting round...</div>
     </div>
   );
 
