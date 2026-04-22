@@ -343,15 +343,17 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
   const saveTimer = useRef(null);
 
   // -- Load specific round (from home screen Resume) or show setup ----------
+  // freshStart ref — prevents checkExisting from reloading after intentional clear
+  const freshStart = useRef(false);
+
   useEffect(() => {
+    if(freshStart.current) return; // user cleared state intentionally — stay on setup
     async function checkExisting() {
       let data = null;
       if(resumeRoundId){
-        // Home screen Resume — load specific round by ID
         const { data: d } = await sb.from("live_rounds").select("*").eq("id", resumeRoundId).single();
         data = d;
       } else {
-        // No specific round — auto-load most recent active round if one exists
         const { data: d } = await sb.from("live_rounds")
           .select("*").eq("owner_id", user.id).eq("status", "active")
           .order("updated_at", { ascending: false }).limit(1).maybeSingle();
@@ -505,7 +507,15 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
     setPosting(false);
     setScores({});
     setCurrentHole(1);
-    setStep("playing");
+    // Guard: only go to playing if course is valid — prevents black screen
+    if(COURSES[courseId]) {
+      channelName.current = null; // fresh channel for new round
+      setStep("playing");
+    } else {
+      setCourseId("south-toledo");
+      channelName.current = null;
+      setStep("playing");
+    }
   }
 
   // -- Score setter - always uses safe integers ------------------------------
@@ -633,6 +643,9 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
     if (liveRoundId) {
       await sb.from("live_rounds").update({ status: "complete" }).eq("id", liveRoundId);
     }
+    // Mark intentional clear — prevents checkExisting from reloading another active round
+    freshStart.current = true;
+    channelName.current = null;
     setLiveRoundId(null); setOpponents([]); setScores({});
     setCurrentHole(1); setStep("setup"); setResuming(false);
   }
@@ -657,14 +670,15 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
           }
         }} color={C.red}>Discard Round</GhostBtn>
         <GhostBtn onClick={()=>{
-          // Clear local state only — existing round stays active in Supabase
-          // It will appear as a separate card on the home screen
+          // Mark as intentional clear — prevents checkExisting from reloading old round
+          freshStart.current = true;
           setResuming(false);
           setLiveRoundId(null);
           setOpponents([]);
           setScores({});
           setCurrentHole(1);
           setBack9Adjustments({});
+          channelName.current = null; // reset channel so new round gets fresh subscription
           setStep("setup");
         }}>+ Start Another Round</GhostBtn>
       </div>
