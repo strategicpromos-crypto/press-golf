@@ -317,6 +317,9 @@ export default function IndividualRound({ user, players, roundData: initialRound
   }
 
   function callManualPress(oppId) {
+    // Safety: only allow press for same-group opponents
+    const target = opponents.find(o => o.playerId===oppId);
+    if(!target?.sameGroup) return;
     const newOpps = opponents.map(opp => {
       if(opp.playerId !== oppId) return opp;
       if((opp.manualPresses||[]).some(p => p.hole===currentHole)) return opp;
@@ -696,11 +699,20 @@ export default function IndividualRound({ user, players, roundData: initialRound
               <div style={{fontSize:11,color:C.green,letterSpacing:2,textTransform:"uppercase",fontWeight:600}}>⛳ Your Score</div>
               {opponents.filter(o=>o.sameGroup).map(opp => {
                 if(opp.betType!=="nassau"&&opp.betType!=="nassau-press") return null;
-                const t = getTally(scores,course,opp,courseId);
                 const alreadyPressed = (opp.manualPresses||[]).some(p=>p.hole===currentHole);
-                if(alreadyPressed) return <button key={opp.playerId} disabled style={{background:"#555",border:"none",color:"#aaa",padding:"5px 12px",borderRadius:8,fontSize:11,fontWeight:700}}>Pressed ✓</button>;
-                if(t.total<0) return <button key={opp.playerId} onClick={()=>callManualPress(opp.playerId)} style={{background:C.red,border:"none",color:"#fff",padding:"6px 14px",borderRadius:8,fontSize:12,fontWeight:800,cursor:"pointer"}}>Press!</button>;
-                return null;
+                // Pissed Press — available any time on Nassau games, not just when losing
+                if(alreadyPressed) return(
+                  <button key={opp.playerId} disabled
+                    style={{background:"#333",border:"none",color:"#888",padding:"5px 12px",borderRadius:8,fontSize:11,fontWeight:700,cursor:"not-allowed"}}>
+                    Pressed ✓
+                  </button>
+                );
+                return(
+                  <button key={opp.playerId} onClick={()=>callManualPress(opp.playerId)}
+                    style={{background:"rgba(224,80,80,0.15)",border:"2px solid "+C.red,color:C.red,padding:"6px 14px",borderRadius:8,fontSize:12,fontWeight:800,cursor:"pointer"}}>
+                    🤬 Press!
+                  </button>
+                );
               })}
             </div>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
@@ -723,12 +735,26 @@ export default function IndividualRound({ user, players, roundData: initialRound
             return (
               <div key={opp.playerId} style={{background:C.card,border:"1px solid "+(getsStroke||iGetStroke?"rgba(232,184,75,0.5)":C.border),borderRadius:14,padding:"14px",marginBottom:10}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-                  <div>
+                  <div style={{flex:1,minWidth:0}}>
                     <div style={{fontWeight:700,fontSize:15}}>{opp.name} <span style={{fontSize:10,color:C.green,background:"rgba(123,180,80,0.12)",padding:"2px 7px",borderRadius:8}}>Same Group</span></div>
                     {getsStroke&&<div style={{fontSize:11,color:C.gold,marginTop:2}}>⭐ {opp.name} gets a stroke</div>}
                     {iGetStroke&&<div style={{fontSize:11,color:C.green,marginTop:2}}>⭐ You get a stroke</div>}
                   </div>
-                  <div style={{fontSize:13,fontWeight:700,color:tally.label==="Even"?C.muted:tally.label?.includes("Up")?C.green:C.red}}>{tally.label||"-"}</div>
+                  <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4}}>
+                    <div style={{fontSize:13,fontWeight:700,color:tally.label==="Even"?C.muted:tally.label?.includes("Up")?C.green:C.red}}>{tally.label||"-"}</div>
+                    {(opp.betType==="nassau"||opp.betType==="nassau-press")&&(()=>{
+                      const alreadyPressed=(opp.manualPresses||[]).some(p=>p.hole===currentHole);
+                      if(alreadyPressed) return(
+                        <button disabled style={{background:"#333",border:"none",color:"#888",padding:"4px 10px",borderRadius:8,fontSize:10,fontWeight:700,cursor:"not-allowed"}}>Pressed ✓</button>
+                      );
+                      return(
+                        <button onClick={()=>callManualPress(opp.playerId)}
+                          style={{background:"rgba(224,80,80,0.15)",border:"2px solid "+C.red,color:C.red,padding:"4px 10px",borderRadius:8,fontSize:11,fontWeight:800,cursor:"pointer"}}>
+                          🤬 Press!
+                        </button>
+                      );
+                    })()}
+                  </div>
                 </div>
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
                   <ScoreButton label="-" size={52} onClick={()=>setScore(opp.playerId,currentHole,(oppScore!==null?oppScore:effPar)-1)}/>
