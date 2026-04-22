@@ -1464,10 +1464,12 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
       players={players}
       onBack={()=>setView("roster")}
       onRoundCreated={(data)=>{
+        // Save session and switch to scoring immediately — single atomic update
         localStorage.setItem(LIVE_KEY,JSON.stringify({id:data.id,savedAt:Date.now()}));
-        setLiveSession({view:"scoring",data});
         setActiveRounds(prev=>[{id:data.id,course_name:data.course_name,opponents:data.opponents,current_hole:1,updated_at:data.updated_at},...prev]);
-        setView("roster");
+        // Set liveSession first, then clear view — React batches these so scoring shows instantly
+        setLiveSession({view:"scoring",data});
+        setView("roster"); // clear liveround view so IndividualRound takes over
       }}
       onPostToLedger={async()=>{await loadAll();setView("roster");t2("Results posted to ledger! ⛳");}}
     />
