@@ -630,7 +630,20 @@ export default function LiveRound({ user, players, roundData, onBack, onRoundSav
   // ==========================================================================
   // Resume screen handled by App.
 
-    if (step === "setup") return (
+    // If roundData provided by App, never show setup — go straight to scoring
+  // This matches TourneyCaptain pattern exactly
+  if (step === "setup" && roundData) {
+    // roundData exists but step is setup — force to playing
+    // This handles any edge case where state gets out of sync
+    setTimeout(() => setStep("playing"), 0);
+    return (
+      <div style={{minHeight:"100vh",background:C.bg,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"Georgia,serif"}}>
+        <div style={{color:C.muted,fontSize:14}}>Loading round...</div>
+      </div>
+    );
+  }
+
+  if (step === "setup") return (
     <div style={{fontFamily:"'Georgia',serif",minHeight:"100vh",background:C.bg,color:C.text,paddingBottom:60}}>
       <div style={{background:"linear-gradient(180deg,"+C.card+" 0%,transparent 100%)",padding:"44px 20px 20px"}}>
         <button onClick={onBack} style={{background:"rgba(123,180,80,0.15)",border:"1px solid "+C.green,color:C.green,fontSize:14,cursor:"pointer",padding:"8px 16px",borderRadius:20,display:"flex",alignItems:"center",gap:6,fontWeight:700,marginBottom:20}}>‹ Back</button>
