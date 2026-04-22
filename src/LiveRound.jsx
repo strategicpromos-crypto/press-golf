@@ -646,9 +646,9 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
   // -- Discard round ---------------------------------------------------------
   async function discardRound() {
     if (liveRoundId) {
-      await sb.from("live_rounds").update({ status: "complete" }).eq("id", liveRoundId);
+      // DELETE from DB entirely — round disappears from home screen
+      await sb.from("live_rounds").delete().eq("id", liveRoundId);
     }
-    // Mark intentional clear — prevents checkExisting from reloading another active round
     freshStart.current = true;
     channelName.current = null;
     setLiveRoundId(null); setOpponents([]); setScores({});
@@ -659,33 +659,45 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
   // -- RESUME PROMPT ---------------------------------------------------------
   // ==========================================================================
   if (resuming) return (
-    <div style={{fontFamily:"'Georgia',serif",minHeight:"100vh",background:C.bg,color:C.text,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:24}}>
-      <div style={{fontSize:48,marginBottom:16}}>⛳</div>
-      <div style={{fontWeight:700,fontSize:22,marginBottom:8,textAlign:"center"}}>Individual Round In Progress</div>
-      <div style={{fontSize:14,color:C.muted,marginBottom:8,textAlign:"center"}}>{COURSES[courseId]?.name}</div>
-      <div style={{fontSize:13,color:C.gold,marginBottom:28,textAlign:"center"}}>
-        Hole {currentHole} - {opponents.map(o=>o.name).join(", ")}
+    <div style={{fontFamily:"'Georgia',serif",minHeight:"100vh",background:C.bg,color:C.text,paddingBottom:40}}>
+      <div style={{background:`linear-gradient(180deg,${C.card} 0%,transparent 100%)`,padding:"50px 20px 20px"}}>
+        <button onClick={onBack} style={{background:"rgba(123,180,80,0.15)",border:`1px solid ${C.green}`,color:C.green,fontSize:13,cursor:"pointer",padding:"8px 16px",borderRadius:20,fontWeight:700,marginBottom:16}}>‹ Home</button>
+        <div style={{textAlign:"center"}}>
+          <div style={{fontSize:32,marginBottom:6}}>⛳</div>
+          <div style={{fontSize:22,fontWeight:800}}>Individual Round</div>
+          <div style={{fontSize:13,color:C.muted,marginTop:4}}>{COURSES[courseId]?.name}</div>
+        </div>
       </div>
-      <div style={{width:"100%",maxWidth:340,display:"flex",flexDirection:"column",gap:10}}>
-        <BigBtn onClick={()=>{setResuming(false);setStep("playing");}}>Resume Round</BigBtn>
-        <GhostBtn onClick={()=>{setResuming(false);setStep("summary");}}>Go to Summary</GhostBtn>
+
+      <div style={{padding:"0 20px"}}>
+        {/* Round card — matches tournament In Progress style */}
+        <div style={{background:"rgba(123,180,80,0.08)",border:`1px solid ${C.green}44`,borderRadius:14,padding:"16px",marginBottom:16}}>
+          <div style={{fontWeight:800,fontSize:16,color:C.green,marginBottom:4}}>▶ In Progress · Hole {currentHole}</div>
+          <div style={{fontSize:13,color:C.text,fontWeight:600,marginBottom:2}}>{opponents.map(o=>o.name).join(", ")}</div>
+          <div style={{fontSize:11,color:C.muted}}>{opponents.map(o=>o.betType==="nassau-press"?"Nassau + Auto Press":"Nassau" ).join(" · ")} · ${opponents[0]?.betAmount||0}</div>
+        </div>
+
+        <BigBtn onClick={()=>{setResuming(false);setStep("playing");}}>Resume Scoring</BigBtn>
+        <div style={{height:10}}/>
+        <GhostBtn onClick={()=>{setResuming(false);setStep("summary");}}>📊 View Summary</GhostBtn>
+        <div style={{height:10}}/>
         <GhostBtn onClick={()=>{
-          if(window.confirm("Are you sure you want to discard this round? All scores will be lost and cannot be recovered.")) {
-            discardRound();
-          }
-        }} color={C.red}>Discard Round</GhostBtn>
-        <GhostBtn onClick={()=>{
-          // Mark as intentional clear — prevents checkExisting from reloading old round
           freshStart.current = true;
+          channelName.current = null;
           setResuming(false);
           setLiveRoundId(null);
           setOpponents([]);
           setScores({});
           setCurrentHole(1);
           setBack9Adjustments({});
-          channelName.current = null; // reset channel so new round gets fresh subscription
           setStep("setup");
-        }}>+ Start Another Round</GhostBtn>
+        }}>+ Start New Round</GhostBtn>
+        <div style={{height:10}}/>
+        <GhostBtn onClick={()=>{
+          if(window.confirm("Delete this round? All scores will be permanently removed.")) {
+            discardRound();
+          }
+        }} color={C.red}>🗑 Delete Round</GhostBtn>
       </div>
     </div>
   );
