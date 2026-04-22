@@ -830,6 +830,18 @@ export default function LiveRound({ user, players, roundData, onRoundDataChange,
   }
 
   if (step === "playing" && holeData) {
+    // Safety: if we have roundData but opponents didn't load, something corrupted
+    // Show a clear error instead of crashing silently
+    if(roundData && opponents.length === 0) {
+      return(
+        <div style={{minHeight:"100vh",background:C.bg,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:16,fontFamily:"Georgia,serif",padding:24}}>
+          <div style={{fontSize:32}}>⚠️</div>
+          <div style={{fontSize:16,fontWeight:700,color:C.gold,textAlign:"center"}}>Round data incomplete</div>
+          <div style={{fontSize:13,color:C.muted,textAlign:"center"}}>Opponents didn't load correctly. Try going back and resuming again.</div>
+          <button onClick={onBack} style={{background:C.green,border:"none",color:"#0a1a0f",padding:"14px 28px",borderRadius:12,fontSize:14,fontWeight:800,cursor:"pointer"}}>← Back</button>
+        </div>
+      );
+    }
     const myScore   = getScore("me", currentHole);
     const canAdvance = myScore !== null;
     const isLastHole = currentHole === course.holes.length;
