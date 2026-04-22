@@ -125,15 +125,32 @@ function getTally(scores, course, opp, courseId) {
 // ── MAIN COMPONENT ────────────────────────────────────────────────────────────
 // Props mirror TourneyCaptain: roundData=initialRound (full DB row), onBack, onDelete, onPostToLedger
 export default function IndividualRound({ user, players, roundData: initialRound, onBack, onDelete, onPostToLedger }) {
-  // ── State — initialized from roundData exactly like TourneyCaptain ─────────
-  const [round,       setRound]       = useState(initialRound);
-  const [currentHole, setCurrentHole] = useState(initialRound.current_hole || 1);
+  // ── Screen state — "setup" for new rounds, "scoring" for resume (mirrors TeamTournament) ──
+  const [screen,      setScreen]      = useState(initialRound ? "scoring" : "setup");
+
+  // ── Setup screen state ─────────────────────────────────────────────────────
+  const [courseId,    setCourseId]    = useState(initialRound?.course_id || "south-toledo");
+  const [myName,      setMyName]      = useState("");
+  const [opponents,   setOpponents]   = useState(initialRound?.opponents || []);
+  const [addSheet,    setAddSheet]    = useState(false);
+  const [addOppId,    setAddOppId]    = useState("");
+  const [addStrokes,  setAddStrokes]  = useState("0");
+  const [addStrokesDir,setAddStrokesDir]=useState("even");
+  const [addBetType,  setAddBetType]  = useState("nassau");
+  const [addPressDown,setAddPressDown]=useState(2);
+  const [addBetAmt,   setAddBetAmt]   = useState("5");
+  const [addSameGroup,setAddSameGroup]=useState(true);
+  const creatingRef = useRef(false);
+
+  // ── Scoring screen state ───────────────────────────────────────────────────
+  const [round,       setRound]       = useState(initialRound || null);
+  const [currentHole, setCurrentHole] = useState(initialRound?.current_hole || 1);
   const [liveTab,     setLiveTab]     = useState("score");
   const [saveStatus,  setSaveStatus]  = useState("");
   const [posting,     setPosting]     = useState(false);
   const [showSettings,setShowSettings]= useState(false);
   const [showShare,   setShowShare]    = useState(false);
-  const [back9Adj,    setBack9Adj]    = useState(initialRound.back9_adjustments || {});
+  const [back9Adj,    setBack9Adj]    = useState(initialRound?.back9_adjustments || {});
 
   // ── TourneyCaptain-identical refs and connection state ─────────────────────
   const saveTimer    = useRef(null);
@@ -146,11 +163,9 @@ export default function IndividualRound({ user, players, roundData: initialRound
   const [readOnlyMode, setReadOnlyMode] = useState(false);
   const [claiming,   setClaiming]    = useState(false);
 
-  // ── Derived from round state ───────────────────────────────────────────────
-  const courseId  = round.course_id || "south-toledo";
-  const opponents = round.opponents || [];
-  const scores    = round.scores    || {};
-  const holePars  = round.hole_pars || {};
+  // ── Derived from round state (scoring screen only) ────────────────────────
+  const scores    = round?.scores    || {};
+  const holePars  = round?.hole_pars || {};
   const course    = COURSES[courseId];
   const holeData  = course?.holes[currentHole - 1];
   const effPar    = holeData ? (holePars[currentHole] ?? holeData.par) : 4;
@@ -169,13 +184,13 @@ export default function IndividualRound({ user, players, roundData: initialRound
   }
 
   // ── Writer lock — per round (not per team) ─────────────────────────────────
-  const localKey = "press_individual_" + initialRound.id;
+  const localKey = "press_individual_" + (round?.id || "new");
 
   // ── Subscription — identical to TourneyCaptain ────────────────────────────
   function startSubscription() {
     if(subRef.current) sb.removeChannel(subRef.current);
     subRef.current = sb
-      .channel("individual_" + round.id)
+      .channel("individual_" + (round?.id||"none"))
       .on("postgres_changes", {event:"UPDATE", schema:"public", table:"live_rounds", filter:"id=eq."+round.id},
         payload => { if(payload.new) setRound(prev => ({...prev, ...payload.new, scores: payload.new.scores || prev.scores})); })
       .subscribe(status => {
@@ -216,6 +231,7 @@ export default function IndividualRound({ user, players, roundData: initialRound
 
   // ── Mount effect — identical to TourneyCaptain ────────────────────────────
   useEffect(() => {
+    if(!round?.id) return; // no round yet — skip writer init and subscription
     async function initWriter() {
       const myLocalToken = localStorage.getItem(localKey);
       const{data} = await sb.from("live_rounds").select("writer_token").eq("id", round.id).single();
@@ -255,7 +271,7 @@ export default function IndividualRound({ user, players, roundData: initialRound
 
   // ── flushSave — identical to TourneyCaptain ───────────────────────────────
   async function flushSave(dataToSave) {
-    if(!isWriter.current) return;
+    if(!isWriter.current || !round?.id) return;
     try {
       await sb.from("live_rounds").update({
         scores: dataToSave.scores,
@@ -263,7 +279,7 @@ export default function IndividualRound({ user, players, roundData: initialRound
         current_hole: dataToSave.current_hole,
         back9_adjustments: back9Adj,
         updated_at: new Date().toISOString(),
-      }).eq("id", round.id);
+      }).eq("id", round?.id);
       pendingData.current = null;
       lastConfirmed.current = Date.now();
       setConnStatus(prev => (prev==="offline"||prev==="syncing")?"online":prev);
@@ -351,6 +367,191 @@ export default function IndividualRound({ user, players, roundData: initialRound
 
   const myScore    = getScore("me", currentHole);
   const canAdvance = myScore !== null;
+
+  // ── Setup screen functions ────────────────────────────────────────────────
+  function addOpponent() {
+    const player = players.find(p => p.id === addOppId);
+    if(!player || opponents.find(o => o.playerId === addOppId)) return;
+    const rawStrokes = safeInt(addStrokes, 0);
+    const totalStrokes = rawStrokes * 2;
+    const finalStrokes = addStrokesDir==="igive" ? totalStrokes : addStrokesDir==="iget" ? -totalStrokes : 0;
+    setOpponents(prev => [...prev, {
+      playerId: player.id, name: player.name, strokes: finalStrokes,
+      betType: addBetType, betAmount: safeInt(addBetAmt, 5),
+      pressDown: addBetType==="nassau-press" ? addPressDown : 2,
+      sameGroup: addSameGroup, manualPresses: [],
+      linkedUserId: player.linked_user_id || null,
+    }]);
+    setAddOppId(""); setAddStrokes("0"); setAddStrokesDir("even"); setAddBetAmt("5");
+    setAddSheet(false);
+  }
+
+  async function startRound() {
+    if(opponents.length === 0 || creatingRef.current) return;
+    creatingRef.current = true;
+    setPosting(true);
+    try {
+      const safeCourseId = COURSES[courseId] ? courseId : "south-toledo";
+      const { data } = await sb.from("live_rounds").insert({
+        owner_id: user.id,
+        course_id: safeCourseId,
+        course_name: COURSES[safeCourseId]?.name || safeCourseId,
+        owner_name: myName.trim() || user.id,
+        opponents,
+        scores: {},
+        current_hole: 1,
+        status: "active",
+      }).select().single();
+      if(data) {
+        setRound(data);
+        setCurrentHole(1);
+        setPosting(false);
+        setScreen("scoring"); // ← identical to TeamTournament's setScreen("scoring")
+        return;
+      }
+    } catch(e) {
+      console.warn("live_rounds insert failed:", e);
+    }
+    creatingRef.current = false;
+    setPosting(false);
+  }
+
+  // ── SETUP SCREEN — only shows for new rounds ───────────────────────────────
+  const selStyle = { width:"100%", padding:"14px", background:C.surface, border:"1px solid "+C.border, borderRadius:10, color:C.text, fontSize:15, outline:"none", WebkitAppearance:"none", cursor:"pointer" };
+
+  if(screen === "setup") return (
+    <div style={{fontFamily:"Georgia,serif",minHeight:"100vh",background:C.bg,color:C.text,paddingBottom:60}}>
+      <div style={{background:"linear-gradient(180deg,"+C.card+" 0%,transparent 100%)",padding:"44px 20px 20px"}}>
+        <button onClick={onBack} style={{background:"rgba(123,180,80,0.15)",border:"1px solid "+C.green,color:C.green,fontSize:14,cursor:"pointer",padding:"8px 16px",borderRadius:20,fontWeight:700,marginBottom:20,display:"inline-flex",alignItems:"center",gap:6}}>‹ Back</button>
+        <div style={{textAlign:"center"}}>
+          <div style={{fontSize:36}}>⛳</div>
+          <div style={{fontSize:24,fontWeight:800,marginBottom:4}}>Start Individual Round</div>
+        </div>
+      </div>
+      <div style={{padding:"0 20px"}}>
+        {/* Your name */}
+        <div style={{marginBottom:16}}>
+          <div style={{fontSize:11,color:C.green,letterSpacing:1.5,textTransform:"uppercase",marginBottom:6,fontWeight:600}}>Your Name</div>
+          <input value={myName} onChange={e=>setMyName(e.target.value)} placeholder="e.g. Michael"
+            style={{width:"100%",padding:"14px",background:C.surface,border:"1px solid "+C.border,borderRadius:10,color:C.text,fontSize:16,fontWeight:700,outline:"none",boxSizing:"border-box"}}/>
+          <div style={{fontSize:11,color:C.muted,marginTop:6}}>Shows on your opponents' scorecards</div>
+        </div>
+        {/* Course */}
+        <div style={{marginBottom:16}}>
+          <div style={{fontSize:11,color:C.green,letterSpacing:1.5,textTransform:"uppercase",marginBottom:6,fontWeight:600}}>Select Course</div>
+          <select value={courseId} onChange={e=>setCourseId(e.target.value)} style={selStyle}>
+            {Object.entries(COURSES).map(([id,c])=>(
+              <option key={id} value={id}>{c.name} - {c.city}</option>
+            ))}
+          </select>
+        </div>
+        {/* Opponents */}
+        <div style={{fontSize:11,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>Opponents ({opponents.length})</div>
+        {opponents.length===0&&(
+          <div style={{textAlign:"center",padding:"20px",background:C.card,border:"1px solid "+C.border,borderRadius:12,marginBottom:12,color:C.muted,fontSize:13}}>
+            Add at least one opponent to start
+          </div>
+        )}
+        {opponents.map(opp=>{
+          const perSide = Math.abs(opp.strokes)/2;
+          const strokeLabel = opp.strokes===0?"Even":opp.strokes>0?"You give "+perSide+"/side":"You get "+perSide+"/side";
+          return(
+            <div key={opp.playerId} style={{background:C.card,border:"1px solid "+C.border,borderRadius:12,padding:"14px",marginBottom:10,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <div>
+                <div style={{fontWeight:700,fontSize:17,marginBottom:2}}>{opp.name}</div>
+                <div style={{fontSize:12,color:C.muted}}>{strokeLabel} · {opp.betType==="nassau-press"?"Nassau + Auto Press "+opp.pressDown+"D $"+opp.betAmount:opp.betType==="nassau"?"Nassau $"+opp.betAmount:opp.betType==="match"?"Match Play $"+opp.betAmount+"/hole":"Skins $"+opp.betAmount}</div>
+              </div>
+              <button onClick={()=>setOpponents(prev=>prev.filter(o=>o.playerId!==opp.playerId))} style={{background:"none",border:"none",color:C.red,fontSize:22,cursor:"pointer",padding:"0 0 0 12px"}}>✕</button>
+            </div>
+          );
+        })}
+        <button onClick={()=>setAddSheet(true)} style={{width:"100%",padding:"14px",background:"transparent",border:"1.5px dashed "+C.border,borderRadius:12,color:C.green,fontSize:14,fontWeight:600,cursor:"pointer",marginBottom:20}}>
+          + Add Opponent
+        </button>
+        <button onClick={startRound} disabled={opponents.length===0||posting}
+          style={{width:"100%",padding:"18px",background:opponents.length===0||posting?"#333":C.green,color:opponents.length===0||posting?C.muted:"#0a1a0f",border:"none",borderRadius:14,fontSize:17,fontWeight:800,cursor:opponents.length===0||posting?"not-allowed":"pointer",fontFamily:"Georgia,serif"}}>
+          {posting?"Starting...":"Tee It Up!"}
+        </button>
+      </div>
+
+      {/* Add opponent sheet */}
+      {addSheet&&(
+        <div style={{position:"fixed",inset:0,zIndex:400}}>
+          <div onClick={()=>setAddSheet(false)} style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.75)"}}/>
+          <div style={{position:"absolute",bottom:0,left:0,right:0,background:C.surface,borderRadius:"22px 22px 0 0",border:"1px solid "+C.border,padding:"20px 20px 44px",maxHeight:"92vh",overflowY:"auto"}}>
+            <div style={{display:"flex",justifyContent:"center",marginBottom:14}}><div style={{width:40,height:4,background:C.dim,borderRadius:2}}/></div>
+            <div style={{fontWeight:700,fontSize:20,marginBottom:16}}>Add Opponent</div>
+            <div style={{display:"flex",flexDirection:"column",gap:14}}>
+              <div>
+                <div style={{fontSize:11,color:C.green,letterSpacing:1.5,textTransform:"uppercase",marginBottom:6,fontWeight:600}}>Select Player</div>
+                <select value={addOppId} onChange={e=>setAddOppId(e.target.value)} style={selStyle}>
+                  <option value="">- Choose opponent -</option>
+                  {players.filter(p=>!opponents.find(o=>o.playerId===p.id)).map(p=>(
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <div style={{fontSize:11,color:C.green,letterSpacing:1.5,textTransform:"uppercase",marginBottom:6,fontWeight:600}}>Strokes Per Side</div>
+                <div style={{display:"flex",gap:8,marginBottom:8}}>
+                  {[["even","Even"],["igive","I Give"],["iget","I Get"]].map(([d,l])=>(
+                    <button key={d} onClick={()=>setAddStrokesDir(d)} style={{flex:1,padding:"10px 4px",fontSize:11,fontWeight:addStrokesDir===d?700:500,background:addStrokesDir===d?C.green:C.surface,color:addStrokesDir===d?"#0a1a0f":C.muted,border:"1px solid "+(addStrokesDir===d?C.green:C.border),cursor:"pointer",borderRadius:8}}>{l}</button>
+                  ))}
+                </div>
+                {addStrokesDir!=="even"&&(
+                  <input type="number" min="1" max="9" value={addStrokes} onChange={e=>setAddStrokes(e.target.value)} placeholder="# per side"
+                    style={{width:"100%",padding:"12px",background:C.surface,border:"1px solid "+C.border,borderRadius:10,color:C.text,fontSize:20,outline:"none",boxSizing:"border-box",textAlign:"center",fontWeight:700}} inputMode="numeric"/>
+                )}
+              </div>
+              <div>
+                <div style={{fontSize:11,color:C.green,letterSpacing:1.5,textTransform:"uppercase",marginBottom:6,fontWeight:600}}>Bet Type</div>
+                <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                  {[["match","Match Play"],["nassau","Nassau"],["nassau-press","Nassau + Press"],["skins","Skins"]].map(([id,label])=>(
+                    <button key={id} onClick={()=>setAddBetType(id)} style={{flex:1,minWidth:"45%",padding:"10px 4px",fontSize:11,fontWeight:addBetType===id?700:500,background:addBetType===id?C.green:C.surface,color:addBetType===id?"#0a1a0f":C.muted,border:"1px solid "+(addBetType===id?C.green:C.border),cursor:"pointer",borderRadius:8}}>{label}</button>
+                  ))}
+                </div>
+              </div>
+              {addBetType==="nassau-press"&&(
+                <div>
+                  <div style={{fontSize:11,color:C.green,letterSpacing:1.5,textTransform:"uppercase",marginBottom:6,fontWeight:600}}>Auto Press Triggers When</div>
+                  <div style={{display:"flex",gap:8}}>
+                    {[1,2,3].map(n=>(
+                      <button key={n} onClick={()=>setAddPressDown(n)} style={{flex:1,padding:"12px",fontSize:13,fontWeight:addPressDown===n?700:500,background:addPressDown===n?C.gold:C.surface,color:addPressDown===n?"#0a1a0f":C.muted,border:"1px solid "+(addPressDown===n?C.gold:C.border),cursor:"pointer",borderRadius:8}}>{n} Down</button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div>
+                <div style={{fontSize:11,color:C.green,letterSpacing:1.5,textTransform:"uppercase",marginBottom:6,fontWeight:600}}>
+                  {addBetType==="match"?"$ Per Hole":addBetType==="skins"?"$ Per Skin":"$ Per Side/Total"}
+                </div>
+                <input type="number" min="1" value={addBetAmt} onChange={e=>setAddBetAmt(e.target.value)}
+                  style={{width:"100%",padding:"12px",background:C.surface,border:"1px solid "+C.border,borderRadius:10,color:C.text,fontSize:20,outline:"none",boxSizing:"border-box",textAlign:"center",fontWeight:700}} inputMode="decimal"/>
+              </div>
+              <div style={{background:C.dim,borderRadius:12,padding:"14px 16px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <div>
+                  <div style={{fontWeight:700,fontSize:14,marginBottom:2}}>Same Group</div>
+                  <div style={{fontSize:11,color:C.muted}}>{addSameGroup?"Can enter scores & call press":"Different group - scores optional"}</div>
+                </div>
+                <button onClick={()=>setAddSameGroup(g=>!g)}
+                  style={{width:52,height:28,borderRadius:14,border:"none",cursor:"pointer",background:addSameGroup?C.green:"#333",position:"relative",flexShrink:0}}>
+                  <div style={{position:"absolute",top:4,left:addSameGroup?26:4,width:20,height:20,borderRadius:"50%",background:"#fff",transition:"left 0.2s"}}/>
+                </button>
+              </div>
+              <button onClick={addOpponent} disabled={!addOppId}
+                style={{width:"100%",padding:"16px",background:addOppId?C.green:"#333",color:addOppId?"#0a1a0f":C.muted,border:"none",borderRadius:12,fontSize:15,fontWeight:700,cursor:addOppId?"pointer":"not-allowed",fontFamily:"Georgia,serif"}}>
+                Add to Round
+              </button>
+              <button onClick={()=>setAddSheet(false)}
+                style={{width:"100%",padding:"14px",background:"transparent",color:C.green,border:"1.5px solid "+C.green,borderRadius:12,fontSize:14,fontWeight:600,cursor:"pointer",fontFamily:"Georgia,serif"}}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 
   // ── Read-only banner ──────────────────────────────────────────────────────
   if(readOnlyMode) return (
