@@ -141,6 +141,7 @@ export default function IndividualRound({ user, players, roundData: initialRound
   const [addBetAmt,   setAddBetAmt]   = useState("5");
   const [addSameGroup,setAddSameGroup]=useState(true);
   const creatingRef = useRef(false);
+  const [pressPrompt, setPressPrompt] = useState(null); // {oppId, oppName, message}
 
   // ── Scoring screen state ───────────────────────────────────────────────────
   const [round,       setRound]       = useState(initialRound || null);
@@ -334,8 +335,36 @@ export default function IndividualRound({ user, players, roundData: initialRound
     if(saveTimer.current) clearTimeout(saveTimer.current);
     const toSave = { scores, opponents, current_hole: currentHole };
     if(isWriter.current) await flushSave(toSave);
+
+    // Check if any same-group Nassau opponent qualifies for a press prompt
+    const myHoleScore = scores["me"]?.[currentHole];
+    for(const opp of opponents) {
+      if(!opp.sameGroup) continue;
+      if(opp.betType!=="nassau"&&opp.betType!=="nassau-press") continue;
+      if(!myHoleScore||!scores[opp.playerId]?.[currentHole]) continue;
+      if((opp.manualPresses||[]).some(p=>p.hole===currentHole)) continue;
+      const t = getTally(scores,course,opp,courseId);
+      if(t.total>0) { // opp is losing — they can press
+        setPressPrompt({oppId:opp.playerId,oppName:opp.name,loser:"them",message:opp.name+" is down — Press?"});
+        return;
+      }
+      if(t.total<0) { // you are losing — you can press
+        setPressPrompt({oppId:opp.playerId,oppName:opp.name,loser:"me",message:"You are down — Press?"});
+        return;
+      }
+    }
+    doAdvance();
+  }
+
+  function doAdvance() {
     if(isLastHole) setLiveTab("summary");
     else setCurrentHole(h => h+1);
+  }
+
+  function resolvePress(accept) {
+    if(accept) callManualPress(pressPrompt.oppId);
+    setPressPrompt(null);
+    doAdvance();
   }
 
   async function postToLedger() {
@@ -697,22 +726,11 @@ export default function IndividualRound({ user, players, roundData: initialRound
           <div style={{background:C.card,border:"2px solid "+C.green,borderRadius:14,padding:"16px",marginBottom:12}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
               <div style={{fontSize:11,color:C.green,letterSpacing:2,textTransform:"uppercase",fontWeight:600}}>⛳ Your Score</div>
-              {opponents.filter(o=>o.sameGroup).map(opp => {
+               {opponents.filter(o=>o.sameGroup).map(opp => {
                 if(opp.betType!=="nassau"&&opp.betType!=="nassau-press") return null;
                 const alreadyPressed = (opp.manualPresses||[]).some(p=>p.hole===currentHole);
-                // Pissed Press — available any time on Nassau games, not just when losing
-                if(alreadyPressed) return(
-                  <button key={opp.playerId} disabled
-                    style={{background:"#333",border:"none",color:"#888",padding:"5px 12px",borderRadius:8,fontSize:11,fontWeight:700,cursor:"not-allowed"}}>
-                    Pressed ✓
-                  </button>
-                );
-                return(
-                  <button key={opp.playerId} onClick={()=>callManualPress(opp.playerId)}
-                    style={{background:"rgba(224,80,80,0.15)",border:"2px solid "+C.red,color:C.red,padding:"6px 14px",borderRadius:8,fontSize:12,fontWeight:800,cursor:"pointer"}}>
-                    🤬 Press!
-                  </button>
-                );
+                if(!alreadyPressed) return null;
+                return <span key={opp.playerId} style={{fontSize:11,color:C.red,fontWeight:700}}>🤬 Pressed this hole</span>;
               })}
             </div>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
@@ -742,18 +760,9 @@ export default function IndividualRound({ user, players, roundData: initialRound
                   </div>
                   <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4}}>
                     <div style={{fontSize:13,fontWeight:700,color:tally.label==="Even"?C.muted:tally.label?.includes("Up")?C.green:C.red}}>{tally.label||"-"}</div>
-                    {(opp.betType==="nassau"||opp.betType==="nassau-press")&&(()=>{
-                      const alreadyPressed=(opp.manualPresses||[]).some(p=>p.hole===currentHole);
-                      if(alreadyPressed) return(
-                        <button disabled style={{background:"#333",border:"none",color:"#888",padding:"4px 10px",borderRadius:8,fontSize:10,fontWeight:700,cursor:"not-allowed"}}>Pressed ✓</button>
-                      );
-                      return(
-                        <button onClick={()=>callManualPress(opp.playerId)}
-                          style={{background:"rgba(224,80,80,0.15)",border:"2px solid "+C.red,color:C.red,padding:"4px 10px",borderRadius:8,fontSize:11,fontWeight:800,cursor:"pointer"}}>
-                          🤬 Press!
-                        </button>
-                      );
-                    })()}
+                    {(opp.betType==="nassau"||opp.betType==="nassau-press")&&(opp.manualPresses||[]).some(p=>p.hole===currentHole)&&(
+                      <span style={{fontSize:11,color:C.red,fontWeight:700}}>🤬 Pressed</span>
+                    )}
                   </div>
                 </div>
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
@@ -1009,7 +1018,32 @@ export default function IndividualRound({ user, players, roundData: initialRound
         </div>
       )}
 
-            {/* Settings overlay */}
+            {/* Press prompt — appears after hole scores entered, before advancing */}
+      {pressPrompt&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.88)",zIndex:900,display:"flex",alignItems:"center",justifyContent:"center",padding:24}}>
+          <div style={{background:C.card,border:"2px solid "+C.red,borderRadius:20,padding:"28px 24px",maxWidth:340,width:"100%",textAlign:"center"}}>
+            <div style={{fontSize:40,marginBottom:12}}>🤬</div>
+            <div style={{fontSize:20,fontWeight:800,color:C.text,marginBottom:8}}>{pressPrompt.message}</div>
+            <div style={{fontSize:13,color:C.muted,marginBottom:24,lineHeight:1.5}}>
+              {pressPrompt.loser==="them"
+                ? pressPrompt.oppName+" can press to start a new bet on the remaining holes."
+                : "Press to start a new bet on the remaining holes."}
+            </div>
+            <div style={{display:"flex",gap:12}}>
+              <button onClick={()=>resolvePress(false)}
+                style={{flex:1,padding:"14px",background:"transparent",color:C.muted,border:"1px solid "+C.border,borderRadius:12,fontSize:15,fontWeight:700,cursor:"pointer",fontFamily:"Georgia,serif"}}>
+                No Thanks
+              </button>
+              <button onClick={()=>resolvePress(true)}
+                style={{flex:1,padding:"14px",background:C.red,color:"#fff",border:"none",borderRadius:12,fontSize:15,fontWeight:800,cursor:"pointer",fontFamily:"Georgia,serif"}}>
+                🤬 Press!
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Settings overlay */}
       {showSettings&&(
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.92)",zIndex:800,overflowY:"auto",fontFamily:"Georgia,serif"}}>
           <div style={{padding:"50px 20px 40px",maxWidth:480,margin:"0 auto"}}>
