@@ -371,7 +371,8 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
     checkExisting();
   }, [resumeRoundId, user.id]);
 
-  // -- Flush pending scores to Supabase (hard save, no debounce) -----------
+  // -- Flush pending scores — never touches connStatus on success -----------
+  // connStatus only changes on genuine connection failure, not normal saves
   async function flushScores(scoresToSave, hole) {
     try {
       await sb.from("live_rounds").update({
@@ -381,68 +382,86 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
         updated_at: new Date().toISOString(),
       }).eq("id", liveRoundId);
       pendingScores.current = null;
-      setConnStatus("online");
+      // Only update connStatus if we were previously offline/syncing
+      setConnStatus(prev => (prev === "offline" || prev === "syncing") ? "online" : prev);
     } catch(e) {
+      // Genuine write failure — mark offline
       setConnStatus("offline");
     }
   }
 
-  // -- Auto-save scores to Supabase whenever scores change ------------------
+  // -- Auto-save scores — never touches connStatus, just saves silently ----
   useEffect(() => {
     if (!liveRoundId || step !== "playing") return;
-    pendingScores.current = { scores, currentHole }; // always track latest
+    pendingScores.current = { scores, currentHole };
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    setConnStatus(prev => prev === "online" ? "online" : prev); // don't flicker
     saveTimerRef.current = setTimeout(async () => {
       await flushScores(scores, currentHole);
     }, 800);
     return () => clearTimeout(saveTimerRef.current);
   }, [scores, currentHole, back9Adjustments, liveRoundId, step]);
 
-  // -- Real-time: sync opponent scores + connection resilience --------------
-  function startLiveRoundSub() {
-    if (realtimeSub.current) sb.removeChannel(realtimeSub.current);
-    realtimeSub.current = sb
-      .channel("live_round_" + liveRoundId + "_" + Date.now())
-      .on("postgres_changes", {
-        event: "UPDATE", schema: "public",
-        table: "live_rounds", filter: "id=eq." + liveRoundId,
-      }, payload => {
-        if (payload.new?.scores) {
-          setScores(prev => {
-            const incoming = payload.new.scores;
-            const merged = { ...incoming };
-            merged["me"] = prev["me"] || {};
-            return merged;
-          });
-        }
-      })
-      .subscribe(status => {
-        if (status === "SUBSCRIBED") {
-          // Flush any pending scores before declaring online
-          if (pendingScores.current) {
-            setConnStatus("syncing");
-            flushScores(pendingScores.current.scores, pendingScores.current.currentHole);
-          } else {
-            setConnStatus("online");
-          }
-        } else if (status === "CLOSED" || status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
-          setConnStatus("offline");
-          setTimeout(() => startLiveRoundSub(), 3000);
-        }
-      });
-  }
+  // -- Stable channel name — no Date.now() so React never creates a duplicate
+  // useRef holds the channel ID so it survives re-renders without triggering effects
+  const channelName = useRef(null);
 
   useEffect(() => {
     if (!liveRoundId || step !== "playing") return;
 
-    startLiveRoundSub();
+    // Build a stable channel name once per round — never changes on re-render
+    if (!channelName.current) {
+      channelName.current = "live_round_" + liveRoundId + "_" + teamIdx;
+    }
 
-    // iOS visibility reconnect — rebuild WS when phone wakes
+    function buildSub() {
+      if (realtimeSub.current) {
+        sb.removeChannel(realtimeSub.current);
+        realtimeSub.current = null;
+      }
+      realtimeSub.current = sb
+        .channel(channelName.current)
+        .on("postgres_changes", {
+          event: "UPDATE", schema: "public",
+          table: "live_rounds", filter: "id=eq." + liveRoundId,
+        }, payload => {
+          if (payload.new?.scores) {
+            setScores(prev => {
+              const incoming = payload.new.scores;
+              const merged = { ...incoming };
+              merged["me"] = prev["me"] || {};
+              return merged;
+            });
+          }
+        })
+        .subscribe(status => {
+          if (status === "SUBSCRIBED") {
+            setConnStatus("online");
+            // Silently flush pending scores without changing status to "syncing"
+            if (pendingScores.current) {
+              flushScores(pendingScores.current.scores, pendingScores.current.currentHole);
+            }
+          } else if (status === "CLOSED" || status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+            // Only go offline if we were previously online — ignore initial setup noise
+            setConnStatus(prev => prev === "online" ? "offline" : prev);
+            setTimeout(() => buildSub(), 4000);
+          }
+        });
+    }
+
+    // Store buildSub in ref so visibility handler can call it without stale closure
+    subRef.current = { rebuild: buildSub };
+    buildSub();
+
+    // iOS visibility reconnect
     function handleVisibility() {
       if (document.visibilityState === "visible") {
-        setConnStatus("connecting");
-        startLiveRoundSub();
+        // Only rebuild if we know connection dropped — don't rebuild on every wake
+        setConnStatus(prev => {
+          if (prev === "offline") {
+            subRef.current?.rebuild?.();
+          }
+          return prev === "offline" ? "connecting" : prev;
+        });
         if (pendingScores.current) {
           flushScores(pendingScores.current.scores, pendingScores.current.currentHole);
         }
