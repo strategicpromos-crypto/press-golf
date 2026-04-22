@@ -1457,25 +1457,19 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
     );
   }
 
-  // ── Individual round: new round setup via LiveRound ─────────────────────────
+  // ── Individual round: new round setup (no LiveRound needed — IndividualRound handles setup)
   if(view==="liveround") return(
-    <LiveRound
+    <IndividualRound
+      key="new-round"
       user={user}
       players={players}
+      roundData={null}
       onBack={()=>setView("roster")}
-      onRoundCreated={(data)=>{
-        // Save session and switch to scoring immediately — single atomic update
-        localStorage.setItem(LIVE_KEY,JSON.stringify({id:data.id,savedAt:Date.now()}));
-        setActiveRounds(prev=>[{id:data.id,course_name:data.course_name,opponents:data.opponents,current_hole:1,updated_at:data.updated_at},...prev]);
-        // Set liveSession first, then clear view — React batches these so scoring shows instantly
-        setLiveSession({view:"scoring",data});
-        setView("roster"); // clear liveround view so IndividualRound takes over
-      }}
       onPostToLedger={async()=>{await loadAll();setView("roster");t2("Results posted to ledger! ⛳");}}
+      onDelete={()=>setView("roster")}
     />
   );
 
-  // ── ROSTER ──────────────────────────────────────────────────────────────────
   if(view==="roster") return(
     <div style={{fontFamily:"'Georgia',serif",minHeight:"100vh",background:C.bg,color:C.text,paddingBottom:40}}>
       <div style={{background:`linear-gradient(180deg,${C.card} 0%,transparent 100%)`,padding:"50px 20px 24px",textAlign:"center"}}>
