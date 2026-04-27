@@ -1390,11 +1390,16 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
 
   // ── JOIN TOURNEY (spectator code entry with back button) ─────────────────
   if(view==="joinTourney") return(
-    <TourneyCodeEntry
-      onBack={()=>setView("roster")}
-      onCaptain={(t,idx)=>{setTourneyData(t);setTourneyCaptainIdx(idx);setTourneyView("captain");}}
-      onSpectator={(t)=>{setTourneyData(t);setTourneyView("spectator");}}
-    />
+    <div style={{fontFamily:"Georgia,serif",minHeight:"100vh",background:C.bg,color:C.text,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:24,gap:16}}>
+      <div style={{fontSize:48,marginBottom:8}}>🚧</div>
+      <div style={{fontSize:22,fontWeight:800,textAlign:"center"}}>Under Construction</div>
+      <div style={{fontSize:14,color:C.muted,textAlign:"center",maxWidth:280,lineHeight:1.6}}>
+        Tournament joining is available via your captain link or spectator link. Check your messages for your personal link.
+      </div>
+      <button onClick={()=>setView("roster")} style={{marginTop:8,padding:"14px 28px",background:C.green,border:"none",borderRadius:12,color:"#0a1a0f",fontSize:15,fontWeight:800,cursor:"pointer",fontFamily:"Georgia,serif"}}>
+        ← Back to Home
+      </button>
+    </div>
   );
 
   if(view==="tournament") return(
@@ -1516,9 +1521,10 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
         </button>
 
         {/* ── JOIN ── */}
-        <button onClick={()=>setView("joinTourney")} style={{width:"100%",maxWidth:360,background:"transparent",border:`1.5px solid ${C.green}55`,color:C.green,padding:"10px 18px",borderRadius:14,fontSize:13,fontWeight:700,cursor:"pointer",marginBottom:12,textAlign:"left"}}>
+        {/* Join a Tournament — hidden, links work via URL params */}
+        {false&&<button onClick={()=>setView("joinTourney")} style={{width:"100%",maxWidth:360,background:"transparent",border:`1.5px solid ${C.green}55`,color:C.green,padding:"10px 18px",borderRadius:14,fontSize:13,fontWeight:700,cursor:"pointer",marginBottom:12,textAlign:"left"}}>
           🔑 Join a Tournament &nbsp;<span style={{fontSize:11,fontWeight:400,opacity:0.6}}>— got a code or link?</span>
-        </button>
+        </button>}
 
         <div style={{display:"flex",background:"rgba(0,0,0,0.35)",border:`1px solid ${C.border}`,borderRadius:14,overflow:"hidden",maxWidth:360,margin:"0 auto"}}>
           {[{l:"Rounds",v:sRound},{l:"Side Bets",v:sBet},{l:"Season Bank",v:sBank}].map((item,i,arr)=>(<div key={i} style={{flex:1,textAlign:"center",padding:"13px 4px",borderRight:i<arr.length-1?`1px solid ${C.border}`:"none"}}><Money value={item.v} size={15}/><div style={{fontSize:8,color:C.muted,letterSpacing:1.5,textTransform:"uppercase",marginTop:3}}>{item.l}</div></div>))}
