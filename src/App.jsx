@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback } from "react";
 import { sb } from "./supabase.js";
 import { loadStripe } from "https://esm.sh/@stripe/stripe-js@2";
 import LiveRound from "./LiveRound.jsx";
-import IndividualRound from "./IndividualRound.jsx";
 import TeamTournament from "./TeamTournament.jsx";
 import TourneyJoin, { TourneyLoader } from "./TourneyJoin.jsx";
 import TourneyCaptain from "./TourneyCaptain.jsx";
@@ -871,10 +870,8 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
   const [saving,setSaving]=useState(false);
   const [toast,setToast]=useState({msg:"",error:false});
   const [view,setView]=useState("roster"); // roster | profile | liveround | tournament
-  const [activeRounds,  setActiveRounds]  = useState([]);
   const [activeRound,   setActiveRound]   = useState(null);
-  const [opponentRound, setOpponentRound] = useState(null);
-  const [liveSession,   setLiveSession]   = useState(null); // rounds where user is a linked opponent
+  const [opponentRound, setOpponentRound] = useState(null); // rounds where user is a linked opponent
   const [activeTourney, setActiveTourney]=useState(null); // active team tournament
   const [pid,setPid]=useState(null);
   const [ptab,setPtab]=useState("overview");
@@ -954,42 +951,35 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
 
   useEffect(()=>{loadAll();},[loadAll]);
 
-  const LIVE_KEY = "press_live_" + user.id;
-
+  // Check for active live round
   useEffect(()=>{
     async function checkActiveRound(){
-      // All active rounds for home screen
-      const{data:all}=await sb.from("live_rounds")
+      // Rounds I created
+      const{data}=await sb.from("live_rounds")
         .select("id,course_name,opponents,current_hole,updated_at")
-        .eq("owner_id",user.id).eq("status","active")
-        .order("updated_at",{ascending:false}).limit(20);
-      setActiveRounds(all||[]);
+        .eq("owner_id",user.id)
+        .eq("status","active")
+        .order("updated_at",{ascending:false})
+        .limit(1)
+        .maybeSingle();
+      if(data)setActiveRound(data);
+      else setActiveRound(null);
 
-      // Restore session from localStorage — identical to captain_resume pattern
-      if(!liveSession){
-        try{
-          const saved=localStorage.getItem(LIVE_KEY);
-          if(saved){
-            const{id,savedAt}=JSON.parse(saved);
-            if(id&&Date.now()-savedAt<24*60*60*1000){
-              const{data}=await sb.from("live_rounds")
-                .select("*").eq("id",id).eq("owner_id",user.id)
-                .eq("status","active").maybeSingle();
-              if(data) setLiveSession({view:"resume",data});
-              else localStorage.removeItem(LIVE_KEY);
-            }
-          }
-        }catch(e){localStorage.removeItem(LIVE_KEY);}
-      }
-
-      try{
+      // Rounds I'm a linked opponent in (Ken's view after creating account)
+      try {
         const{data:oppData}=await sb.from("live_rounds")
           .select("id,course_name,opponents,current_hole,updated_at")
-          .eq("status","active").neq("owner_id",user.id)
+          .eq("status","active")
+          .neq("owner_id",user.id)          // never show rounds I created
           .contains("opponent_user_ids",[user.id])
-          .order("updated_at",{ascending:false}).limit(1).maybeSingle();
+          .order("updated_at",{ascending:false})
+          .limit(1)
+          .maybeSingle();
         setOpponentRound(oppData||null);
-      }catch(e){setOpponentRound(null);}
+      } catch(e) {
+        // Column may not exist yet — silent fail
+        setOpponentRound(null);
+      }
     }
     checkActiveRound();
   },[user.id,view]);
@@ -1401,75 +1391,16 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
     <TeamTournament user={user} onBack={()=>setView("roster")} onDelete={()=>setActiveTourney(null)}/>
   );
 
-  // ── Individual round: resume prompt (mirrors captain_resume exactly) ────────
-  if(liveSession?.view==="resume"&&liveSession?.data){
-    const d=liveSession.data;
-    return(
-      <div style={{fontFamily:"Georgia,serif",minHeight:"100vh",background:"#080f0a",color:"#e8f0e9",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:24}}>
-        <div style={{fontSize:48,marginBottom:16}}>⛳</div>
-        <div style={{fontSize:22,fontWeight:800,marginBottom:6,textAlign:"center"}}>Individual Round In Progress</div>
-        <div style={{fontSize:14,color:"#6b7f6d",marginBottom:4,textAlign:"center"}}>{d.course_name}</div>
-        <div style={{fontSize:13,color:"#e8b84b",marginBottom:32,textAlign:"center"}}>{(d.opponents||[]).map(o=>o.name).join(", ")} · Hole {d.current_hole||1}</div>
-        <div style={{width:"100%",maxWidth:320,display:"flex",flexDirection:"column",gap:10}}>
-          <button onClick={()=>setLiveSession(s=>({...s,view:"scoring"}))}
-            style={{width:"100%",padding:"18px",background:"#7bb450",color:"#0a1a0f",border:"none",borderRadius:14,fontSize:17,fontWeight:800,cursor:"pointer",fontFamily:"Georgia,serif"}}>
-            ▶ Resume Scoring
-          </button>
-          <button onClick={async()=>{
-            if(window.confirm("Delete this round? All scores will be permanently removed.")){
-              await sb.from("live_rounds").delete().eq("id",d.id);
-              localStorage.removeItem(LIVE_KEY);
-              setLiveSession(null);
-              setActiveRounds(prev=>prev.filter(r=>r.id!==d.id));
-            }
-          }} style={{width:"100%",padding:"14px",background:"transparent",color:"#e05050",border:"1px solid rgba(224,80,80,0.4)",borderRadius:12,fontSize:14,fontWeight:600,cursor:"pointer",fontFamily:"Georgia,serif"}}>
-            🗑 Delete Round
-          </button>
-          <button onClick={()=>{setLiveSession(null);localStorage.removeItem(LIVE_KEY);}}
-            style={{width:"100%",padding:"14px",background:"transparent",color:"#6b7f6d",border:"1px solid rgba(123,180,80,0.2)",borderRadius:12,fontSize:14,fontWeight:600,cursor:"pointer",fontFamily:"Georgia,serif"}}>
-            Not my round
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  // ── Individual round: scoring via IndividualRound (TourneyCaptain pattern) ──
-  if(liveSession?.view==="scoring"&&liveSession?.data){
-    return(
-      <IndividualRound
-        key={liveSession.data.id}
-        user={user}
-        players={players}
-        roundData={liveSession.data}
-        onBack={()=>setLiveSession(s=>({...s,view:"resume"}))}
-        onPostToLedger={async()=>{
-          localStorage.removeItem(LIVE_KEY);
-          setLiveSession(null);
-          await loadAll();setView("roster");t2("Results posted to ledger! ⛳");
-        }}
-        onDelete={()=>{
-          localStorage.removeItem(LIVE_KEY);
-          setLiveSession(null);
-          setActiveRounds(prev=>prev.filter(r=>r.id!==liveSession.data.id));
-        }}
-      />
-    );
-  }
-
-  // ── Individual round: new round setup (no LiveRound needed — IndividualRound handles setup)
   if(view==="liveround") return(
-    <IndividualRound
-      key="new-round"
+    <LiveRound
       user={user}
       players={players}
-      roundData={null}
       onBack={()=>setView("roster")}
       onPostToLedger={async()=>{await loadAll();setView("roster");t2("Results posted to ledger! ⛳");}}
-      onDelete={()=>setView("roster")}
     />
   );
 
+  // ── ROSTER ──────────────────────────────────────────────────────────────────
   if(view==="roster") return(
     <div style={{fontFamily:"'Georgia',serif",minHeight:"100vh",background:C.bg,color:C.text,paddingBottom:40}}>
       <div style={{background:`linear-gradient(180deg,${C.card} 0%,transparent 100%)`,padding:"50px 20px 24px",textAlign:"center"}}>
@@ -1516,9 +1447,13 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
         </button>
 
         {/* ── JOIN ── */}
-        <button onClick={()=>setView("joinTourney")} style={{width:"100%",maxWidth:360,background:"transparent",border:`1.5px solid ${C.green}55`,color:C.green,padding:"10px 18px",borderRadius:14,fontSize:13,fontWeight:700,cursor:"pointer",marginBottom:12,textAlign:"left"}}>
-          🔑 Join a Tournament &nbsp;<span style={{fontSize:11,fontWeight:400,opacity:0.6}}>— got a code or link?</span>
-        </button>
+        {/* Join a Tournament button hidden — links work via URL params, not this button */}
+        {/* Kept in code so TourneyCodeEntry and all link flows remain intact */}
+        {false && (
+          <button onClick={()=>setView("joinTourney")} style={{width:"100%",maxWidth:360,background:"transparent",border:`1.5px solid ${C.green}55`,color:C.green,padding:"10px 18px",borderRadius:14,fontSize:13,fontWeight:700,cursor:"pointer",marginBottom:12,textAlign:"left"}}>
+            🔑 Join a Tournament &nbsp;<span style={{fontSize:11,fontWeight:400,opacity:0.6}}>— got a code or link?</span>
+          </button>
+        )}
 
         <div style={{display:"flex",background:"rgba(0,0,0,0.35)",border:`1px solid ${C.border}`,borderRadius:14,overflow:"hidden",maxWidth:360,margin:"0 auto"}}>
           {[{l:"Rounds",v:sRound},{l:"Side Bets",v:sBet},{l:"Season Bank",v:sBank}].map((item,i,arr)=>(<div key={i} style={{flex:1,textAlign:"center",padding:"13px 4px",borderRight:i<arr.length-1?`1px solid ${C.border}`:"none"}}><Money value={item.v} size={15}/><div style={{fontSize:8,color:C.muted,letterSpacing:1.5,textTransform:"uppercase",marginTop:3}}>{item.l}</div></div>))}
@@ -1549,25 +1484,19 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
           </div>
         )}
 
-        {/* Individual round cards — one per active round */}
-        {activeRounds.map(round=>(
-          <div key={round.id} style={{background:`linear-gradient(135deg,rgba(123,180,80,0.15),rgba(123,180,80,0.05))`,border:`1px solid ${C.green}44`,borderRadius:14,padding:"14px 16px",marginBottom:10,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-            <div style={{flex:1,minWidth:0}}>
+        {/* Resume Round banner */}
+        {activeRound&&(
+          <div style={{background:`linear-gradient(135deg,rgba(123,180,80,0.15),rgba(123,180,80,0.05))`,border:`1px solid ${C.green}44`,borderRadius:14,padding:"14px 16px",marginBottom:14,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <div>
               <div style={{fontWeight:700,fontSize:14,color:C.green,marginBottom:2}}>⛳ Round In Progress</div>
-              <div style={{fontSize:12,color:C.muted}}>{round.course_name} · Hole {round.current_hole}</div>
-              <div style={{fontSize:12,color:C.text,fontWeight:600,marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{(round.opponents||[]).map(o=>o.name).join(", ")}</div>
+              <div style={{fontSize:12,color:C.muted}}>{activeRound.course_name} · Hole {activeRound.current_hole}</div>
+              <div style={{fontSize:12,color:C.text,fontWeight:600,marginTop:2}}>{(activeRound.opponents||[]).map(o=>o.name).join(", ")}</div>
             </div>
-            <button onClick={async()=>{
-              const{data}=await sb.from("live_rounds").select("*").eq("id",round.id).maybeSingle();
-              if(data){
-                localStorage.setItem(LIVE_KEY,JSON.stringify({id:data.id,savedAt:Date.now()}));
-                setLiveSession({view:"resume",data});
-              }
-            }} style={{background:C.green,border:"none",color:"#0a1a0f",padding:"10px 16px",borderRadius:12,fontSize:13,fontWeight:800,cursor:"pointer",flexShrink:0,marginLeft:12}}>
+            <button onClick={()=>setView("liveround")} style={{background:C.green,border:"none",color:"#0a1a0f",padding:"10px 16px",borderRadius:12,fontSize:13,fontWeight:800,cursor:"pointer",flexShrink:0}}>
               Resume →
             </button>
           </div>
-        ))}
+        )}
 
         {/* Opponent round banner — shows when user has linked their account */}
         {opponentRound&&(()=>{
