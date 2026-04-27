@@ -250,6 +250,33 @@ export const COURSES = {
     ]
   },
 
+  // ── SUNNEHANNA COUNTRY CLUB ───────────────────────────────────────────────
+  "sunnehanna": {
+    name: "Sunnehanna Country Club",
+    city: "Johnstown, PA",
+    par: 70,
+    holes: [
+      { hole:1,  par:4, hdcp:7,  side:"front" },
+      { hole:2,  par:4, hdcp:3,  side:"front" },
+      { hole:3,  par:4, hdcp:15, side:"front" },
+      { hole:4,  par:4, hdcp:13, side:"front" },
+      { hole:5,  par:3, hdcp:17, side:"front" },
+      { hole:6,  par:4, hdcp:5,  side:"front" },
+      { hole:7,  par:3, hdcp:11, side:"front" },
+      { hole:8,  par:4, hdcp:9,  side:"front" },
+      { hole:9,  par:5, hdcp:1,  side:"front" },
+      { hole:10, par:3, hdcp:16, side:"back" },
+      { hole:11, par:5, hdcp:12, side:"back" },
+      { hole:12, par:4, hdcp:6,  side:"back" },
+      { hole:13, par:4, hdcp:10, side:"back" },
+      { hole:14, par:3, hdcp:18, side:"back" },
+      { hole:15, par:5, hdcp:2,  side:"back" },
+      { hole:16, par:3, hdcp:14, side:"back" },
+      { hole:17, par:4, hdcp:4,  side:"back" },
+      { hole:18, par:4, hdcp:8,  side:"back" },
+    ]
+  },
+
   // ── GIANT OAK GOLF CLUB — Temperance, MI ──────────────────────────────────
   // Blue tees: 6415 yards, par 72, designed by Arthur Hills (1969)
   // Verified from official scorecard
@@ -404,16 +431,12 @@ export function calcAutoPressNassau(scores, holeData, myStrokeHoles, oppStrokeHo
       }
 
       // Check for AUTO press triggers (±pressDown)
-      const isLastHole     = h.hole === sideHoles[sideHoles.length - 1].hole;
-      const isSecondToLast = h.hole === sideHoles[sideHoles.length - 2]?.hole;
-      // A press needs at least 2 holes to be meaningful.
-      // Block if triggered on last OR second-to-last hole — only 0 or 1 hole would remain.
-      const canPress = !isLastHole && !isSecondToLast;
+      const isLastHole = h.hole === sideHoles[sideHoles.length - 1].hole;
       for (let i = 0; i < betsThisHole; i++) {
         const bet = bets[i];
         if (bet.startHole <= h.hole && (bet.diff === pressDown || bet.diff === -pressDown) && !bet.pressed) {
           bet.pressed = true;
-          if (canPress) {
+          if (!isLastHole) {
             bets.push({ startHole: h.hole + 1, diff: 0, pressed: false, label: `Auto Press` });
           }
         }
@@ -424,7 +447,7 @@ export function calcAutoPressNassau(scores, holeData, myStrokeHoles, oppStrokeHo
       for (const mp of manualThisHole) {
         // Manual press starts on the current hole (already scored above)
         // so new bet starts next hole to not double-count
-        if (canPress) {
+        if (!isLastHole) {
           bets.push({ startHole: h.hole + 1, diff: 0, pressed: false, label: `Pissed Press h${h.hole}` });
         }
       }
