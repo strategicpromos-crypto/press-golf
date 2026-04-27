@@ -891,6 +891,7 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
   const [disputeAmt,setDisputeAmt]=useState("");
   const [disputeReason,setDisputeReason]=useState("");
   const [showNotifs,setShowNotifs]=useState(false);
+  const [activeTab,setActiveTab]=useState("home");
   const [nName,setNName]=useState(""); const [nDir,setNDir]=useState("even"); const [nStr,setNStr]=useState("1");
   const [fDate,setFDate]=useState(today); const [fDir,setFDir]=useState("received"); const [fStr,setFStr]=useState("1"); const [fMoney,setFMoney]=useState(""); const [fNotes,setFNotes]=useState(""); const [fWon,setFWon]=useState(true);
   const [bDate,setBDate]=useState(today); const [bType,setBType]=useState(BET_TYPES[0]); const [bAmt,setBAmt]=useState(""); const [bNotes,setBNotes]=useState(""); const [bWon,setBWon]=useState(true);
@@ -1390,16 +1391,11 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
 
   // ── JOIN TOURNEY (spectator code entry with back button) ─────────────────
   if(view==="joinTourney") return(
-    <div style={{fontFamily:"Georgia,serif",minHeight:"100vh",background:C.bg,color:C.text,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:24,gap:16}}>
-      <div style={{fontSize:48,marginBottom:8}}>🚧</div>
-      <div style={{fontSize:22,fontWeight:800,textAlign:"center"}}>Under Construction</div>
-      <div style={{fontSize:14,color:C.muted,textAlign:"center",maxWidth:280,lineHeight:1.6}}>
-        Tournament joining is available via your captain link or spectator link. Check your messages for your personal link.
-      </div>
-      <button onClick={()=>setView("roster")} style={{marginTop:8,padding:"14px 28px",background:C.green,border:"none",borderRadius:12,color:"#0a1a0f",fontSize:15,fontWeight:800,cursor:"pointer",fontFamily:"Georgia,serif"}}>
-        ← Back to Home
-      </button>
-    </div>
+    <TourneyCodeEntry
+      onBack={()=>setView("roster")}
+      onCaptain={(t,idx)=>{setTourneyData(t);setTourneyCaptainIdx(idx);setTourneyView("captain");}}
+      onSpectator={(t)=>{setTourneyData(t);setTourneyView("spectator");}}
+    />
   );
 
   if(view==="tournament") return(
@@ -1476,16 +1472,14 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
   );
 
   if(view==="roster") return(
-    <div style={{fontFamily:"'Georgia',serif",minHeight:"100vh",background:C.bg,color:C.text,paddingBottom:40}}>
+    <div style={{fontFamily:"'Georgia',serif",minHeight:"100vh",background:C.bg,color:C.text,paddingBottom:80}}>
       <div style={{background:`linear-gradient(180deg,${C.card} 0%,transparent 100%)`,padding:"50px 20px 24px",textAlign:"center"}}>
         <div style={{display:"inline-flex",alignItems:"center",justifyContent:"center",width:64,height:64,background:`linear-gradient(135deg,${C.green},#4a8030)`,borderRadius:18,marginBottom:14,boxShadow:`0 4px 20px ${C.green}44`}}><span style={{fontSize:32}}>⛳</span></div>
         <div style={{fontSize:42,fontWeight:800,letterSpacing:-2,color:"#f0f7ec",lineHeight:1}}>Press</div>
         <div style={{fontSize:10,color:C.green,letterSpacing:4,textTransform:"uppercase",marginTop:5,marginBottom:4}}>Put Me In Your Phone</div>
-        <div style={{fontSize:11,color:C.muted,marginBottom:6,display:"flex",alignItems:"center",justifyContent:"center",gap:10,flexWrap:"wrap"}}>
-          <span>{user.user_metadata?.display_name||user.email}</span>
+        <div style={{fontSize:12,color:C.muted,marginBottom:6,display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
+          <span style={{fontWeight:600,color:C.text}}>{user.user_metadata?.display_name||user.email}</span>
           {isPro&&<span style={{background:`rgba(232,184,75,0.15)`,color:C.gold,fontSize:10,padding:"2px 8px",borderRadius:10,fontWeight:700}}>⭐ Pro</span>}
-          <button onClick={onSignOut} style={{background:"none",border:"none",color:C.dim,fontSize:11,cursor:"pointer"}}>Sign out</button>
-          <button onClick={()=>{setShowNotifs(true);markNotifsRead();}} style={{background:"none",border:"none",color:C.muted,fontSize:11,cursor:"pointer",display:"flex",alignItems:"center"}}>🔔<NotifBadge count={unreadNotifs+pendingActions}/></button>
         </div>
         {!isPro&&(
           <div style={{display:"flex",gap:8,justifyContent:"center",marginBottom:12,flexWrap:"wrap"}}>
@@ -1521,10 +1515,9 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
         </button>
 
         {/* ── JOIN ── */}
-        {/* Join a Tournament — hidden, links work via URL params */}
-        {false&&<button onClick={()=>setView("joinTourney")} style={{width:"100%",maxWidth:360,background:"transparent",border:`1.5px solid ${C.green}55`,color:C.green,padding:"10px 18px",borderRadius:14,fontSize:13,fontWeight:700,cursor:"pointer",marginBottom:12,textAlign:"left"}}>
+        <button onClick={()=>setView("joinTourney")} style={{width:"100%",maxWidth:360,background:"transparent",border:`1.5px solid ${C.green}55`,color:C.green,padding:"10px 18px",borderRadius:14,fontSize:13,fontWeight:700,cursor:"pointer",marginBottom:12,textAlign:"left"}}>
           🔑 Join a Tournament &nbsp;<span style={{fontSize:11,fontWeight:400,opacity:0.6}}>— got a code or link?</span>
-        </button>}
+        </button>
 
         <div style={{display:"flex",background:"rgba(0,0,0,0.35)",border:`1px solid ${C.border}`,borderRadius:14,overflow:"hidden",maxWidth:360,margin:"0 auto"}}>
           {[{l:"Rounds",v:sRound},{l:"Side Bets",v:sBet},{l:"Season Bank",v:sBank}].map((item,i,arr)=>(<div key={i} style={{flex:1,textAlign:"center",padding:"13px 4px",borderRight:i<arr.length-1?`1px solid ${C.border}`:"none"}}><Money value={item.v} size={15}/><div style={{fontSize:8,color:C.muted,letterSpacing:1.5,textTransform:"uppercase",marginTop:3}}>{item.l}</div></div>))}
@@ -1697,6 +1690,100 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
       </Sheet>
 
       {/* Notifications Sheet */}
+      {/* ── BOTTOM NAVIGATION BAR ── */}
+      <div style={{position:"fixed",bottom:0,left:0,right:0,background:"#0e1a10",borderTop:"1px solid #1e2f20",display:"flex",height:58,zIndex:200}}>
+
+        <button onClick={()=>setActiveTab("home")} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:3,background:"transparent",border:"none",borderTop:activeTab==="home"?"2px solid #7bb450":"2px solid transparent",cursor:"pointer",padding:0}}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M3 12L12 3L21 12V21H15V15H9V21H3V12Z" fill={activeTab==="home"?"#7bb450":"#6b7f6d"}/></svg>
+          <span style={{fontSize:9,color:activeTab==="home"?"#7bb450":"#6b7f6d",fontWeight:activeTab==="home"?700:500,letterSpacing:"0.5px",fontFamily:"Georgia,serif"}}>HOME</span>
+        </button>
+
+        <button onClick={()=>{setActiveTab("alerts");markNotifsRead();}} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:3,background:"transparent",border:"none",borderTop:activeTab==="alerts"?"2px solid #7bb450":"2px solid transparent",cursor:"pointer",padding:0,position:"relative"}}>
+          <div style={{position:"relative",display:"inline-block"}}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 22C13.1 22 14 21.1 14 20H10C10 21.1 10.9 22 12 22ZM18 16V11C18 7.93 16.36 5.36 13.5 4.68V4C13.5 3.17 12.83 2.5 12 2.5C11.17 2.5 10.5 3.17 10.5 4V4.68C7.63 5.36 6 7.92 6 11V16L4 18V19H20V18L18 16Z" fill={activeTab==="alerts"?"#7bb450":"#6b7f6d"}/></svg>
+            {(unreadNotifs+pendingActions)>0&&<div style={{position:"absolute",top:-4,right:-6,background:"#e05050",borderRadius:"50%",width:14,height:14,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:8,color:"#fff",fontWeight:"bold"}}>{unreadNotifs+pendingActions}</span></div>}
+          </div>
+          <span style={{fontSize:9,color:activeTab==="alerts"?"#7bb450":"#6b7f6d",fontWeight:activeTab==="alerts"?700:500,letterSpacing:"0.5px",fontFamily:"Georgia,serif"}}>ALERTS</span>
+        </button>
+
+        <button onClick={()=>setActiveTab("profile")} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:3,background:"transparent",border:"none",borderTop:activeTab==="profile"?"2px solid #7bb450":"2px solid transparent",cursor:"pointer",padding:0}}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="4" fill={activeTab==="profile"?"#7bb450":"#6b7f6d"}/><path d="M4 20C4 16.69 7.58 14 12 14C16.42 14 20 16.69 20 20" stroke={activeTab==="profile"?"#7bb450":"#6b7f6d"} strokeWidth="2" strokeLinecap="round"/></svg>
+          <span style={{fontSize:9,color:activeTab==="profile"?"#7bb450":"#6b7f6d",fontWeight:activeTab==="profile"?700:500,letterSpacing:"0.5px",fontFamily:"Georgia,serif"}}>PROFILE</span>
+        </button>
+
+      </div>
+
+      {/* ── ALERTS PANEL ── */}
+      {activeTab==="alerts"&&(
+        <div style={{position:"fixed",inset:0,background:C.bg,zIndex:150,overflowY:"auto",paddingBottom:70,fontFamily:"Georgia,serif"}}>
+          <div style={{padding:"50px 20px 20px"}}>
+            <div style={{fontSize:22,fontWeight:800,marginBottom:4,color:C.text}}>Notifications & Actions</div>
+            <div style={{fontSize:13,color:C.muted,marginBottom:20}}>{user.user_metadata?.display_name||user.email}</div>
+            {pendingActions>0&&(
+              <div style={{background:"rgba(232,184,75,0.1)",border:"1px solid rgba(232,184,75,0.4)",borderRadius:12,padding:"12px 14px",marginBottom:16}}>
+                <div style={{fontSize:13,color:C.gold,fontWeight:600}}>⚠️ {pendingActions} action{pendingActions>1?"s":""} need your response</div>
+              </div>
+            )}
+            {notifications.length===0&&cancelRequests.filter(r=>r.responder_id===user.id).length===0&&strokeRequests.filter(s=>s.responder_id===user.id).length===0&&(
+              <div style={{textAlign:"center",color:C.dim,padding:"30px 0"}}>No notifications yet.</div>
+            )}
+            {notifications.map(n=>(
+              <div key={n.id} style={{padding:"12px 14px",background:n.read?C.card:"rgba(123,180,80,0.06)",border:`1px solid ${n.read?C.border:C.green+"33"}`,borderRadius:10,marginBottom:8}}>
+                <div style={{fontWeight:600,fontSize:13,marginBottom:2,color:C.text}}>{n.title}</div>
+                {n.body&&<div style={{fontSize:12,color:C.muted}}>{n.body}</div>}
+                <div style={{fontSize:10,color:C.dim,marginTop:4}}>{new Date(n.created_at).toLocaleDateString()}</div>
+              </div>
+            ))}
+            {cancelRequests.filter(r=>r.responder_id===user.id).map(req=>(
+              <div key={req.id} style={{padding:"14px",background:"rgba(232,184,75,0.06)",border:"1px solid rgba(232,184,75,0.3)",borderRadius:10,marginBottom:8}}>
+                <div style={{fontWeight:700,fontSize:13,color:C.gold,marginBottom:4}}>Cancel Request</div>
+                <div style={{fontSize:12,color:C.muted,marginBottom:10}}>{req.item_date}</div>
+                <div style={{display:"flex",gap:8}}>
+                  <button onClick={()=>handleCancelResponse(req,true)} style={{flex:1,padding:"10px",background:C.green,color:"#0a1a0f",border:"none",borderRadius:8,fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"Georgia,serif"}}>Approve</button>
+                  <button onClick={()=>handleCancelResponse(req,false)} style={{flex:1,padding:"10px",background:"transparent",color:C.red,border:`1px solid rgba(224,80,80,0.4)`,borderRadius:8,fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:"Georgia,serif"}}>Deny</button>
+                </div>
+              </div>
+            ))}
+            {strokeRequests.filter(s=>s.responder_id===user.id).map(req=>(
+              <div key={req.id} style={{padding:"14px",background:"rgba(52,152,219,0.06)",border:"1px solid rgba(52,152,219,0.25)",borderRadius:10,marginBottom:8}}>
+                <div style={{fontWeight:700,fontSize:13,color:"#5dade2",marginBottom:4}}>Stroke Change Request</div>
+                <div style={{fontSize:12,color:C.muted,marginBottom:10}}>{req.proposed_label}</div>
+                <div style={{display:"flex",gap:8}}>
+                  <button onClick={()=>handleStrokeResponse(req,true)} style={{flex:1,padding:"10px",background:C.green,color:"#0a1a0f",border:"none",borderRadius:8,fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"Georgia,serif"}}>Approve</button>
+                  <button onClick={()=>handleStrokeResponse(req,false)} style={{flex:1,padding:"10px",background:"transparent",color:C.red,border:`1px solid rgba(224,80,80,0.4)`,borderRadius:8,fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:"Georgia,serif"}}>Deny</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── PROFILE PANEL ── */}
+      {activeTab==="profile"&&(
+        <div style={{position:"fixed",inset:0,background:C.bg,zIndex:150,overflowY:"auto",paddingBottom:70,fontFamily:"Georgia,serif"}}>
+          <div style={{padding:"50px 20px 20px"}}>
+            <div style={{fontSize:22,fontWeight:800,marginBottom:16,color:C.text}}>Profile</div>
+            <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:14,padding:"16px",marginBottom:16}}>
+              <div style={{fontSize:20,fontWeight:800,color:C.text,marginBottom:4}}>{user.user_metadata?.display_name||"Player"}</div>
+              <div style={{fontSize:13,color:C.muted}}>{user.email}</div>
+              {isPro&&<div style={{marginTop:8,display:"inline-block",background:"rgba(232,184,75,0.15)",color:C.gold,fontSize:11,padding:"3px 10px",borderRadius:10,fontWeight:700}}>⭐ Pro Member</div>}
+            </div>
+            {!isPro&&(
+              <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap"}}>
+                <button onClick={onUpgrade} style={{flex:2,padding:"14px",background:`linear-gradient(135deg,${C.gold},#b8860b)`,border:"none",color:"#0a1a0f",borderRadius:12,fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"Georgia,serif"}}>⭐ Upgrade to Pro — $1.99/mo</button>
+                <button onClick={onShowProInfo} style={{flex:1,padding:"14px",background:"transparent",border:`1px solid rgba(232,184,75,0.4)`,color:C.gold,borderRadius:12,fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"Georgia,serif"}}>What's included?</button>
+              </div>
+            )}
+            {isPro&&(
+              <button onClick={onShowProInfo} style={{width:"100%",padding:"12px",background:"transparent",border:`1px solid rgba(232,184,75,0.3)`,color:C.gold,borderRadius:12,fontSize:12,fontWeight:600,cursor:"pointer",marginBottom:12,fontFamily:"Georgia,serif"}}>⭐ View Pro Features</button>
+            )}
+            <button onClick={onSignOut} style={{width:"100%",padding:"14px",background:"transparent",border:`1px solid rgba(224,80,80,0.3)`,color:C.red,borderRadius:12,fontSize:14,fontWeight:600,cursor:"pointer",marginTop:8,fontFamily:"Georgia,serif"}}>
+              Sign Out
+            </button>
+          </div>
+        </div>
+      )}
+
       <Sheet open={showNotifs} onClose={()=>setShowNotifs(false)} title="Notifications & Actions">
         <div>
           {cancelRequests.filter(r=>r.responder_id===user.id).map(req=>(
