@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { sb } from "./supabase.js";
 import { loadStripe } from "https://esm.sh/@stripe/stripe-js@2";
 import LiveRound from "./LiveRound.jsx";
+import IndividualRound from "./IndividualRound.jsx";
 import TeamTournament from "./TeamTournament.jsx";
 import TourneyJoin, { TourneyLoader } from "./TourneyJoin.jsx";
 import TourneyCaptain from "./TourneyCaptain.jsx";
@@ -862,7 +863,6 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
   const [bets,setBets]=useState([]);
   const [settlements,setSettlements]=useState([]);
   const [notifications,setNotifications]=useState([]);
-  const [activeTab,setActiveTab]=useState("home"); // home | alerts | profile
   const [archivedRounds,setArchivedRounds]=useState([]);
   const [archivedBets,setArchivedBets]=useState([]);
   const [cancelRequests,setCancelRequests]=useState([]);
@@ -871,8 +871,10 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
   const [saving,setSaving]=useState(false);
   const [toast,setToast]=useState({msg:"",error:false});
   const [view,setView]=useState("roster"); // roster | profile | liveround | tournament
+  const [activeRounds,  setActiveRounds]  = useState([]);
   const [activeRound,   setActiveRound]   = useState(null);
-  const [opponentRound, setOpponentRound] = useState(null); // rounds where user is a linked opponent
+  const [opponentRound, setOpponentRound] = useState(null);
+  const [liveSession,   setLiveSession]   = useState(null); // rounds where user is a linked opponent
   const [activeTourney, setActiveTourney]=useState(null); // active team tournament
   const [pid,setPid]=useState(null);
   const [ptab,setPtab]=useState("overview");
@@ -952,35 +954,42 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
 
   useEffect(()=>{loadAll();},[loadAll]);
 
-  // Check for active live round
+  const LIVE_KEY = "press_live_" + user.id;
+
   useEffect(()=>{
     async function checkActiveRound(){
-      // Rounds I created
-      const{data}=await sb.from("live_rounds")
+      // All active rounds for home screen
+      const{data:all}=await sb.from("live_rounds")
         .select("id,course_name,opponents,current_hole,updated_at")
-        .eq("owner_id",user.id)
-        .eq("status","active")
-        .order("updated_at",{ascending:false})
-        .limit(1)
-        .maybeSingle();
-      if(data)setActiveRound(data);
-      else setActiveRound(null);
+        .eq("owner_id",user.id).eq("status","active")
+        .order("updated_at",{ascending:false}).limit(20);
+      setActiveRounds(all||[]);
 
-      // Rounds I'm a linked opponent in (Ken's view after creating account)
-      try {
+      // Restore session from localStorage — identical to captain_resume pattern
+      if(!liveSession){
+        try{
+          const saved=localStorage.getItem(LIVE_KEY);
+          if(saved){
+            const{id,savedAt}=JSON.parse(saved);
+            if(id&&Date.now()-savedAt<24*60*60*1000){
+              const{data}=await sb.from("live_rounds")
+                .select("*").eq("id",id).eq("owner_id",user.id)
+                .eq("status","active").maybeSingle();
+              if(data) setLiveSession({view:"resume",data});
+              else localStorage.removeItem(LIVE_KEY);
+            }
+          }
+        }catch(e){localStorage.removeItem(LIVE_KEY);}
+      }
+
+      try{
         const{data:oppData}=await sb.from("live_rounds")
           .select("id,course_name,opponents,current_hole,updated_at")
-          .eq("status","active")
-          .neq("owner_id",user.id)          // never show rounds I created
+          .eq("status","active").neq("owner_id",user.id)
           .contains("opponent_user_ids",[user.id])
-          .order("updated_at",{ascending:false})
-          .limit(1)
-          .maybeSingle();
+          .order("updated_at",{ascending:false}).limit(1).maybeSingle();
         setOpponentRound(oppData||null);
-      } catch(e) {
-        // Column may not exist yet — silent fail
-        setOpponentRound(null);
-      }
+      }catch(e){setOpponentRound(null);}
     }
     checkActiveRound();
   },[user.id,view]);
@@ -1392,25 +1401,86 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
     <TeamTournament user={user} onBack={()=>setView("roster")} onDelete={()=>setActiveTourney(null)}/>
   );
 
+  // ── Individual round: resume prompt (mirrors captain_resume exactly) ────────
+  if(liveSession?.view==="resume"&&liveSession?.data){
+    const d=liveSession.data;
+    return(
+      <div style={{fontFamily:"Georgia,serif",minHeight:"100vh",background:"#080f0a",color:"#e8f0e9",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:24}}>
+        <div style={{fontSize:48,marginBottom:16}}>⛳</div>
+        <div style={{fontSize:22,fontWeight:800,marginBottom:6,textAlign:"center"}}>Individual Round In Progress</div>
+        <div style={{fontSize:14,color:"#6b7f6d",marginBottom:4,textAlign:"center"}}>{d.course_name}</div>
+        <div style={{fontSize:13,color:"#e8b84b",marginBottom:32,textAlign:"center"}}>{(d.opponents||[]).map(o=>o.name).join(", ")} · Hole {d.current_hole||1}</div>
+        <div style={{width:"100%",maxWidth:320,display:"flex",flexDirection:"column",gap:10}}>
+          <button onClick={()=>setLiveSession(s=>({...s,view:"scoring"}))}
+            style={{width:"100%",padding:"18px",background:"#7bb450",color:"#0a1a0f",border:"none",borderRadius:14,fontSize:17,fontWeight:800,cursor:"pointer",fontFamily:"Georgia,serif"}}>
+            ▶ Resume Scoring
+          </button>
+          <button onClick={async()=>{
+            if(window.confirm("Delete this round? All scores will be permanently removed.")){
+              await sb.from("live_rounds").delete().eq("id",d.id);
+              localStorage.removeItem(LIVE_KEY);
+              setLiveSession(null);
+              setActiveRounds(prev=>prev.filter(r=>r.id!==d.id));
+            }
+          }} style={{width:"100%",padding:"14px",background:"transparent",color:"#e05050",border:"1px solid rgba(224,80,80,0.4)",borderRadius:12,fontSize:14,fontWeight:600,cursor:"pointer",fontFamily:"Georgia,serif"}}>
+            🗑 Delete Round
+          </button>
+          <button onClick={()=>{setLiveSession(null);localStorage.removeItem(LIVE_KEY);}}
+            style={{width:"100%",padding:"14px",background:"transparent",color:"#6b7f6d",border:"1px solid rgba(123,180,80,0.2)",borderRadius:12,fontSize:14,fontWeight:600,cursor:"pointer",fontFamily:"Georgia,serif"}}>
+            Not my round
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Individual round: scoring via IndividualRound (TourneyCaptain pattern) ──
+  if(liveSession?.view==="scoring"&&liveSession?.data){
+    return(
+      <IndividualRound
+        key={liveSession.data.id}
+        user={user}
+        players={players}
+        roundData={liveSession.data}
+        onBack={()=>setLiveSession(s=>({...s,view:"resume"}))}
+        onPostToLedger={async()=>{
+          localStorage.removeItem(LIVE_KEY);
+          setLiveSession(null);
+          await loadAll();setView("roster");t2("Results posted to ledger! ⛳");
+        }}
+        onDelete={()=>{
+          localStorage.removeItem(LIVE_KEY);
+          setLiveSession(null);
+          setActiveRounds(prev=>prev.filter(r=>r.id!==liveSession.data.id));
+        }}
+      />
+    );
+  }
+
+  // ── Individual round: new round setup (no LiveRound needed — IndividualRound handles setup)
   if(view==="liveround") return(
-    <LiveRound
+    <IndividualRound
+      key="new-round"
       user={user}
       players={players}
+      roundData={null}
       onBack={()=>setView("roster")}
       onPostToLedger={async()=>{await loadAll();setView("roster");t2("Results posted to ledger! ⛳");}}
+      onDelete={()=>setView("roster")}
     />
   );
 
-  // ── ROSTER ──────────────────────────────────────────────────────────────────
   if(view==="roster") return(
-    <div style={{fontFamily:"'Georgia',serif",minHeight:"100vh",background:C.bg,color:C.text,paddingBottom:80}}>
+    <div style={{fontFamily:"'Georgia',serif",minHeight:"100vh",background:C.bg,color:C.text,paddingBottom:40}}>
       <div style={{background:`linear-gradient(180deg,${C.card} 0%,transparent 100%)`,padding:"50px 20px 24px",textAlign:"center"}}>
         <div style={{display:"inline-flex",alignItems:"center",justifyContent:"center",width:64,height:64,background:`linear-gradient(135deg,${C.green},#4a8030)`,borderRadius:18,marginBottom:14,boxShadow:`0 4px 20px ${C.green}44`}}><span style={{fontSize:32}}>⛳</span></div>
         <div style={{fontSize:42,fontWeight:800,letterSpacing:-2,color:"#f0f7ec",lineHeight:1}}>Press</div>
         <div style={{fontSize:10,color:C.green,letterSpacing:4,textTransform:"uppercase",marginTop:5,marginBottom:4}}>Put Me In Your Phone</div>
-        <div style={{fontSize:12,color:C.muted,marginBottom:6,display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
-          <span style={{fontWeight:600,color:C.text}}>{user.user_metadata?.display_name||user.email}</span>
+        <div style={{fontSize:11,color:C.muted,marginBottom:6,display:"flex",alignItems:"center",justifyContent:"center",gap:10,flexWrap:"wrap"}}>
+          <span>{user.user_metadata?.display_name||user.email}</span>
           {isPro&&<span style={{background:`rgba(232,184,75,0.15)`,color:C.gold,fontSize:10,padding:"2px 8px",borderRadius:10,fontWeight:700}}>⭐ Pro</span>}
+          <button onClick={onSignOut} style={{background:"none",border:"none",color:C.dim,fontSize:11,cursor:"pointer"}}>Sign out</button>
+          <button onClick={()=>{setShowNotifs(true);markNotifsRead();}} style={{background:"none",border:"none",color:C.muted,fontSize:11,cursor:"pointer",display:"flex",alignItems:"center"}}>🔔<NotifBadge count={unreadNotifs+pendingActions}/></button>
         </div>
         {!isPro&&(
           <div style={{display:"flex",gap:8,justifyContent:"center",marginBottom:12,flexWrap:"wrap"}}>
@@ -1479,19 +1549,25 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
           </div>
         )}
 
-        {/* Resume Round banner */}
-        {activeRound&&(
-          <div style={{background:`linear-gradient(135deg,rgba(123,180,80,0.15),rgba(123,180,80,0.05))`,border:`1px solid ${C.green}44`,borderRadius:14,padding:"14px 16px",marginBottom:14,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-            <div>
+        {/* Individual round cards — one per active round */}
+        {activeRounds.map(round=>(
+          <div key={round.id} style={{background:`linear-gradient(135deg,rgba(123,180,80,0.15),rgba(123,180,80,0.05))`,border:`1px solid ${C.green}44`,borderRadius:14,padding:"14px 16px",marginBottom:10,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <div style={{flex:1,minWidth:0}}>
               <div style={{fontWeight:700,fontSize:14,color:C.green,marginBottom:2}}>⛳ Round In Progress</div>
-              <div style={{fontSize:12,color:C.muted}}>{activeRound.course_name} · Hole {activeRound.current_hole}</div>
-              <div style={{fontSize:12,color:C.text,fontWeight:600,marginTop:2}}>{(activeRound.opponents||[]).map(o=>o.name).join(", ")}</div>
+              <div style={{fontSize:12,color:C.muted}}>{round.course_name} · Hole {round.current_hole}</div>
+              <div style={{fontSize:12,color:C.text,fontWeight:600,marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{(round.opponents||[]).map(o=>o.name).join(", ")}</div>
             </div>
-            <button onClick={()=>setView("liveround")} style={{background:C.green,border:"none",color:"#0a1a0f",padding:"10px 16px",borderRadius:12,fontSize:13,fontWeight:800,cursor:"pointer",flexShrink:0}}>
+            <button onClick={async()=>{
+              const{data}=await sb.from("live_rounds").select("*").eq("id",round.id).maybeSingle();
+              if(data){
+                localStorage.setItem(LIVE_KEY,JSON.stringify({id:data.id,savedAt:Date.now()}));
+                setLiveSession({view:"resume",data});
+              }
+            }} style={{background:C.green,border:"none",color:"#0a1a0f",padding:"10px 16px",borderRadius:12,fontSize:13,fontWeight:800,cursor:"pointer",flexShrink:0,marginLeft:12}}>
               Resume →
             </button>
           </div>
-        )}
+        ))}
 
         {/* Opponent round banner — shows when user has linked their account */}
         {opponentRound&&(()=>{
@@ -1615,112 +1691,6 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
       </Sheet>
 
       {/* Notifications Sheet */}
-      {/* ── BOTTOM NAVIGATION BAR ─────────────────────────────────────── */}
-      <div style={{position:"fixed",bottom:0,left:0,right:0,background:"#0e1a10",borderTop:"1px solid #1e2f20",display:"flex",height:58,zIndex:200,maxWidth:"100vw"}}>
-
-        {/* Home */}
-        <button onClick={()=>setActiveTab("home")} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:3,background:"transparent",border:"none",borderTop:activeTab==="home"?"2px solid #7bb450":"2px solid transparent",cursor:"pointer",padding:0}}>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-            <path d="M3 12L12 3L21 12V21H15V15H9V21H3V12Z" fill={activeTab==="home"?"#7bb450":"#6b7f6d"}/>
-          </svg>
-          <span style={{fontSize:9,color:activeTab==="home"?"#7bb450":"#6b7f6d",fontWeight:activeTab==="home"?700:500,letterSpacing:"0.5px",fontFamily:"Georgia,serif"}}>HOME</span>
-        </button>
-
-        {/* Alerts */}
-        <button onClick={()=>{setActiveTab("alerts");markNotifsRead();}} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:3,background:"transparent",border:"none",borderTop:activeTab==="alerts"?"2px solid #7bb450":"2px solid transparent",cursor:"pointer",padding:0,position:"relative"}}>
-          <div style={{position:"relative",display:"inline-block"}}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-              <path d="M12 22C13.1 22 14 21.1 14 20H10C10 21.1 10.9 22 12 22ZM18 16V11C18 7.93 16.36 5.36 13.5 4.68V4C13.5 3.17 12.83 2.5 12 2.5C11.17 2.5 10.5 3.17 10.5 4V4.68C7.63 5.36 6 7.92 6 11V16L4 18V19H20V18L18 16Z" fill={activeTab==="alerts"?"#7bb450":"#6b7f6d"}/>
-            </svg>
-            {(unreadNotifs+pendingActions)>0&&(
-              <div style={{position:"absolute",top:-4,right:-6,background:"#e05050",borderRadius:"50%",width:14,height:14,display:"flex",alignItems:"center",justifyContent:"center"}}>
-                <span style={{fontSize:8,color:"#fff",fontWeight:"bold"}}>{unreadNotifs+pendingActions}</span>
-              </div>
-            )}
-          </div>
-          <span style={{fontSize:9,color:activeTab==="alerts"?"#7bb450":"#6b7f6d",fontWeight:activeTab==="alerts"?700:500,letterSpacing:"0.5px",fontFamily:"Georgia,serif"}}>ALERTS</span>
-        </button>
-
-        {/* Profile */}
-        <button onClick={()=>setActiveTab("profile")} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:3,background:"transparent",border:"none",borderTop:activeTab==="profile"?"2px solid #7bb450":"2px solid transparent",cursor:"pointer",padding:0}}>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-            <circle cx="12" cy="8" r="4" fill={activeTab==="profile"?"#7bb450":"#6b7f6d"}/>
-            <path d="M4 20C4 16.69 7.58 14 12 14C16.42 14 20 16.69 20 20" stroke={activeTab==="profile"?"#7bb450":"#6b7f6d"} strokeWidth="2" strokeLinecap="round"/>
-          </svg>
-          <span style={{fontSize:9,color:activeTab==="profile"?"#7bb450":"#6b7f6d",fontWeight:activeTab==="profile"?700:500,letterSpacing:"0.5px",fontFamily:"Georgia,serif"}}>PROFILE</span>
-        </button>
-
-      </div>
-
-      {/* ── ALERTS PANEL ───────────────────────────────────────────────── */}
-      {activeTab==="alerts"&&(
-        <div style={{position:"fixed",inset:0,background:"#080f0a",zIndex:150,overflowY:"auto",paddingBottom:70,fontFamily:"Georgia,serif"}}>
-          <div style={{padding:"50px 20px 20px"}}>
-            <div style={{fontSize:22,fontWeight:800,marginBottom:4}}>Notifications & Actions</div>
-            <div style={{fontSize:13,color:"#6b7f6d",marginBottom:20}}>{user.user_metadata?.display_name||user.email}</div>
-            {pendingActions>0&&(
-              <div style={{background:"rgba(232,184,75,0.1)",border:"1px solid rgba(232,184,75,0.4)",borderRadius:12,padding:"12px 14px",marginBottom:16}}>
-                <div style={{fontSize:13,color:"#e8b84b",fontWeight:600}}>⚠️ {pendingActions} action{pendingActions>1?"s":""} need your response</div>
-              </div>
-            )}
-            {notifications.length===0&&cancelRequests.filter(r=>r.responder_id===user.id).length===0&&<div style={{textAlign:"center",color:"#1e2f20",padding:"30px 0"}}>No notifications yet.</div>}
-            {notifications.map(n=>(<div key={n.id} style={{padding:"12px 14px",background:n.read?"#121e14":"rgba(123,180,80,0.06)",border:`1px solid ${n.read?"rgba(123,180,80,0.18)":"rgba(123,180,80,0.33)"}`,borderRadius:10,marginBottom:8}}><div style={{fontWeight:600,fontSize:13,marginBottom:2}}>{n.title}</div>{n.body&&<div style={{fontSize:12,color:"#6b7f6d"}}>{n.body}</div>}<div style={{fontSize:10,color:"#1e2f20",marginTop:4}}>{new Date(n.created_at).toLocaleDateString()}</div></div>))}
-            {cancelRequests.filter(r=>r.responder_id===user.id).map(req=>(
-              <div key={req.id} style={{padding:"14px",background:"rgba(232,184,75,0.06)",border:"1px solid rgba(232,184,75,0.3)",borderRadius:10,marginBottom:8}}>
-                <div style={{fontWeight:700,fontSize:13,color:"#e8b84b",marginBottom:4}}>Cancel Request</div>
-                <div style={{fontSize:12,color:"#6b7f6d",marginBottom:10}}>{req.item_date}</div>
-                <div style={{display:"flex",gap:8}}>
-                  <button onClick={()=>handleCancelResponse(req,true)} style={{flex:1,padding:"10px",background:"#7bb450",color:"#0a1a0f",border:"none",borderRadius:8,fontSize:13,fontWeight:700,cursor:"pointer"}}>Approve</button>
-                  <button onClick={()=>handleCancelResponse(req,false)} style={{flex:1,padding:"10px",background:"transparent",color:"#e05050",border:"1px solid rgba(224,80,80,0.4)",borderRadius:8,fontSize:13,fontWeight:600,cursor:"pointer"}}>Deny</button>
-                </div>
-              </div>
-            ))}
-            {strokeRequests.filter(s=>s.responder_id===user.id).map(req=>(
-              <div key={req.id} style={{padding:"14px",background:"rgba(52,152,219,0.06)",border:"1px solid rgba(52,152,219,0.25)",borderRadius:10,marginBottom:8}}>
-                <div style={{fontWeight:700,fontSize:13,color:"#5dade2",marginBottom:4}}>Stroke Change Request</div>
-                <div style={{fontSize:12,color:"#6b7f6d",marginBottom:10}}>{req.proposed_label}</div>
-                <div style={{display:"flex",gap:8}}>
-                  <button onClick={()=>handleStrokeResponse(req,true)} style={{flex:1,padding:"10px",background:"#7bb450",color:"#0a1a0f",border:"none",borderRadius:8,fontSize:13,fontWeight:700,cursor:"pointer"}}>Approve</button>
-                  <button onClick={()=>handleStrokeResponse(req,false)} style={{flex:1,padding:"10px",background:"transparent",color:"#e05050",border:"1px solid rgba(224,80,80,0.4)",borderRadius:8,fontSize:13,fontWeight:600,cursor:"pointer"}}>Deny</button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* ── PROFILE PANEL ──────────────────────────────────────────────── */}
-      {activeTab==="profile"&&(
-        <div style={{position:"fixed",inset:0,background:"#080f0a",zIndex:150,overflowY:"auto",paddingBottom:70,fontFamily:"Georgia,serif"}}>
-          <div style={{padding:"50px 20px 20px"}}>
-            <div style={{fontSize:22,fontWeight:800,marginBottom:16}}>Profile</div>
-
-            {/* Name + email */}
-            <div style={{background:"#121e14",border:"1px solid rgba(123,180,80,0.18)",borderRadius:14,padding:"16px",marginBottom:12}}>
-              <div style={{fontSize:20,fontWeight:800,color:"#e8f0e9",marginBottom:4}}>{user.user_metadata?.display_name||"Player"}</div>
-              <div style={{fontSize:13,color:"#6b7f6d"}}>{user.email}</div>
-              {isPro&&<div style={{marginTop:8,display:"inline-block",background:"rgba(232,184,75,0.15)",color:"#e8b84b",fontSize:11,padding:"3px 10px",borderRadius:10,fontWeight:700}}>⭐ Pro Member</div>}
-            </div>
-
-            {/* Pro section */}
-            {!isPro&&(
-              <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap"}}>
-                <button onClick={onUpgrade} style={{flex:2,padding:"14px",background:"linear-gradient(135deg,#e8b84b,#b8860b)",border:"none",color:"#0a1a0f",borderRadius:12,fontSize:13,fontWeight:700,cursor:"pointer"}}>⭐ Upgrade to Pro — $1.99/mo</button>
-                <button onClick={onShowProInfo} style={{flex:1,padding:"14px",background:"transparent",border:"1px solid rgba(232,184,75,0.4)",color:"#e8b84b",borderRadius:12,fontSize:12,fontWeight:600,cursor:"pointer"}}>What's included?</button>
-              </div>
-            )}
-            {isPro&&(
-              <button onClick={onShowProInfo} style={{width:"100%",padding:"12px",background:"transparent",border:"1px solid rgba(232,184,75,0.3)",color:"#e8b84b",borderRadius:12,fontSize:12,fontWeight:600,cursor:"pointer",marginBottom:12}}>⭐ View Pro Features</button>
-            )}
-
-            {/* Sign out — clearly labeled, safe location */}
-            <button onClick={onSignOut} style={{width:"100%",padding:"14px",background:"transparent",border:"1px solid rgba(224,80,80,0.3)",color:"#e05050",borderRadius:12,fontSize:14,fontWeight:600,cursor:"pointer",marginTop:8}}>
-              Sign Out
-            </button>
-          </div>
-        </div>
-      )}
-
       <Sheet open={showNotifs} onClose={()=>setShowNotifs(false)} title="Notifications & Actions">
         <div>
           {cancelRequests.filter(r=>r.responder_id===user.id).map(req=>(
