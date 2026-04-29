@@ -44,34 +44,11 @@ const pill = (active, color=C.green) => ({
 
 function genCode(){ return Math.random().toString(36).substring(2,8).toUpperCase(); }
 
-function openDeepLink(appUrl, webUrl) {
-  // Try to open the native app
-  const a = document.createElement("a");
-  a.href = appUrl;
-  a.style.display = "none";
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-
-  // Only fall back to web if the app did NOT open (page stays visible)
-  // If user switched to the app, visibilitychange fires and we cancel the timer
-  let fallbackTimer = setTimeout(() => {
-    window.open(webUrl, "_blank");
-  }, 2500);
-
-  // Cancel fallback if user successfully switched to the app
-  function cancelFallback() {
-    if(document.hidden) {
-      clearTimeout(fallbackTimer);
-      document.removeEventListener("visibilitychange", cancelFallback);
-    }
-  }
-  document.addEventListener("visibilitychange", cancelFallback);
-
-  // Also clean up listener after 3s regardless
-  setTimeout(() => {
-    document.removeEventListener("visibilitychange", cancelFallback);
-  }, 3000);
+function openDeepLink(appUrl) {
+  // iOS PWA: just fire the deep link — no fallback timer
+  // A timer fallback causes iOS to yank focus back from the payment app
+  // If the app isn't installed, nothing happens (better than a broken web page)
+  window.location.href = appUrl;
 }
 
 function openVenmo(name, amount) {
@@ -79,8 +56,7 @@ function openVenmo(name, amount) {
   const note = encodeURIComponent("Press Golf");
   const recipient = encodeURIComponent(name);
   openDeepLink(
-    `venmo://paycharge?txn=pay&recipients=${recipient}&amount=${amt}&note=${note}`,
-    `https://venmo.com/u/${recipient}?txn=pay&amount=${amt}&note=${note}`
+    `venmo://paycharge?txn=pay&recipients=${recipient}&amount=${amt}&note=${note}`
   );
 }
 
@@ -88,15 +64,13 @@ function openCashApp(name, amount) {
   const amt = Math.abs(amount).toFixed(2);
   const handle = encodeURIComponent(name.replace(/\s+/g, ""));
   openDeepLink(
-    `cashapp://cash.app/pay/${handle}/${amt}`,
-    `https://cash.app/$${handle}/${amt}`
+    `cashapp://cash.app/pay/${handle}/${amt}`
   );
 }
 
 function openZelle(phone) {
   openDeepLink(
-    `zellepay://pay${phone ? `?contact=${encodeURIComponent(phone)}` : ""}`,
-    "https://www.zellepay.com/"
+    `zellepay://pay${phone ? `?contact=${encodeURIComponent(phone)}` : ""}`
   );
 }
 
