@@ -45,10 +45,17 @@ const pill = (active, color=C.green) => ({
 function genCode(){ return Math.random().toString(36).substring(2,8).toUpperCase(); }
 
 function openDeepLink(appUrl) {
-  // iOS PWA: just fire the deep link — no fallback timer
-  // A timer fallback causes iOS to yank focus back from the payment app
-  // If the app isn't installed, nothing happens (better than a broken web page)
-  window.location.href = appUrl;
+  // Use an anchor with target="_blank" — works on both Android and iOS PWA
+  // Android: fires the intent properly without navigating the PWA away
+  // iOS: hands off to the OS to open the native app
+  const a = document.createElement("a");
+  a.href = appUrl;
+  a.target = "_blank";
+  a.rel = "noopener noreferrer";
+  a.style.display = "none";
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => document.body.removeChild(a), 500);
 }
 
 function openVenmo(name, amount) {
