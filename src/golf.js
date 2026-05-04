@@ -304,6 +304,33 @@ export const COURSES = {
     ]
   },
 
+  // ── PINE MEADOWS GOLF COMPLEX ─────────────────────────────────────────────
+  "pine-meadows": {
+    name: "Pine Meadows Golf Complex",
+    city: "Lebanon, PA",
+    par: 72,
+    holes: [
+      { hole:1,  par:4, hdcp:5,  side:"front" },
+      { hole:2,  par:4, hdcp:3,  side:"front" },
+      { hole:3,  par:4, hdcp:1,  side:"front" },
+      { hole:4,  par:4, hdcp:9,  side:"front" },
+      { hole:5,  par:5, hdcp:17, side:"front" },
+      { hole:6,  par:5, hdcp:13, side:"front" },
+      { hole:7,  par:3, hdcp:7,  side:"front" },
+      { hole:8,  par:4, hdcp:15, side:"front" },
+      { hole:9,  par:3, hdcp:11, side:"front" },
+      { hole:10, par:5, hdcp:10, side:"back"  },
+      { hole:11, par:4, hdcp:14, side:"back"  },
+      { hole:12, par:4, hdcp:18, side:"back"  },
+      { hole:13, par:3, hdcp:4,  side:"back"  },
+      { hole:14, par:4, hdcp:6,  side:"back"  },
+      { hole:15, par:4, hdcp:8,  side:"back"  },
+      { hole:16, par:4, hdcp:2,  side:"back"  },
+      { hole:17, par:3, hdcp:16, side:"back"  },
+      { hole:18, par:5, hdcp:12, side:"back"  },
+    ]
+  },
+
   // ── GIANT OAK GOLF CLUB — Temperance, MI ──────────────────────────────────
   // Blue tees: 6415 yards, par 72, designed by Arthur Hills (1969)
   // Verified from official scorecard
