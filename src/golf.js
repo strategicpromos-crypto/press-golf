@@ -196,167 +196,30 @@ export const COURSES = {
       { hole:18, par:4, hdcp:14, side:"back" },
     ]
   },
-  // Iron Valley Golf Club - Lebanon, PA - verified 18Birdies
-  "iron-valley": {
-    name: "Iron Valley Golf Club",
-    city: "Lebanon, PA",
+
+  "bella-vista": {
+    name: "Bella Vista Golf Course",
+    city: "Coldwater, MI",
     par: 72,
     holes: [
-      { hole:1,  par:4, hdcp:1,  side:"front", yards:435 },
-      { hole:2,  par:4, hdcp:17, side:"front", yards:373 },
-      { hole:3,  par:5, hdcp:15, side:"front", yards:511 },
-      { hole:4,  par:4, hdcp:5,  side:"front", yards:448 },
-      { hole:5,  par:3, hdcp:11, side:"front", yards:124 },
-      { hole:6,  par:4, hdcp:3,  side:"front", yards:473 },
-      { hole:7,  par:5, hdcp:9,  side:"front", yards:535 },
-      { hole:8,  par:3, hdcp:7,  side:"front", yards:201 },
-      { hole:9,  par:4, hdcp:13, side:"front", yards:395 },
-      { hole:10, par:4, hdcp:4,  side:"back",  yards:469 },
-      { hole:11, par:4, hdcp:14, side:"back",  yards:356 },
-      { hole:12, par:3, hdcp:16, side:"back",  yards:177 },
-      { hole:13, par:5, hdcp:10, side:"back",  yards:588 },
-      { hole:14, par:4, hdcp:8,  side:"back",  yards:383 },
-      { hole:15, par:4, hdcp:6,  side:"back",  yards:456 },
-      { hole:16, par:5, hdcp:18, side:"back",  yards:494 },
-      { hole:17, par:3, hdcp:12, side:"back",  yards:181 },
-      { hole:18, par:4, hdcp:2,  side:"back",  yards:427 },
-    ]
-  },
-
-  // GlenRiddle Man O War - Berlin, MD - verified 18Birdies
-  "glenriddle-manowar": {
-    name: "GlenRiddle - Man O War",
-    city: "Berlin, MD",
-    par: 72,
-    holes: [
-      { hole:1,  par:4, hdcp:5,  side:"front", yards:440 },
-      { hole:2,  par:4, hdcp:11, side:"front", yards:408 },
-      { hole:3,  par:3, hdcp:17, side:"front", yards:156 },
-      { hole:4,  par:5, hdcp:1,  side:"front", yards:570 },
-      { hole:5,  par:4, hdcp:7,  side:"front", yards:445 },
-      { hole:6,  par:3, hdcp:13, side:"front", yards:190 },
-      { hole:7,  par:5, hdcp:3,  side:"front", yards:573 },
-      { hole:8,  par:4, hdcp:9,  side:"front", yards:418 },
-      { hole:9,  par:4, hdcp:15, side:"front", yards:365 },
-      { hole:10, par:4, hdcp:2,  side:"back",  yards:450 },
-      { hole:11, par:4, hdcp:12, side:"back",  yards:395 },
-      { hole:12, par:5, hdcp:8,  side:"back",  yards:535 },
-      { hole:13, par:3, hdcp:18, side:"back",  yards:170 },
-      { hole:14, par:4, hdcp:4,  side:"back",  yards:387 },
-      { hole:15, par:3, hdcp:16, side:"back",  yards:156 },
-      { hole:16, par:5, hdcp:6,  side:"back",  yards:536 },
-      { hole:17, par:4, hdcp:14, side:"back",  yards:431 },
-      { hole:18, par:4, hdcp:10, side:"back",  yards:386 },
-    ]
-  },
-
-  // ── SUNNEHANNA COUNTRY CLUB ───────────────────────────────────────────────
-  "sunnehanna": {
-    name: "Sunnehanna Country Club",
-    city: "Johnstown, PA",
-    par: 70,
-    holes: [
-      { hole:1,  par:4, hdcp:7,  side:"front" },
-      { hole:2,  par:4, hdcp:3,  side:"front" },
-      { hole:3,  par:4, hdcp:15, side:"front" },
-      { hole:4,  par:4, hdcp:13, side:"front" },
-      { hole:5,  par:3, hdcp:17, side:"front" },
-      { hole:6,  par:4, hdcp:5,  side:"front" },
-      { hole:7,  par:3, hdcp:11, side:"front" },
-      { hole:8,  par:4, hdcp:9,  side:"front" },
-      { hole:9,  par:5, hdcp:1,  side:"front" },
-      { hole:10, par:3, hdcp:16, side:"back" },
-      { hole:11, par:5, hdcp:12, side:"back" },
-      { hole:12, par:4, hdcp:6,  side:"back" },
-      { hole:13, par:4, hdcp:10, side:"back" },
-      { hole:14, par:3, hdcp:18, side:"back" },
-      { hole:15, par:5, hdcp:2,  side:"back" },
-      { hole:16, par:3, hdcp:14, side:"back" },
-      { hole:17, par:4, hdcp:4,  side:"back" },
-      { hole:18, par:4, hdcp:8,  side:"back" },
-    ]
-  },
-
-  // ── COUNTRY CLUB OF HARRISBURG ────────────────────────────────────────────
-  "harrisburg-cc": {
-    name: "Country Club of Harrisburg",
-    city: "Harrisburg, PA",
-    par: 71,
-    holes: [
-      { hole:1,  par:4, hdcp:11, side:"front" },
-      { hole:2,  par:3, hdcp:7,  side:"front" },
-      { hole:3,  par:4, hdcp:9,  side:"front" },
-      { hole:4,  par:4, hdcp:13, side:"front" },
-      { hole:5,  par:4, hdcp:1,  side:"front" },
-      { hole:6,  par:3, hdcp:15, side:"front" },
-      { hole:7,  par:4, hdcp:3,  side:"front" },
-      { hole:8,  par:5, hdcp:17, side:"front" },
-      { hole:9,  par:4, hdcp:5,  side:"front" },
-      { hole:10, par:3, hdcp:12, side:"back"  },
-      { hole:11, par:5, hdcp:10, side:"back"  },
-      { hole:12, par:3, hdcp:16, side:"back"  },
-      { hole:13, par:4, hdcp:4,  side:"back"  },
-      { hole:14, par:5, hdcp:8,  side:"back"  },
-      { hole:15, par:4, hdcp:2,  side:"back"  },
-      { hole:16, par:3, hdcp:14, side:"back"  },
-      { hole:17, par:5, hdcp:6,  side:"back"  },
-      { hole:18, par:4, hdcp:18, side:"back"  },
-    ]
-  },
-
-  // ── PINE MEADOWS GOLF COMPLEX ─────────────────────────────────────────────
-  "pine-meadows": {
-    name: "Pine Meadows Golf Complex",
-    city: "Lebanon, PA",
-    par: 72,
-    holes: [
-      { hole:1,  par:4, hdcp:5,  side:"front" },
-      { hole:2,  par:4, hdcp:3,  side:"front" },
-      { hole:3,  par:4, hdcp:1,  side:"front" },
-      { hole:4,  par:4, hdcp:9,  side:"front" },
-      { hole:5,  par:5, hdcp:17, side:"front" },
-      { hole:6,  par:5, hdcp:13, side:"front" },
-      { hole:7,  par:3, hdcp:7,  side:"front" },
-      { hole:8,  par:4, hdcp:15, side:"front" },
-      { hole:9,  par:3, hdcp:11, side:"front" },
-      { hole:10, par:5, hdcp:10, side:"back"  },
-      { hole:11, par:4, hdcp:14, side:"back"  },
-      { hole:12, par:4, hdcp:18, side:"back"  },
-      { hole:13, par:3, hdcp:4,  side:"back"  },
-      { hole:14, par:4, hdcp:6,  side:"back"  },
-      { hole:15, par:4, hdcp:8,  side:"back"  },
-      { hole:16, par:4, hdcp:2,  side:"back"  },
-      { hole:17, par:3, hdcp:16, side:"back"  },
-      { hole:18, par:5, hdcp:12, side:"back"  },
-    ]
-  },
-
-  // ── GIANT OAK GOLF CLUB — Temperance, MI ──────────────────────────────────
-  // Blue tees: 6415 yards, par 72, designed by Arthur Hills (1969)
-  // Verified from official scorecard
-  "giant-oak": {
-    name: "Giant Oak Golf Club",
-    city: "Temperance, MI",
-    par: 72,
-    holes: [
-      { hole:1,  par:5, hdcp:5,  side:"front" },
-      { hole:2,  par:5, hdcp:9,  side:"front" },
-      { hole:3,  par:3, hdcp:3,  side:"front" },
-      { hole:4,  par:4, hdcp:11, side:"front" },
-      { hole:5,  par:5, hdcp:15, side:"front" },
-      { hole:6,  par:3, hdcp:13, side:"front" },
-      { hole:7,  par:4, hdcp:17, side:"front" },
-      { hole:8,  par:4, hdcp:1,  side:"front" },
-      { hole:9,  par:3, hdcp:7,  side:"front" },
-      { hole:10, par:4, hdcp:16, side:"back" },
-      { hole:11, par:4, hdcp:6,  side:"back" },
-      { hole:12, par:4, hdcp:4,  side:"back" },
-      { hole:13, par:4, hdcp:2,  side:"back" },
-      { hole:14, par:5, hdcp:8,  side:"back" },
-      { hole:15, par:3, hdcp:14, side:"back" },
-      { hole:16, par:5, hdcp:12, side:"back" },
-      { hole:17, par:3, hdcp:10, side:"back" },
-      { hole:18, par:4, hdcp:18, side:"back" },
+      { hole:1,  par:4, hdcp:4,  side:"front", yards:417 },
+      { hole:2,  par:3, hdcp:2,  side:"front", yards:208 },
+      { hole:3,  par:5, hdcp:8,  side:"front", yards:552 },
+      { hole:4,  par:4, hdcp:16, side:"front", yards:416 },
+      { hole:5,  par:4, hdcp:18, side:"front", yards:396 },
+      { hole:6,  par:4, hdcp:12, side:"front", yards:423 },
+      { hole:7,  par:3, hdcp:14, side:"front", yards:193 },
+      { hole:8,  par:4, hdcp:10, side:"front", yards:384 },
+      { hole:9,  par:5, hdcp:6,  side:"front", yards:501 },
+      { hole:10, par:4, hdcp:5,  side:"back",  yards:387 },
+      { hole:11, par:5, hdcp:1,  side:"back",  yards:588 },
+      { hole:12, par:3, hdcp:11, side:"back",  yards:213 },
+      { hole:13, par:4, hdcp:7,  side:"back",  yards:374 },
+      { hole:14, par:4, hdcp:17, side:"back",  yards:386 },
+      { hole:15, par:5, hdcp:13, side:"back",  yards:535 },
+      { hole:16, par:4, hdcp:15, side:"back",  yards:416 },
+      { hole:17, par:3, hdcp:3,  side:"back",  yards:200 },
+      { hole:18, par:4, hdcp:9,  side:"back",  yards:422 },
     ]
   },
 
@@ -526,23 +389,21 @@ export function calcAutoPressNassau(scores, holeData, myStrokeHoles, oppStrokeHo
   const front = calcSideWithPress(frontHoles);
   const back  = calcSideWithPress(backHoles);
 
-  // 18-hole total — NEVER pressed, flat bet based on most holes won (match play)
+  // 18-hole total — NEVER pressed, flat bet based on total score
   function calcTotal() {
-    let holesWon = 0, holesPlayed = 0;
+    let myT = 0, oppT = 0, holesPlayed = 0;
     for (const h of holeData) {
       const myScore  = scores.me[h.hole];
       const oppScore = scores.opp[h.hole];
       if (myScore === undefined || myScore === null) continue;
       if (oppScore === undefined || oppScore === null) continue;
       holesPlayed++;
-      const myNet  = myStrokeHoles.includes(h.hole)  ? myScore  - 1 : myScore;
-      const oppNet = oppStrokeHoles.includes(h.hole) ? oppScore - 1 : oppScore;
-      if (myNet < oppNet) holesWon++;
-      else if (myNet > oppNet) holesWon--;
+      myT  += myStrokeHoles.includes(h.hole)  ? myScore  - 1 : myScore;
+      oppT += oppStrokeHoles.includes(h.hole) ? oppScore - 1 : oppScore;
     }
     if (holesPlayed === 0) return 0;
-    if (holesWon > 0)  return  betAmount;  // won more holes — collect
-    if (holesWon < 0)  return -betAmount;  // lost more holes — pay
+    if (myT < oppT)  return  betAmount;
+    if (myT > oppT)  return -betAmount;
     return 0;
   }
 
