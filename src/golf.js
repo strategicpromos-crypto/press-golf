@@ -167,6 +167,108 @@ export const COURSES = {
     ]
   },
 
+  // ── BEDFORD HILLS GOLF CLUB — Temperance, MI ─────────────────────────────
+  // Three 9-hole courses: Buckeye (par 35), Wolverine (par 36), Irish (par 36)
+  // Played as 18-hole combos. Front hdcp = odd 1-17, Back hdcp = even 2-18
+  // (ranked by each course's own 9-hole hdcp difficulty order)
+
+  // Buckeye hdcp rank order (1=hardest): 5,6,9,8,2,3,1,7,4
+  // Wolverine hdcp rank order: 2,3,9,5,7,6,4,8,1
+  // Irish hdcp rank order: 3,8,1,4,6,5,7,2,9
+
+  "bedford-hills-buckeye-wolverine": {
+    name: "Bedford Hills — Buckeye / Wolverine",
+    city: "Temperance, MI",
+    par: 71,
+    holes: [
+      // Buckeye Course as front 9 (hdcp rank -> odd 1,3,5,7,9,11,13,15,17)
+      // Buckeye per-hole hdcp: H5=1,H6=2,H9=3,H8=4,H2=5,H3=6,H1=7,H7=8,H4=9
+      // Mapped to odd: rank1->1, rank2->3, rank3->5, rank4->7, rank5->9, rank6->11, rank7->13, rank8->15, rank9->17
+      { hole:1,  par:4, hdcp:13, side:"front" },  // Buckeye H1, rank 7
+      { hole:2,  par:4, hdcp:9,  side:"front" },  // Buckeye H2, rank 5
+      { hole:3,  par:4, hdcp:11, side:"front" },  // Buckeye H3, rank 6
+      { hole:4,  par:3, hdcp:17, side:"front" },  // Buckeye H4, rank 9
+      { hole:5,  par:4, hdcp:1,  side:"front" },  // Buckeye H5, rank 1
+      { hole:6,  par:4, hdcp:3,  side:"front" },  // Buckeye H6, rank 2
+      { hole:7,  par:3, hdcp:15, side:"front" },  // Buckeye H7, rank 8
+      { hole:8,  par:4, hdcp:7,  side:"front" },  // Buckeye H8, rank 4
+      { hole:9,  par:5, hdcp:5,  side:"front" },  // Buckeye H9, rank 3
+      // Wolverine Course as back 9 (hdcp rank -> even 2,4,6,8,10,12,14,16,18)
+      // Wolverine per-hole hdcp: H2=1,H3=2,H9=3,H5=4,H7=5,H6=6,H4=7(wait, H4=8 per card),H1=7,H8=9
+      // Wolverine hdcp ranks: H2(1)->2, H3(2)->4, H9(3)->6, H5(4)->8, H7(5)->10, H6(6)->12, H1(7)->14, H4(8)->16, H8(9)->18
+      { hole:10, par:4, hdcp:14, side:"back" },   // Wolverine H1, rank 7
+      { hole:11, par:5, hdcp:2,  side:"back" },   // Wolverine H2, rank 1
+      { hole:12, par:4, hdcp:4,  side:"back" },   // Wolverine H3, rank 2
+      { hole:13, par:3, hdcp:16, side:"back" },   // Wolverine H4, rank 8
+      { hole:14, par:4, hdcp:8,  side:"back" },   // Wolverine H5, rank 4
+      { hole:15, par:4, hdcp:12, side:"back" },   // Wolverine H6, rank 6
+      { hole:16, par:4, hdcp:10, side:"back" },   // Wolverine H7, rank 5
+      { hole:17, par:3, hdcp:18, side:"back" },   // Wolverine H8, rank 9
+      { hole:18, par:5, hdcp:6,  side:"back" },   // Wolverine H9, rank 3
+    ]
+  },
+
+  "bedford-hills-wolverine-irish": {
+    name: "Bedford Hills — Wolverine / Irish",
+    city: "Temperance, MI",
+    par: 72,
+    holes: [
+      // Wolverine Course as front 9 (hdcp ranks -> odd 1,3,5,7,9,11,13,15,17)
+      { hole:1,  par:4, hdcp:13, side:"front" },  // Wolverine H1, rank 7
+      { hole:2,  par:5, hdcp:1,  side:"front" },  // Wolverine H2, rank 1
+      { hole:3,  par:4, hdcp:3,  side:"front" },  // Wolverine H3, rank 2
+      { hole:4,  par:3, hdcp:15, side:"front" },  // Wolverine H4, rank 8
+      { hole:5,  par:4, hdcp:7,  side:"front" },  // Wolverine H5, rank 4
+      { hole:6,  par:4, hdcp:11, side:"front" },  // Wolverine H6, rank 6
+      { hole:7,  par:4, hdcp:9,  side:"front" },  // Wolverine H7, rank 5
+      { hole:8,  par:3, hdcp:17, side:"front" },  // Wolverine H8, rank 9
+      { hole:9,  par:5, hdcp:5,  side:"front" },  // Wolverine H9, rank 3
+      // Irish Course as back 9 (hdcp ranks -> even 2,4,6,8,10,12,14,16,18)
+      // Irish hdcp: H3=1,H8=2,H1=3 (wait: H1=4,H2=3,H3=1,H8=2 per card)
+      // Irish per-hole hdcp: H1=4,H2=3,H3=1,H4=8,H5=6,H6=5,H7=7,H8=2,H9=9
+      // Ranks: H3(1)->2, H8(2)->4, H2(3)->6, H1(4)->8, H6(5)->10, H5(6)->12, H7(7)->14, H4(8)->16, H9(9)->18
+      { hole:10, par:5, hdcp:8,  side:"back" },   // Irish H1, rank 4
+      { hole:11, par:5, hdcp:6,  side:"back" },   // Irish H2, rank 3
+      { hole:12, par:4, hdcp:2,  side:"back" },   // Irish H3, rank 1
+      { hole:13, par:3, hdcp:16, side:"back" },   // Irish H4, rank 8
+      { hole:14, par:4, hdcp:12, side:"back" },   // Irish H5, rank 6
+      { hole:15, par:4, hdcp:10, side:"back" },   // Irish H6, rank 5
+      { hole:16, par:3, hdcp:14, side:"back" },   // Irish H7, rank 7
+      { hole:17, par:5, hdcp:4,  side:"back" },   // Irish H8, rank 2
+      { hole:18, par:3, hdcp:18, side:"back" },   // Irish H9, rank 9
+    ]
+  },
+
+  "bedford-hills-irish-buckeye": {
+    name: "Bedford Hills — Irish / Buckeye",
+    city: "Temperance, MI",
+    par: 71,
+    holes: [
+      // Irish Course as front 9 (hdcp ranks -> odd 1,3,5,7,9,11,13,15,17)
+      // Irish ranks: H3(1)->1, H8(2)->3, H2(3)->5, H1(4)->7, H6(5)->9, H5(6)->11, H7(7)->13, H4(8)->15, H9(9)->17
+      { hole:1,  par:5, hdcp:7,  side:"front" },  // Irish H1, rank 4
+      { hole:2,  par:5, hdcp:5,  side:"front" },  // Irish H2, rank 3
+      { hole:3,  par:4, hdcp:1,  side:"front" },  // Irish H3, rank 1
+      { hole:4,  par:3, hdcp:15, side:"front" },  // Irish H4, rank 8
+      { hole:5,  par:4, hdcp:11, side:"front" },  // Irish H5, rank 6
+      { hole:6,  par:4, hdcp:9,  side:"front" },  // Irish H6, rank 5
+      { hole:7,  par:3, hdcp:13, side:"front" },  // Irish H7, rank 7
+      { hole:8,  par:5, hdcp:3,  side:"front" },  // Irish H8, rank 2
+      { hole:9,  par:3, hdcp:17, side:"front" },  // Irish H9, rank 9
+      // Buckeye Course as back 9 (hdcp ranks -> even 2,4,6,8,10,12,14,16,18)
+      // Buckeye ranks: H5(1)->2, H6(2)->4, H9(3)->6, H8(4)->8, H2(5)->10, H3(6)->12, H1(7)->14, H7(8)->16, H4(9)->18
+      { hole:10, par:4, hdcp:14, side:"back" },   // Buckeye H1, rank 7
+      { hole:11, par:4, hdcp:10, side:"back" },   // Buckeye H2, rank 5
+      { hole:12, par:4, hdcp:12, side:"back" },   // Buckeye H3, rank 6
+      { hole:13, par:3, hdcp:18, side:"back" },   // Buckeye H4, rank 9
+      { hole:14, par:4, hdcp:2,  side:"back" },   // Buckeye H5, rank 1
+      { hole:15, par:4, hdcp:4,  side:"back" },   // Buckeye H6, rank 2
+      { hole:16, par:3, hdcp:16, side:"back" },   // Buckeye H7, rank 8
+      { hole:17, par:4, hdcp:8,  side:"back" },   // Buckeye H8, rank 4
+      { hole:18, par:5, hdcp:6,  side:"back" },   // Buckeye H9, rank 3
+    ]
+  },
+
   // ── OCEAN CITY GOLF CLUB — Seaside — Berlin, MD ───────────────────────────
   // Note: Hole-by-hole hdcp not publicly available — using estimated values
   // Please verify against physical scorecard and update as needed
@@ -196,33 +298,6 @@ export const COURSES = {
       { hole:18, par:4, hdcp:14, side:"back" },
     ]
   },
-
-  "bella-vista": {
-    name: "Bella Vista Golf Course",
-    city: "Coldwater, MI",
-    par: 72,
-    holes: [
-      { hole:1,  par:4, hdcp:4,  side:"front", yards:417 },
-      { hole:2,  par:3, hdcp:2,  side:"front", yards:208 },
-      { hole:3,  par:5, hdcp:8,  side:"front", yards:552 },
-      { hole:4,  par:4, hdcp:16, side:"front", yards:416 },
-      { hole:5,  par:4, hdcp:18, side:"front", yards:396 },
-      { hole:6,  par:4, hdcp:12, side:"front", yards:423 },
-      { hole:7,  par:3, hdcp:14, side:"front", yards:193 },
-      { hole:8,  par:4, hdcp:10, side:"front", yards:384 },
-      { hole:9,  par:5, hdcp:6,  side:"front", yards:501 },
-      { hole:10, par:4, hdcp:5,  side:"back",  yards:387 },
-      { hole:11, par:5, hdcp:1,  side:"back",  yards:588 },
-      { hole:12, par:3, hdcp:11, side:"back",  yards:213 },
-      { hole:13, par:4, hdcp:7,  side:"back",  yards:374 },
-      { hole:14, par:4, hdcp:17, side:"back",  yards:386 },
-      { hole:15, par:5, hdcp:13, side:"back",  yards:535 },
-      { hole:16, par:4, hdcp:15, side:"back",  yards:416 },
-      { hole:17, par:3, hdcp:3,  side:"back",  yards:200 },
-      { hole:18, par:4, hdcp:9,  side:"back",  yards:422 },
-    ]
-  },
-
 };
 
 // ── STROKE CALCULATOR ─────────────────────────────────────────────────────────
