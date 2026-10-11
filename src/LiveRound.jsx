@@ -440,7 +440,21 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
       channelName.current = "live_round_" + liveRoundId;
     }
 
+    // Exponential backoff retry — keeps trying until reconnected
+    // Delays: 3s, 6s, 12s, 24s, then caps at 30s forever
+    const retryDelays = [3000, 6000, 12000, 24000, 30000];
+    let retryCount = 0;
+    let retryTimer = null;
+
+    function scheduleRetry() {
+      if (retryTimer) clearTimeout(retryTimer);
+      const delay = retryDelays[Math.min(retryCount, retryDelays.length - 1)];
+      retryCount++;
+      retryTimer = setTimeout(() => buildSub(), delay);
+    }
+
     function buildSub() {
+      if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }
       if (realtimeSub.current) {
         sb.removeChannel(realtimeSub.current);
         realtimeSub.current = null;
@@ -462,15 +476,16 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
         })
         .subscribe(status => {
           if (status === "SUBSCRIBED") {
+            retryCount = 0; // reset backoff on success
             setConnStatus("online");
-            // Silently flush pending scores without changing status to "syncing"
+            // Flush any scores that built up while offline
             if (pendingScores.current) {
               flushScores(pendingScores.current.scores, pendingScores.current.currentHole);
             }
           } else if (status === "CLOSED" || status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
-            // Only go offline if we were previously online — ignore initial setup noise
+            // Mark offline and keep retrying with backoff until back online
             setConnStatus(prev => prev === "online" ? "offline" : prev);
-            setTimeout(() => buildSub(), 4000);
+            scheduleRetry();
           }
         });
     }
@@ -501,6 +516,7 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
     window.addEventListener("press_show_summary", handleShowSummary);
 
     return () => {
+      if (retryTimer) clearTimeout(retryTimer);
       if (realtimeSub.current) {
         sb.removeChannel(realtimeSub.current);
         realtimeSub.current = null;
