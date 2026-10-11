@@ -1059,18 +1059,18 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
           );
         })()}
 
-        {/* Connection status banner */}
+        {/* Connection status banner — tap to reload fixes everything */}
         {connStatus==="offline"&&(
-          <div onClick={()=>setConnStatus("connecting")}
+          <div onClick={()=>window.location.reload()}
             style={{background:"rgba(224,80,80,0.15)",border:"2px solid rgba(224,80,80,0.7)",margin:"0 12px 10px",borderRadius:10,padding:"10px 14px",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
             <div style={{display:"flex",alignItems:"center",gap:10}}>
               <div style={{width:10,height:10,borderRadius:"50%",background:"#e05050",flexShrink:0}}/>
               <div>
-                <div style={{fontWeight:800,fontSize:13,color:"#e05050"}}>Scores not uploading</div>
-                <div style={{fontSize:11,color:"rgba(224,80,80,0.8)",marginTop:2}}>Saved on phone. Tap to reconnect.</div>
+                <div style={{fontWeight:800,fontSize:13,color:"#e05050"}}>Connection lost</div>
+                <div style={{fontSize:11,color:"rgba(224,80,80,0.8)",marginTop:2}}>Scores saved on phone · tap to refresh</div>
               </div>
             </div>
-            <div style={{background:"#e05050",color:"#fff",fontSize:11,fontWeight:800,padding:"5px 10px",borderRadius:8,flexShrink:0}}>Reconnect</div>
+            <div style={{background:"#e05050",color:"#fff",fontSize:11,fontWeight:800,padding:"5px 10px",borderRadius:8,flexShrink:0}}>Refresh</div>
           </div>
         )}
         {connStatus==="syncing"&&(
@@ -1199,7 +1199,7 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
               {!canAdvance?"Enter your score to continue":isLastHole?"Finish Round":"Next - Hole "+(currentHole+1)}
             </button>
             <div style={{textAlign:"center",fontSize:11,color:connStatus==="offline"?"rgba(224,80,80,0.8)":connStatus==="syncing"?"rgba(232,184,75,0.8)":C.dim,marginTop:8}}>
-              {connStatus==="offline"?"Scores saved locally — tap Next Hole to retry":connStatus==="syncing"?"Uploading...":"Scores saved · safe to close"}
+              {connStatus==="offline"?"Scores saved on phone — tap banner above to refresh":connStatus==="syncing"?"Uploading...":"Scores saved · safe to close"}
             </div>
           </>)}
 
