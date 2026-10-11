@@ -244,30 +244,78 @@ export default function TeamTournament({onBack, user, onDelete}){
 
   useEffect(()=>{ loadSaved(); },[]);
 
+  // ── Sync snapshots — fix for captain scores being clobbered ────────────────
+  // lastSyncedTeams / lastSyncedCtp: JSON of teams[] / ctp_leaders as last
+  // written to or received from the DB. lastSavedSnap: snapshot of the full
+  // row the director last wrote (or last received). The auto-save below only
+  // overwrites the team slots the DIRECTOR actually changed since the last
+  // sync; slots changed by captains are preserved from a fresh DB read.
+  // Comparing snapshots also breaks the old save → realtime-echo → save
+  // infinite write loop.
+  const lastSyncedTeams=useRef(null);
+  const lastSyncedCtp=useRef(null);
+  const lastSavedSnap=useRef(null);
+  const snap=(v)=>{ try{return JSON.stringify(v??[]);}catch(e){return "[]";} };
+  const stateSnap=(s)=>JSON.stringify({
+    teams:s?.teams||[], course_id:s?.course_id, birdie_bonus:s?.birdie_bonus,
+    ball_count_by_par:s?.ball_count_by_par, hole_pars:s?.hole_pars,
+    skins_enabled:s?.skins_enabled, big_boy_enabled:s?.big_boy_enabled,
+    teammates_tie:s?.teammates_tie, ctp_enabled:s?.ctp_enabled,
+    ctp_holes:s?.ctp_holes, ctp_leaders:s?.ctp_leaders||{}, current_hole:s?.current_hole,
+  });
+  const localSnap=()=>stateSnap({
+    teams, course_id:courseId, birdie_bonus:birdieBonus, ball_count_by_par:ballsByPar,
+    hole_pars:holePars, skins_enabled:skinsEnabled, big_boy_enabled:bigBoyEnabled,
+    teammates_tie:teammatesTie, ctp_enabled:ctpEnabled, ctp_holes:ctpHoles,
+    ctp_leaders:ctpLeaders, current_hole:currentHole,
+  });
+
   // ── Real-time: director sees captain scores instantly (always on) ──────────
+  // Incoming updates are MERGED, not applied wholesale, so the director's own
+  // unsaved edits are never discarded by a captain's update arriving mid-edit.
+  // Reconnect actually re-subscribes now (the old path removed the channel and
+  // never came back).
   useEffect(()=>{
     if(!tourneyId)return;
-    // Fix 4: no screen condition — subscription stays alive regardless of screen
-    if(subRef.current){sb.removeChannel(subRef.current);subRef.current=null;}
-    subRef.current=sb
-      .channel("director_"+tourneyId+"_"+Date.now())
-      .on("postgres_changes",{event:"UPDATE",schema:"public",table:"team_tournaments",filter:"id=eq."+tourneyId},
-        payload=>{
-          if(payload.new?.teams) setTeams(payload.new.teams);
-          if(payload.new?.ctp_leaders) setCtpLeaders(payload.new.ctp_leaders);
-        })
-      .subscribe(status=>{
-        // Auto-reconnect if channel drops
-        if(status==="CLOSED"||status==="CHANNEL_ERROR"||status==="TIMED_OUT"){
-          setTimeout(()=>{
-            if(!subRef.current)return;
-            sb.removeChannel(subRef.current);
-            subRef.current=null;
-            // Re-trigger by updating a dummy ref — React will re-run this effect on next render
-          },3000);
-        }
-      });
-    return()=>{ if(subRef.current){sb.removeChannel(subRef.current);subRef.current=null;} };
+    let cancelled=false;
+    function subscribe(){
+      if(cancelled)return;
+      if(subRef.current){sb.removeChannel(subRef.current);subRef.current=null;}
+      subRef.current=sb
+        .channel("director_"+tourneyId+"_"+Date.now())
+        .on("postgres_changes",{event:"UPDATE",schema:"public",table:"team_tournaments",filter:"id=eq."+tourneyId},
+          payload=>{
+            if(!payload.new)return;
+            if(payload.new.teams){
+              const incoming=payload.new.teams;
+              setTeams(prev=>{
+                const wasSynced=JSON.parse(lastSyncedTeams.current||"[]");
+                const n=Math.max(incoming.length,prev.length);
+                return Array.from({length:n},(_,i)=>{
+                  const l=prev[i];
+                  if(l===undefined) return incoming[i];
+                  if(incoming[i]===undefined) return l;
+                  // Director edited this slot locally and hasn't saved yet → keep local
+                  return snap(l)!==snap(wasSynced[i]) ? l : incoming[i];
+                });
+              });
+              lastSyncedTeams.current=snap(incoming);
+            }
+            if(payload.new.ctp_leaders){
+              setCtpLeaders(payload.new.ctp_leaders);
+              lastSyncedCtp.current=snap(payload.new.ctp_leaders);
+            }
+            lastSavedSnap.current=stateSnap(payload.new);
+          })
+        .subscribe(status=>{
+          if(cancelled)return;
+          if(status==="CLOSED"||status==="CHANNEL_ERROR"||status==="TIMED_OUT"){
+            setTimeout(()=>subscribe(),3000);
+          }
+        });
+    }
+    subscribe();
+    return()=>{ cancelled=true; if(subRef.current){sb.removeChannel(subRef.current);subRef.current=null;} };
   },[tourneyId]);
 
   async function loadSaved(){
@@ -281,35 +329,77 @@ export default function TeamTournament({onBack, user, onDelete}){
   }
 
   // ── Auto-save whenever teams/scores/hole change ────────────────────────────
+  // Merge-on-write: reads the fresh row first and only overwrites the team
+  // slots the director actually changed. Captain scores are never clobbered.
+  // The snapshot guard also skips saves when nothing changed (realtime echo of
+  // our own write, or a captain's update) — killing the old infinite loop.
   useEffect(()=>{
     if(!tourneyId||screen==="home"||screen==="saved"||screen==="join")return;
+    if(lastSavedSnap.current!==null && localSnap()===lastSavedSnap.current){
+      setSaveStatus("");
+      return;
+    }
     if(saveTimer.current)clearTimeout(saveTimer.current);
     setSaveStatus("saving");
-    saveTimer.current=setTimeout(async()=>{
-      // Never downgrade status — once scoring starts, always stay "active"
-      // Leaderboard screen should not reset status to "setup"
-      // Never downgrade — once created always stays active
-      const newStatus = "active";
-      await sb.from("team_tournaments").update({
-        teams,
-        course_id:courseId,
-        birdie_bonus:birdieBonus,
-        ball_count_by_par:ballsByPar,
-        hole_pars:holePars,
-        skins_enabled:skinsEnabled,
-        big_boy_enabled:bigBoyEnabled,
-        teammates_tie:teammatesTie,
-        ctp_enabled:ctpEnabled,
-        ctp_holes:ctpHoles,
-        ctp_leaders:ctpLeaders,
-        current_hole:currentHole,
-        status:newStatus,
-        updated_at:new Date().toISOString(),
-      }).eq("id",tourneyId);
-      setSaveStatus("saved");
-      setTimeout(()=>setSaveStatus(""),2000);
-      loadSaved();
-    },800);
+    let attempts=0;
+    const doSave=async()=>{
+      try{
+        // Read fresh FIRST so concurrent captain writes survive this save.
+        const{data:current,error:readErr}=await sb.from("team_tournaments")
+          .select("teams,ctp_leaders").eq("id",tourneyId).single();
+        if(readErr) throw readErr;
+        const dbTeams=current?.teams||[];
+        const wasSynced=JSON.parse(lastSyncedTeams.current||"[]");
+        const n=Math.max(dbTeams.length,teams.length);
+        const mergedTeams=Array.from({length:n},(_,i)=>{
+          const local=teams[i], db=dbTeams[i];
+          if(db===undefined) return local;      // brand-new local slot
+          if(local===undefined) return db;      // keep DB slot
+          // Director touched this slot since last sync → director wins; else keep DB (captain's data)
+          return snap(local)!==snap(wasSynced[i]) ? local : db;
+        });
+        // Same idea for CTP leaders (captains write these directly)
+        const dbCtp=current?.ctp_leaders;
+        const ctpToWrite=(dbCtp!==undefined && snap(ctpLeaders)===lastSyncedCtp.current) ? dbCtp : ctpLeaders;
+        const{error}=await sb.from("team_tournaments").update({
+          teams:mergedTeams,
+          course_id:courseId,
+          birdie_bonus:birdieBonus,
+          ball_count_by_par:ballsByPar,
+          hole_pars:holePars,
+          skins_enabled:skinsEnabled,
+          big_boy_enabled:bigBoyEnabled,
+          teammates_tie:teammatesTie,
+          ctp_enabled:ctpEnabled,
+          ctp_holes:ctpHoles,
+          ctp_leaders:ctpToWrite,
+          current_hole:currentHole,
+          status:"active", // never downgrade — once scoring starts, always stay "active"
+          updated_at:new Date().toISOString(),
+        }).eq("id",tourneyId);
+        if(error) throw error; // never report "saved" when the write failed
+        lastSyncedTeams.current=snap(mergedTeams);
+        lastSyncedCtp.current=snap(ctpToWrite);
+        lastSavedSnap.current=stateSnap({
+          teams:mergedTeams, course_id:courseId, birdie_bonus:birdieBonus,
+          ball_count_by_par:ballsByPar, hole_pars:holePars, skins_enabled:skinsEnabled,
+          big_boy_enabled:bigBoyEnabled, teammates_tie:teammatesTie, ctp_enabled:ctpEnabled,
+          ctp_holes:ctpHoles, ctp_leaders:ctpToWrite, current_hole:currentHole,
+        });
+        // Reconcile in case the merge kept DB data we hadn't seen yet
+        if(snap(mergedTeams)!==snap(teams)) setTeams(mergedTeams);
+        if(snap(ctpToWrite)!==snap(ctpLeaders)) setCtpLeaders(ctpToWrite);
+        setSaveStatus("saved");
+        setTimeout(()=>setSaveStatus(""),2000);
+        loadSaved();
+      }catch(e){
+        // Write failed (network/RLS) — retry once, then leave state dirty so the
+        // next local change retries. Never report "saved" on failure.
+        if(attempts<1){ attempts++; saveTimer.current=setTimeout(doSave,3000); }
+        else { setSaveStatus(""); }
+      }
+    };
+    saveTimer.current=setTimeout(doSave,800);
     return()=>clearTimeout(saveTimer.current);
   },[teams,currentHole,courseId,birdieBonus,holePars,ballsByPar,skinsEnabled,bigBoyEnabled,teammatesTie,ctpEnabled,ctpHoles,ctpLeaders,tourneyId]);
 
@@ -355,6 +445,9 @@ export default function TeamTournament({onBack, user, onDelete}){
     if(data){
       setDirectorCode(dirCode);
       setTeams(teamsWithPins);
+      lastSyncedTeams.current=snap(teamsWithPins);
+      lastSyncedCtp.current=snap({});
+      lastSavedSnap.current=stateSnap(data);
       await loadSaved();
     }
     return data?.id||null;
@@ -377,6 +470,9 @@ export default function TeamTournament({onBack, user, onDelete}){
       setCtpHoles(data.ctp_holes||[]);
       setCtpLeaders(data.ctp_leaders||{});
       setTeams(data.teams||[]);
+      lastSyncedTeams.current=snap(data.teams||[]);
+      lastSyncedCtp.current=snap(data.ctp_leaders||{});
+      lastSavedSnap.current=stateSnap(data);
       setNumTeams((data.teams||[]).length);
       setCurrentHole(data.current_hole||1);
       setActiveTeam(0);
@@ -410,6 +506,9 @@ export default function TeamTournament({onBack, user, onDelete}){
     // Clear ALL active tournament state so home screen updates instantly
     setTourneyId(null);
     setTeams([]);
+    lastSyncedTeams.current=null;
+    lastSyncedCtp.current=null;
+    lastSavedSnap.current=null;
     setDirectorCode(null);
     setCurrentHole(1);
     setConfirmDelete(null);
@@ -612,6 +711,9 @@ export default function TeamTournament({onBack, user, onDelete}){
             setCtpLeaders({});
             setDirectorCode(null);
             setTourneyId(null);
+            lastSyncedTeams.current=null;
+            lastSyncedCtp.current=null;
+            lastSavedSnap.current=null;
             // Go to setup — DB entry created when director hits Tee It Up (or when they save)
             setScreen("setup");
           }}>+ New Tournament Setup</BigBtn>
