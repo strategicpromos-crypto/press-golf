@@ -325,7 +325,10 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
   const [holePars,          setHolePars]          = useState({});
   const realtimeSub   = useRef(null);
   const saveTimerRef  = useRef(null); // named ref to avoid collision with saveTimer state
-  const pendingScores = useRef(null); // scores waiting to flush if connection dropped
+  const pendingScores = useRef(null); // latest local scores + hole (for localStorage / flush)
+  // Cells this phone actually changed and has not yet confirmed saved: "playerKey|hole"
+  const editedRef     = useRef(new Set());
+  const flushingRef   = useRef(false);
   const subRef        = useRef(null); // holds { rebuild: buildSub } for visibility handler
   const [connStatus,  setConnStatus]  = useState("connecting"); // connecting|online|syncing|offline
 
@@ -391,22 +394,74 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
 
   // -- Flush pending scores — never touches connStatus on success -----------
   // connStatus only changes on genuine connection failure, not normal saves
-  async function flushScores(scoresToSave, hole) {
+  // Connection status with hysteresis: the banner only appears after
+  // FAIL_TO_OFFLINE failures in a row, and only clears after OK_TO_ONLINE
+  // successes in a row. A single flaky request never flips the UI.
+  const connTally = useRef({ fails: 0, oks: 0 });
+  const FAIL_TO_OFFLINE = 3;
+  const OK_TO_ONLINE = 2;
+  function reportConn(ok) {
+    const t = connTally.current;
+    if (ok) {
+      t.oks++; t.fails = 0;
+      if (t.oks >= OK_TO_ONLINE) {
+        setConnStatus(prev => (prev === "offline" || prev === "connecting" || prev === "syncing") ? "online" : prev);
+      }
+    } else {
+      t.fails++; t.oks = 0;
+      if (t.fails >= FAIL_TO_OFFLINE) {
+        setConnStatus(prev => (prev === "online" || prev === "syncing") ? "offline" : prev);
+      }
+    }
+  }
+
+  // Incoming scores from Supabase (poll or realtime) are applied as the source of
+  // truth EXCEPT for cells this phone has edited but not yet saved, which stay local.
+  function applyRemote(incoming) {
+    setScores(prev => {
+      const merged = JSON.parse(JSON.stringify(incoming || {}));
+      for (const cell of editedRef.current) {
+        const [k, h] = cell.split("|");
+        const v = prev[k]?.[h];
+        if (v !== undefined) merged[k] = { ...(merged[k] || {}), [h]: v };
+      }
+      return merged;
+    });
+  }
+
+  // Saves ONLY the cells this phone changed, merged into the latest server copy,
+  // so one phone can never overwrite another phone's holes with stale data.
+  async function flushScores(_unused, hole) {
+    if (flushingRef.current || !liveRoundId) return;
+    flushingRef.current = true;
+    const edits = [...editedRef.current];
+    const local = pendingScores.current?.scores || {};
     try {
-      await sb.from("live_rounds").update({
-        scores: scoresToSave,
+      const { data: remote } = await sb.from("live_rounds")
+        .select("scores").eq("id", liveRoundId).single();
+      const merged = JSON.parse(JSON.stringify(remote?.scores || {}));
+      for (const cell of edits) {
+        const [k, h] = cell.split("|");
+        const v = local[k]?.[h];
+        if (v !== undefined) merged[k] = { ...(merged[k] || {}), [h]: v };
+      }
+      const { error } = await sb.from("live_rounds").update({
+        scores: merged,
         current_hole: hole,
         back9_adjustments: back9Adjustments,
         updated_at: new Date().toISOString(),
       }).eq("id", liveRoundId);
-      pendingScores.current = null;
-      // Clear localStorage backup — scores are safely in Supabase now
-      try { localStorage.removeItem("press_scores_" + liveRoundId); } catch(lse) {}
-      // Only update connStatus if we were previously offline/syncing
-      setConnStatus(prev => (prev === "offline" || prev === "syncing") ? "online" : prev);
+      if (error) throw error;
+      edits.forEach(c => editedRef.current.delete(c));
+      if (editedRef.current.size === 0) {
+        try { localStorage.removeItem("press_scores_" + liveRoundId); } catch(lse) {}
+      }
+      reportConn(true);
     } catch(e) {
-      // Genuine write failure — mark offline
-      setConnStatus("offline");
+      // Edits stay in editedRef + localStorage; the next poll retries them
+      reportConn(false);
+    } finally {
+      flushingRef.current = false;
     }
   }
 
@@ -421,9 +476,11 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
         JSON.stringify({ scores, currentHole, back9Adjustments, ts: Date.now() })
       );
     } catch(lse) {}
+    // Only save when THIS phone made an edit. Incoming remote data never triggers a write.
+    if (editedRef.current.size === 0) return;
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(async () => {
-      await flushScores(scores, currentHole);
+      await flushScores(null, currentHole);
     }, 800);
     return () => clearTimeout(saveTimerRef.current);
   }, [scores, currentHole, back9Adjustments, liveRoundId, step]);
@@ -465,27 +522,14 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
           event: "UPDATE", schema: "public",
           table: "live_rounds", filter: "id=eq." + liveRoundId,
         }, payload => {
-          if (payload.new?.scores) {
-            setScores(prev => {
-              const incoming = payload.new.scores;
-              const merged = { ...incoming };
-              // Only protect local "me" scores if there are unsaved pending entries.
-              // A spectator device has no pending scores, so Supabase is fully authoritative.
-              if (pendingScores.current) {
-                merged["me"] = prev["me"] || {};
-              }
-              return merged;
-            });
-          }
+          if (payload.new?.scores) applyRemote(payload.new.scores);
         })
         .subscribe(status => {
           if (status === "SUBSCRIBED") {
             retryCount = 0; // reset backoff on success
             setConnStatus("online");
             // Flush any scores that built up while offline
-            if (pendingScores.current) {
-              flushScores(pendingScores.current.scores, pendingScores.current.currentHole);
-            }
+            if (editedRef.current.size > 0) flushScores(null, pendingScores.current?.currentHole ?? 1);
           } else if (status === "CLOSED" || status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
             // DO NOT set offline here — let polling determine real connectivity.
             // WebSocket drops constantly on mobile; only lose the green dot if
@@ -504,9 +548,7 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
     function handleVisibility() {
       if (document.visibilityState === "visible") {
         subRef.current?.rebuild?.();
-        if (pendingScores.current) {
-          flushScores(pendingScores.current.scores, pendingScores.current.currentHole);
-        }
+        if (editedRef.current.size > 0) flushScores(null, pendingScores.current?.currentHole ?? 1);
       }
     }
     document.addEventListener("visibilitychange", handleVisibility);
@@ -517,9 +559,7 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
 
     // -- Polling fallback — fetches scores every 5s regardless of WebSocket state --
     // Squabbit-style: simple, reliable, works on any connection quality.
-    // Only show "offline" banner after 2 consecutive poll failures (~10s of no HTTP)
-    // so a momentary WebSocket blip never triggers the red flash.
-    let pollFailCount = 0;
+    // Status changes go through reportConn() so one bad request never flips the banner.
     async function pollScores() {
       try {
         const { data } = await sb.from("live_rounds")
@@ -527,31 +567,17 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
           .eq("id", liveRoundId)
           .single();
         if (data?.scores) {
-          pollFailCount = 0; // reset failure counter on any success
-          setScores(prev => {
-            const incoming = data.scores;
-            const merged = { ...incoming };
-            // Only protect local "me" scores if we actually have pending unsaved entries.
-            // If pendingScores is null, our last write succeeded and Supabase is authoritative.
-            // This prevents a spectator's empty prev["me"] from wiping the round owner's scores.
-            if (pendingScores.current) {
-              merged["me"] = prev["me"] || {};
-            }
-            return merged;
-          });
-          setConnStatus(prev => (prev === "offline" || prev === "connecting") ? "online" : prev);
-          // Flush any locally saved scores that haven't made it to Supabase yet
-          if (pendingScores.current) {
-            flushScores(pendingScores.current.scores, pendingScores.current.currentHole);
+          applyRemote(data.scores);
+          reportConn(true);
+          // Retry any of this phone's own unsaved edits (e.g. after signal dropped)
+          if (editedRef.current.size > 0) {
+            flushScores(null, pendingScores.current?.currentHole ?? currentHole);
           }
+        } else {
+          reportConn(false);
         }
       } catch(e) {
-        pollFailCount++;
-        // Only go "offline" after 2 consecutive poll failures (~10s)
-        // This prevents a single hiccup from flashing the red banner
-        if (pollFailCount >= 2) {
-          setConnStatus(prev => prev === "online" ? "offline" : prev);
-        }
+        reportConn(false);
       }
     }
     const pollInterval = setInterval(pollScores, 5000);
@@ -617,6 +643,7 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
   function setScore(playerId, hole, rawValue) {
     const value = safeInt(rawValue, 1);
     const safeValue = Math.max(1, Math.min(15, value)); // clamp 1-15
+    editedRef.current.add(playerId + "|" + hole); // this phone changed this cell
     setScores(prev => ({
       ...prev,
       [playerId]: {
@@ -1104,7 +1131,7 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
                 return(
                   <button key={h.hole} onClick={async()=>{
                     if(saveTimerRef.current) clearTimeout(saveTimerRef.current);
-                    if(pendingScores.current) await flushScores(pendingScores.current.scores, pendingScores.current.currentHole);
+                    if(editedRef.current.size > 0) await flushScores(null, currentHole);
                     setCurrentHole(h.hole);
                   }} style={{
                     flexShrink:0,width:36,height:36,borderRadius:"50%",fontSize:12,fontWeight:700,cursor:"pointer",
