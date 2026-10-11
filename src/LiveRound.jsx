@@ -515,8 +515,36 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
     function handleShowSummary() { setStep("summary"); }
     window.addEventListener("press_show_summary", handleShowSummary);
 
+    // -- Polling fallback — fetches scores every 5s regardless of WebSocket state --
+    // Squabbit-style: simple, reliable, works on any connection quality
+    async function pollScores() {
+      try {
+        const { data } = await sb.from("live_rounds")
+          .select("scores, updated_at")
+          .eq("id", liveRoundId)
+          .single();
+        if (data?.scores) {
+          setScores(prev => {
+            const incoming = data.scores;
+            const merged = { ...incoming };
+            merged["me"] = prev["me"] || {}; // always keep my own scores
+            return merged;
+          });
+          setConnStatus(prev => (prev === "offline" || prev === "connecting") ? "online" : prev);
+          // Flush any locally saved scores that haven't made it to Supabase yet
+          if (pendingScores.current) {
+            flushScores(pendingScores.current.scores, pendingScores.current.currentHole);
+          }
+        }
+      } catch(e) {
+        setConnStatus(prev => prev === "online" ? "offline" : prev);
+      }
+    }
+    const pollInterval = setInterval(pollScores, 5000);
+
     return () => {
       if (retryTimer) clearTimeout(retryTimer);
+      clearInterval(pollInterval);
       if (realtimeSub.current) {
         sb.removeChannel(realtimeSub.current);
         realtimeSub.current = null;
