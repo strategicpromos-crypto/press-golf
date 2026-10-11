@@ -6,10 +6,18 @@ import TourneyCaptain from "./TourneyCaptain.jsx";
 import TourneySpectator from "./TourneySpectator.jsx";
 import { calcSkins, SkinsTab } from "./skins.jsx";
 
-const C = {
+// Dark (default) and Day (high-contrast, sunlight-readable) themes.
+// The TeamTournament component picks one via `dayMode` and shadows it as
+// `C`, so every style reference follows the active theme automatically.
+const DARK = {
   bg:"#080f0a", surface:"#0e1a10", card:"#121e14",
   border:"rgba(123,180,80,0.18)", green:"#7bb450", gold:"#e8b84b",
   red:"#e05050", text:"#e8f0e9", muted:"#6b7f6d", dim:"#1e2f20",
+};
+const LIGHT = {
+  bg:"#edf2ea", surface:"#ffffff", card:"#ffffff",
+  border:"rgba(35,100,45,0.30)", green:"#1f7a2c", gold:"#96690f",
+  red:"#c62828", text:"#0d1f10", muted:"#5b6f5d", dim:"#dde6db",
 };
 
 const TEAM_COLORS = [
@@ -20,7 +28,8 @@ const TEAM_COLORS = [
 
 function safeInt(v,f=0){const n=parseInt(v,10);return isNaN(n)?f:n;}
 function relLabel(d){if(d===null||d===undefined)return"--";if(d===0)return"E";return d>0?"+"+d:String(d);}
-function relColor(d){if(d===null||d===undefined)return C.muted;if(d<0)return C.green;if(d>0)return C.red;return C.muted;}
+// NOTE: relColor, BigBtn, GhostBtn, Lbl, NumStepper live INSIDE the
+// TeamTournament component (below) so they close over the active theme.
 
 // Build top 10 individual leaderboard from all teams
 function calcIndividualLeaderboard(teams, holeData, holePars){
@@ -53,7 +62,9 @@ function calcIndividualLeaderboard(teams, holeData, holePars){
 }
 
 // Individual scorecard — top 30, full hole-by-hole vs-par
-function Top10Tab({ teams, course, holePars }){
+// Theme passed as a prop so it follows day mode.
+function Top10Tab({ teams, course, holePars, C }){
+  const relColor=(d)=>{if(d===null||d===undefined)return C.muted;if(d<0)return C.green;if(d>0)return C.red;return C.muted;};
   const players = calcIndividualLeaderboard(teams, course.holes, holePars);
   const medals = ["1st","2nd","3rd"];
   const frontHoles = course.holes.filter(h=>h.side==="front");
@@ -186,28 +197,39 @@ function calcTeamScore(teamScores,teamSize,holeData,birdieBonus,ballsByPar,holeP
 }
 
 
-function BigBtn({children,onClick,color=C.green,disabled=false,style={}}){
-  return(<button onClick={onClick} disabled={disabled} style={{width:"100%",padding:"18px",background:disabled?"#1a2a1a":color,color:disabled?C.muted:"#0a1a0f",border:"none",borderRadius:14,fontSize:17,fontWeight:800,cursor:disabled?"not-allowed":"pointer",opacity:disabled?0.5:1,fontFamily:"Georgia,serif",...style}}>{children}</button>);
-}
-function GhostBtn({children,onClick,color=C.green}){
-  return(<button onClick={onClick} style={{width:"100%",padding:"14px",background:"transparent",color,border:"1.5px solid "+color,borderRadius:12,fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"Georgia,serif"}}>{children}</button>);
-}
-function Lbl({children}){return<div style={{fontSize:11,color:C.green,letterSpacing:1.5,textTransform:"uppercase",marginBottom:8,fontWeight:600}}>{children}</div>;}
-
-function NumStepper({value,onChange,min=0,max=99,label}){
-  return(
-    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"4px 0"}}>
-      {label&&<div style={{fontSize:13,color:C.muted,flex:1}}>{label}</div>}
-      <div style={{display:"flex",alignItems:"center",gap:12}}>
-        <button onClick={()=>onChange(Math.max(min,value-1))} style={{width:36,height:36,borderRadius:"50%",background:C.dim,border:"1px solid "+C.border,color:C.text,fontSize:20,fontWeight:700,cursor:"pointer"}}>−</button>
-        <div style={{width:32,textAlign:"center",fontSize:18,fontWeight:800,color:C.text}}>{value}</div>
-        <button onClick={()=>onChange(Math.min(max,value+1))} style={{width:36,height:36,borderRadius:"50%",background:C.dim,border:"1px solid "+C.border,color:C.text,fontSize:20,fontWeight:700,cursor:"pointer"}}>+</button>
-      </div>
-    </div>
-  );
-}
-
 export default function TeamTournament({onBack, user, onDelete}){
+
+  // ── Day mode (sunlight-readable theme) — persisted per device ──────────
+  const [dayMode, setDayMode] = useState(()=>{
+    try{ return localStorage.getItem("press_daymode")==="1"; }catch(e){ return false; }
+  });
+  const C = dayMode ? LIGHT : DARK; // shadows module themes — all styles follow
+  function toggleDayMode(){
+    const v=!dayMode; setDayMode(v);
+    try{ localStorage.setItem("press_daymode", v?"1":"0"); }catch(e){}
+  }
+
+  // Theme-aware helpers (moved inside so they use the active theme)
+  function relColor(d){if(d===null||d===undefined)return C.muted;if(d<0)return C.green;if(d>0)return C.red;return C.muted;}
+  function BigBtn({children,onClick,color=C.green,disabled=false,style={}}){
+    return(<button onClick={onClick} disabled={disabled} style={{width:"100%",padding:"18px",background:disabled?"#1a2a1a":color,color:disabled?C.muted:"#0a1a0f",border:"none",borderRadius:14,fontSize:17,fontWeight:800,cursor:disabled?"not-allowed":"pointer",opacity:disabled?0.5:1,fontFamily:"Georgia,serif",...style}}>{children}</button>);
+  }
+  function GhostBtn({children,onClick,color=C.green}){
+    return(<button onClick={onClick} style={{width:"100%",padding:"14px",background:"transparent",color,border:"1.5px solid "+color,borderRadius:12,fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"Georgia,serif"}}>{children}</button>);
+  }
+  function Lbl({children}){return<div style={{fontSize:11,color:C.green,letterSpacing:1.5,textTransform:"uppercase",marginBottom:8,fontWeight:600}}>{children}</div>;}
+  function NumStepper({value,onChange,min=0,max=99,label}){
+    return(
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"4px 0"}}>
+        {label&&<div style={{fontSize:13,color:C.muted,flex:1}}>{label}</div>}
+        <div style={{display:"flex",alignItems:"center",gap:12}}>
+          <button onClick={()=>onChange(Math.max(min,value-1))} style={{width:36,height:36,borderRadius:"50%",background:C.dim,border:"1px solid "+C.border,color:C.text,fontSize:20,fontWeight:700,cursor:"pointer"}}>−</button>
+          <div style={{width:32,textAlign:"center",fontSize:18,fontWeight:800,color:C.text}}>{value}</div>
+          <button onClick={()=>onChange(Math.min(max,value+1))} style={{width:36,height:36,borderRadius:"50%",background:C.dim,border:"1px solid "+C.border,color:C.text,fontSize:20,fontWeight:700,cursor:"pointer"}}>+</button>
+        </div>
+      </div>
+    );
+  }
   const[screen,setScreen]=useState("home");
   const[courseId,setCourseId]=useState("south-toledo");
   const[birdieBonus,setBirdieBonus]=useState(true);
@@ -339,6 +361,17 @@ export default function TeamTournament({onBack, user, onDelete}){
       setSaveStatus("");
       return;
     }
+    // Back up dirty state — if this phone dies before the save lands, the
+    // edits are restored on next open (see resumeTourney). The lastSynced
+    // refs go along so merge-on-write still protects captains' scores.
+    try{
+      localStorage.setItem("press_director_pending_"+tourneyId, JSON.stringify({
+        savedAt: Date.now(),
+        state: localSnap(),
+        lastSyncedTeams: lastSyncedTeams.current,
+        lastSyncedCtp: lastSyncedCtp.current,
+      }));
+    }catch(e){}
     if(saveTimer.current)clearTimeout(saveTimer.current);
     setSaveStatus("saving");
     let attempts=0;
@@ -389,6 +422,7 @@ export default function TeamTournament({onBack, user, onDelete}){
         // Reconcile in case the merge kept DB data we hadn't seen yet
         if(snap(mergedTeams)!==snap(teams)) setTeams(mergedTeams);
         if(snap(ctpToWrite)!==snap(ctpLeaders)) setCtpLeaders(ctpToWrite);
+        try{ localStorage.removeItem("press_director_pending_"+tourneyId); }catch(e){} // saved — drop the backup
         setSaveStatus("saved");
         setTimeout(()=>setSaveStatus(""),2000);
         loadSaved();
@@ -477,6 +511,38 @@ export default function TeamTournament({onBack, user, onDelete}){
       setCurrentHole(data.current_hole||1);
       setActiveTeam(0);
       setDirectorCode(data.director_code||null);
+      // Restore the director's own unsaved edits if this phone died before
+      // they saved (backup newer than the DB row, and < 7 days old).
+      // lastSavedSnap stays as the DB snapshot, so the auto-save effect sees
+      // the restored state as dirty and flushes it via merge-on-write —
+      // the director's edits win their slots, captains' fresh scores survive.
+      try{
+        const raw=localStorage.getItem("press_director_pending_"+data.id);
+        if(raw){
+          const bak=JSON.parse(raw);
+          const dbTime=new Date(data.updated_at||0).getTime();
+          if(bak&&bak.savedAt>dbTime&&Date.now()-bak.savedAt<7*24*3600*1000){
+            const s=JSON.parse(bak.state||"{}");
+            if(s.teams) setTeams(s.teams);
+            if(s.course_id) setCourseId(s.course_id);
+            if(typeof s.birdie_bonus==="boolean") setBirdieBonus(s.birdie_bonus);
+            if(s.ball_count_by_par) setBallsByPar(s.ball_count_by_par);
+            if(s.hole_pars) setHolePars(s.hole_pars);
+            if(typeof s.skins_enabled==="boolean") setSkinsEnabled(s.skins_enabled);
+            if(typeof s.big_boy_enabled==="boolean") setBigBoyEnabled(s.big_boy_enabled);
+            if(typeof s.teammates_tie==="boolean") setTeammatesTie(s.teammates_tie);
+            if(typeof s.ctp_enabled==="boolean") setCtpEnabled(s.ctp_enabled);
+            if(s.ctp_holes) setCtpHoles(s.ctp_holes);
+            if(s.ctp_leaders) setCtpLeaders(s.ctp_leaders);
+            if(s.current_hole) setCurrentHole(s.current_hole);
+            setNumTeams((s.teams||[]).length);
+            if(bak.lastSyncedTeams) lastSyncedTeams.current=bak.lastSyncedTeams;
+            if(bak.lastSyncedCtp) lastSyncedCtp.current=bak.lastSyncedCtp;
+          }else{
+            localStorage.removeItem("press_director_pending_"+data.id);
+          }
+        }
+      }catch(e){}
       // Go to scoring if: status is active OR any team has scores entered
       // This prevents the setup loop bug where a corrupted status sent director back to setup
       const hasScores=(data.teams||[]).some(t=>Object.keys(t.scores||{}).length>0);
@@ -509,6 +575,7 @@ export default function TeamTournament({onBack, user, onDelete}){
     lastSyncedTeams.current=null;
     lastSyncedCtp.current=null;
     lastSavedSnap.current=null;
+    try{ localStorage.removeItem("press_director_pending_"+confirmDelete); }catch(e){}
     setDirectorCode(null);
     setCurrentHole(1);
     setConfirmDelete(null);
@@ -1145,6 +1212,8 @@ export default function TeamTournament({onBack, user, onDelete}){
                 style={{background:"rgba(232,184,75,0.15)",border:"1px solid "+C.gold,color:C.gold,fontSize:11,cursor:"pointer",padding:"5px 10px",borderRadius:12,fontWeight:700}}>📊 Leaderboard</button>
               <button onClick={()=>setShowSettings(true)}
                 style={{background:"rgba(123,180,80,0.15)",border:"1px solid "+C.green,color:C.green,fontSize:13,cursor:"pointer",padding:"8px 14px",borderRadius:12,fontWeight:700}}>⚙️ Settings</button>
+              <button onClick={toggleDayMode} title={dayMode?"Switch to dark mode":"Day mode — easier to read in sunlight"}
+                style={{background:dayMode?"rgba(35,100,45,0.10)":"rgba(232,184,75,0.10)",border:"1px solid "+(dayMode?C.green:C.gold),color:dayMode?C.green:C.gold,fontSize:13,cursor:"pointer",padding:"8px 12px",borderRadius:12,fontWeight:700}}>{dayMode?"🌙":"☀️"}</button>
             </div>
           </div>
           <div style={{display:"flex",gap:2}}>
@@ -1779,7 +1848,7 @@ export default function TeamTournament({onBack, user, onDelete}){
             </div>
           )}
 
-          {lbTab==="top10"&&<Top10Tab teams={teams} course={course} holePars={holePars}/>}
+          {lbTab==="top10"&&<Top10Tab teams={teams} course={course} holePars={holePars} C={C}/>}
 
           {lbTab==="skins"&&<SkinsTab teams={teams} course={course} holePars={holePars} skinsEnabled={skinsEnabled} bigBoyEnabled={bigBoyEnabled} teammatesTie={teammatesTie}/>}
 
