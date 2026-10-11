@@ -161,23 +161,34 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
       const{data}=await sb.from("team_tournaments").select("teams").eq("id",tourney.id).single();
       const sbToken = (data?.teams||[])[teamIdx]?.writer_token || null;
 
-      if(!sbToken){
-        // Nobody has claimed yet — this device is first, claim it
-        const newToken = Date.now().toString(36)+"_"+Math.random().toString(36).slice(2,6);
-        localStorage.setItem(localKey, newToken);
-        isWriter.current = true;
-        await claimWriterToken(newToken);
-
-      } else if(myLocalToken && myLocalToken === sbToken){
+      if(myLocalToken && myLocalToken === sbToken){
         // This device's token matches Supabase — it's the real captain (refresh case)
         isWriter.current = true;
-
-      } else {
-        // Different device — read-only
+      } else if(sbToken){
+        // Claimed by a different device — read-only until reclaimed
         isWriter.current = false;
         setReadOnlyMode(true);
       }
+      // Else: nobody has claimed yet. We deliberately do NOT claim on page
+      // load — the claim happens on the first score edit instead (see
+      // ensureWriter). This stops the director (or anyone previewing the link)
+      // from accidentally locking the real captain out of scoring.
     }
+
+  // ── Lazy writer claim — first edit claims the slot, not page load ──────────
+  async function ensureWriter(){
+    if(isWriter.current) return true;
+    if(readOnlyMode) return false;
+    try{
+      const{data}=await sb.from("team_tournaments").select("teams").eq("id",tourney.id).single();
+      const sbToken=(data?.teams||[])[teamIdx]?.writer_token||null;
+      if(sbToken){ setReadOnlyMode(true); return false; } // someone claimed it first
+      const newToken=Date.now().toString(36)+"_"+Math.random().toString(36).slice(2,6);
+      const ok=await claimWriterToken(newToken);
+      if(ok){ localStorage.setItem(localKey,newToken); isWriter.current=true; return true; }
+    }catch(e){}
+    return false;
+  }
 
     initWriter();
     startSubscription();
@@ -203,10 +214,12 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
   async function flushSave(teamsToSave){
     if(!isWriter.current) return;  // read-only — never write
     try{
-      const{data:current}=await sb.from("team_tournaments").select("teams").eq("id",tourney.id).single();
+      const{data:current,error:readErr}=await sb.from("team_tournaments").select("teams").eq("id",tourney.id).single();
+      if(readErr) throw readErr;
       const dbTeams=current?.teams||teamsToSave;
       const safeTeams=dbTeams.map((t,i)=>i===teamIdx?teamsToSave[i]:t);
-      await sb.from("team_tournaments").update({teams:safeTeams,updated_at:new Date().toISOString()}).eq("id",tourney.id);
+      const{error}=await sb.from("team_tournaments").update({teams:safeTeams,updated_at:new Date().toISOString()}).eq("id",tourney.id);
+      if(error) throw error; // never report "saved" when the write failed (e.g. RLS)
       pendingTeams.current=null;
       lastConfirmed.current=Date.now();
       // Only NOW mark as online — scores are confirmed in the database
@@ -224,7 +237,11 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
     pendingTeams.current = updatedTeams;  // always keep latest for flush
     if (saveTimer.current) clearTimeout(saveTimer.current);
     setSaveStatus("saving");
-    saveTimer.current = setTimeout(()=>flushSave(updatedTeams), 800);
+    // Claim the writer slot on first edit (not on page load — see initWriter)
+    ensureWriter().then(ok=>{
+      if(!ok){ setSaveStatus(""); return; } // read-only — the VIEW ONLY banner explains
+      saveTimer.current = setTimeout(()=>flushSave(updatedTeams), 800);
+    });
   }
 
   function setPlayerScore(pi, hole, val) {
