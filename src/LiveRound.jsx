@@ -469,7 +469,11 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
             setScores(prev => {
               const incoming = payload.new.scores;
               const merged = { ...incoming };
-              merged["me"] = prev["me"] || {};
+              // Only protect local "me" scores if there are unsaved pending entries.
+              // A spectator device has no pending scores, so Supabase is fully authoritative.
+              if (pendingScores.current) {
+                merged["me"] = prev["me"] || {};
+              }
               return merged;
             });
           }
@@ -483,8 +487,9 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
               flushScores(pendingScores.current.scores, pendingScores.current.currentHole);
             }
           } else if (status === "CLOSED" || status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
-            // Mark offline and keep retrying with backoff until back online
-            setConnStatus(prev => prev === "online" ? "offline" : prev);
+            // DO NOT set offline here — let polling determine real connectivity.
+            // WebSocket drops constantly on mobile; only lose the green dot if
+            // the HTTP poll also fails (handled in pollScores catch block).
             scheduleRetry();
           }
         });
@@ -494,16 +499,11 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
     subRef.current = { rebuild: buildSub };
     buildSub();
 
-    // iOS visibility reconnect
+    // iOS visibility reconnect — always try to rebuild WebSocket when app comes back
+    // (screen lock, tab switch, backgrounding all kill the WS on mobile)
     function handleVisibility() {
       if (document.visibilityState === "visible") {
-        // Only rebuild if we know connection dropped — don't rebuild on every wake
-        setConnStatus(prev => {
-          if (prev === "offline") {
-            subRef.current?.rebuild?.();
-          }
-          return prev === "offline" ? "connecting" : prev;
-        });
+        subRef.current?.rebuild?.();
         if (pendingScores.current) {
           flushScores(pendingScores.current.scores, pendingScores.current.currentHole);
         }
@@ -516,7 +516,10 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
     window.addEventListener("press_show_summary", handleShowSummary);
 
     // -- Polling fallback — fetches scores every 5s regardless of WebSocket state --
-    // Squabbit-style: simple, reliable, works on any connection quality
+    // Squabbit-style: simple, reliable, works on any connection quality.
+    // Only show "offline" banner after 2 consecutive poll failures (~10s of no HTTP)
+    // so a momentary WebSocket blip never triggers the red flash.
+    let pollFailCount = 0;
     async function pollScores() {
       try {
         const { data } = await sb.from("live_rounds")
@@ -524,10 +527,16 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
           .eq("id", liveRoundId)
           .single();
         if (data?.scores) {
+          pollFailCount = 0; // reset failure counter on any success
           setScores(prev => {
             const incoming = data.scores;
             const merged = { ...incoming };
-            merged["me"] = prev["me"] || {}; // always keep my own scores
+            // Only protect local "me" scores if we actually have pending unsaved entries.
+            // If pendingScores is null, our last write succeeded and Supabase is authoritative.
+            // This prevents a spectator's empty prev["me"] from wiping the round owner's scores.
+            if (pendingScores.current) {
+              merged["me"] = prev["me"] || {};
+            }
             return merged;
           });
           setConnStatus(prev => (prev === "offline" || prev === "connecting") ? "online" : prev);
@@ -537,7 +546,12 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
           }
         }
       } catch(e) {
-        setConnStatus(prev => prev === "online" ? "offline" : prev);
+        pollFailCount++;
+        // Only go "offline" after 2 consecutive poll failures (~10s)
+        // This prevents a single hiccup from flashing the red banner
+        if (pollFailCount >= 2) {
+          setConnStatus(prev => prev === "online" ? "offline" : prev);
+        }
       }
     }
     const pollInterval = setInterval(pollScores, 5000);
