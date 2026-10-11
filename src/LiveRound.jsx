@@ -331,6 +331,7 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
   const flushingRef   = useRef(false);
   const subRef        = useRef(null); // holds { rebuild: buildSub } for visibility handler
   const [connStatus,  setConnStatus]  = useState("connecting"); // connecting|online|syncing|offline
+  const [syncInfo,    setSyncInfo]    = useState(null); // last 5s sync result, shown on screen
 
   // Add opponent form
   const [addOppId,       setAddOppId]       = useState("");
@@ -429,6 +430,15 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
     });
   }
 
+  // Pull the latest scores from the server right now (used by Next Hole)
+  async function refreshScores() {
+    try {
+      const { data } = await sb.from("live_rounds")
+        .select("scores").eq("id", liveRoundId).single();
+      if (data?.scores) applyRemote(data.scores);
+    } catch(e) {}
+  }
+
   // Saves ONLY the cells this phone changed, merged into the latest server copy,
   // so one phone can never overwrite another phone's holes with stale data.
   async function flushScores(_unused, hole) {
@@ -484,6 +494,32 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
     }, 800);
     return () => clearTimeout(saveTimerRef.current);
   }, [scores, currentHole, back9Adjustments, liveRoundId, step]);
+
+  // -- Independent 5-second sync. Runs whenever a round is open, on any screen,
+  // and does not depend on the WebSocket. Pushes this phone's unsaved holes,
+  // then pulls everyone else's.
+  useEffect(() => {
+    if (!liveRoundId) return;
+    let stopped = false;
+    async function tick() {
+      if (stopped) return;
+      try {
+        if (editedRef.current.size > 0) {
+          await flushScores(null, pendingScores.current?.currentHole ?? 1);
+        }
+        const { data, error } = await sb.from("live_rounds")
+          .select("scores").eq("id", liveRoundId).single();
+        if (error) throw error;
+        if (data?.scores) applyRemote(data.scores);
+        if (!stopped) setSyncInfo({ ok: true, at: new Date().toLocaleTimeString(), err: "" });
+      } catch (e) {
+        if (!stopped) setSyncInfo({ ok: false, at: new Date().toLocaleTimeString(), err: String(e?.message || e) });
+      }
+    }
+    tick();
+    const id = setInterval(tick, 5000);
+    return () => { stopped = true; clearInterval(id); };
+  }, [liveRoundId]);
 
   // -- Stable channel name — no Date.now() so React never creates a duplicate
   // useRef holds the channel ID so it survives re-renders without triggering effects
@@ -557,34 +593,8 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
     function handleShowSummary() { setStep("summary"); }
     window.addEventListener("press_show_summary", handleShowSummary);
 
-    // -- Polling fallback — fetches scores every 5s regardless of WebSocket state --
-    // Squabbit-style: simple, reliable, works on any connection quality.
-    // Status changes go through reportConn() so one bad request never flips the banner.
-    async function pollScores() {
-      try {
-        const { data } = await sb.from("live_rounds")
-          .select("scores, updated_at")
-          .eq("id", liveRoundId)
-          .single();
-        if (data?.scores) {
-          applyRemote(data.scores);
-          reportConn(true);
-          // Retry any of this phone's own unsaved edits (e.g. after signal dropped)
-          if (editedRef.current.size > 0) {
-            flushScores(null, pendingScores.current?.currentHole ?? currentHole);
-          }
-        } else {
-          reportConn(false);
-        }
-      } catch(e) {
-        reportConn(false);
-      }
-    }
-    const pollInterval = setInterval(pollScores, 5000);
-
     return () => {
       if (retryTimer) clearTimeout(retryTimer);
-      clearInterval(pollInterval);
       if (realtimeSub.current) {
         sb.removeChannel(realtimeSub.current);
         realtimeSub.current = null;
@@ -1217,8 +1227,9 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
               if(pendingScores.current||true){
                 setConnStatus("syncing");
                 await flushScores(scores, currentHole);
+                await refreshScores(); // pull latest from the server before moving on
               }
-              
+
               if(isLastHole) setStep("summary");
               else setCurrentHole(h=>h+1);
             }} disabled={!canAdvance}
@@ -1227,6 +1238,12 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
             </button>
             <div style={{textAlign:"center",fontSize:11,color:connStatus==="offline"?"rgba(224,80,80,0.8)":connStatus==="syncing"?"rgba(232,184,75,0.8)":C.dim,marginTop:8}}>
               {connStatus==="offline"?"Scores saved on phone — tap banner above to refresh":connStatus==="syncing"?"Uploading...":"Scores saved · safe to close"}
+            </div>
+            <div style={{textAlign:"center",fontSize:10,color:syncInfo&&!syncInfo.ok?"#e05050":C.muted,marginTop:4}}>
+              {!liveRoundId ? "Not connected to a round"
+                : !syncInfo ? "Sync: waiting for first check…"
+                : syncInfo.ok ? "Last sync OK · "+syncInfo.at
+                : "Sync failed · "+syncInfo.at+" · "+syncInfo.err}
             </div>
           </>)}
 
