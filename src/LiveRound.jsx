@@ -326,6 +326,7 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
   const realtimeSub   = useRef(null);
   const saveTimerRef  = useRef(null); // named ref to avoid collision with saveTimer state
   const pendingScores = useRef(null); // scores waiting to flush if connection dropped
+  const subRef        = useRef(null); // holds { rebuild: buildSub } for visibility handler
   const [connStatus,  setConnStatus]  = useState("connecting"); // connecting|online|syncing|offline
 
   // Add opponent form
@@ -364,9 +365,24 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
         setLiveRoundId(data.id);
         setCourseId(validCourseId);
         setOpponents(data.opponents || []);
-        setScores(data.scores || {});
-        setCurrentHole(data.current_hole || 1);
-        if(data.back9_adjustments) setBack9Adjustments(data.back9_adjustments);
+
+        // Check localStorage for scores saved after the last Supabase write
+        // (handles the case where iPhone lost signal and scores were saved locally)
+        let restoredScores = data.scores || {};
+        let restoredHole = data.current_hole || 1;
+        let restoredBack9 = data.back9_adjustments || {};
+        try {
+          const local = JSON.parse(localStorage.getItem("press_scores_" + data.id) || "null");
+          if (local && local.ts > new Date(data.updated_at).getTime()) {
+            restoredScores = local.scores || restoredScores;
+            restoredHole = local.currentHole || restoredHole;
+            restoredBack9 = local.back9Adjustments || restoredBack9;
+          }
+        } catch(lse) {}
+
+        setScores(restoredScores);
+        setCurrentHole(restoredHole);
+        setBack9Adjustments(restoredBack9);
         setResuming(true);
       }
     }
@@ -384,6 +400,8 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
         updated_at: new Date().toISOString(),
       }).eq("id", liveRoundId);
       pendingScores.current = null;
+      // Clear localStorage backup — scores are safely in Supabase now
+      try { localStorage.removeItem("press_scores_" + liveRoundId); } catch(lse) {}
       // Only update connStatus if we were previously offline/syncing
       setConnStatus(prev => (prev === "offline" || prev === "syncing") ? "online" : prev);
     } catch(e) {
@@ -396,6 +414,13 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
   useEffect(() => {
     if (!liveRoundId || step !== "playing") return;
     pendingScores.current = { scores, currentHole };
+    // Persist to localStorage immediately — survives app restart if signal drops
+    try {
+      localStorage.setItem(
+        "press_scores_" + liveRoundId,
+        JSON.stringify({ scores, currentHole, back9Adjustments, ts: Date.now() })
+      );
+    } catch(lse) {}
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(async () => {
       await flushScores(scores, currentHole);
