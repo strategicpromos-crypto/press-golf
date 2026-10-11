@@ -90,14 +90,28 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
     return {...incoming, teams:mergedTeams};
   }
 
+  const offlineTimer = useRef(null);
+  // Don't flash the red "not uploading" banner for transient blips (spotty
+  // course WiFi/cell) — only show it if the connection is still down after a
+  // short grace period. Genuine outages still surface; hiccups stay invisible.
+  function markOfflineSoon(){
+    if(offlineTimer.current) clearTimeout(offlineTimer.current);
+    offlineTimer.current=setTimeout(()=>{ offlineTimer.current=null; setConnStatus("offline"); },2500);
+  }
+  function clearOfflineTimer(){
+    if(offlineTimer.current){ clearTimeout(offlineTimer.current); offlineTimer.current=null; }
+  }
+
   function startSubscription(){
     if(subRef.current) sb.removeChannel(subRef.current);
-    subRef.current = sb
+    const ch = sb
       .channel("captain_"+tourney.id+"_"+teamIdx+"_"+Date.now())
       .on("postgres_changes",{event:"UPDATE",schema:"public",table:"team_tournaments",filter:"id=eq."+tourney.id},
         payload=>{ if(payload.new) setTourney(prev=>mergeTourneyUpdate(payload.new,prev)); })
       .subscribe(status=>{
+        if(subRef.current!==ch) return; // stale channel (already replaced) — ignore its callbacks
         if(status==="SUBSCRIBED"){
+          clearOfflineTimer();
           // WebSocket up — but only mark online once any pending scores are flushed
           if(pendingTeams.current){
             setConnStatus("syncing"); // amber — reconnected but scores not confirmed yet
@@ -106,12 +120,13 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
             setConnStatus("online");
           }
         } else if(status==="CLOSED"||status==="CHANNEL_ERROR"||status==="TIMED_OUT"){
-          setConnStatus("offline");
+          markOfflineSoon();
           // Reconnect — use longer delay if we have pending scores to avoid hammering
           const delay = pendingTeams.current ? 2000 : 3000;
-          setTimeout(()=>startSubscription(), delay);
+          setTimeout(()=>{ if(subRef.current===ch) startSubscription(); }, delay);
         }
       });
+    subRef.current = ch;
   }
 
   function startPolling(){
@@ -120,8 +135,9 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
       try{
         const{data}=await sb.from("team_tournaments").select("*").eq("id",tourney.id).single();
         if(data) setTourney(prev=>mergeTourneyUpdate(data,prev));
+        clearOfflineTimer();
         setConnStatus("online");
-      }catch(e){ setConnStatus("offline"); }
+      }catch(e){ markOfflineSoon(); }
     }, 30000);
   }
 
@@ -197,6 +213,7 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
     // ── iOS visibility reconnect ───────────────────────────────────────────
     function handleVisibility(){
       if(document.visibilityState === "visible"){
+        clearOfflineTimer();
         setConnStatus("connecting");
         startSubscription();
         if(pendingTeams.current) flushSave(pendingTeams.current);
@@ -207,6 +224,7 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
     return()=>{
       if(subRef.current) sb.removeChannel(subRef.current);
       if(pollTimer.current) clearInterval(pollTimer.current);
+      if(offlineTimer.current) clearTimeout(offlineTimer.current);
       document.removeEventListener("visibilitychange", handleVisibility);
     };
   },[tourney.id, teamIdx]);
@@ -223,12 +241,13 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
       pendingTeams.current=null;
       lastConfirmed.current=Date.now();
       // Only NOW mark as online — scores are confirmed in the database
+      clearOfflineTimer();
       setConnStatus("online");
       setSaveStatus("saved");
       setTimeout(()=>setSaveStatus(""),2000);
     }catch(e){
       // Write failed — stay offline, will retry on next reconnect
-      setConnStatus("offline");
+      markOfflineSoon();
       setTimeout(()=>startSubscription(), 3000);
     }
   }
