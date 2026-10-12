@@ -52,17 +52,11 @@ const pill = (active, color=C.green) => ({
 function genCode(){ return Math.random().toString(36).substring(2,8).toUpperCase(); }
 
 function openDeepLink(appUrl) {
-  // Use an anchor with target="_blank" — works on both Android and iOS PWA
-  // Android: fires the intent properly without navigating the PWA away
-  // iOS: hands off to the OS to open the native app
-  const a = document.createElement("a");
-  a.href = appUrl;
-  a.target = "_blank";
-  a.rel = "noopener noreferrer";
-  a.style.display = "none";
-  document.body.appendChild(a);
-  a.click();
-  setTimeout(() => document.body.removeChild(a), 500);
+  // Navigate directly — custom schemes (venmo://, cashapp://, zellepay://)
+  // must be handed to the OS from the current tab. The old hidden-anchor +
+  // target="_blank" trick fails silently on iOS and in installed PWAs: the
+  // blank tab can't resolve the scheme and the OS never gets the handoff.
+  window.location.href = appUrl;
 }
 
 function openVenmo(name, amount) {
@@ -130,6 +124,50 @@ function SwipeRow({children,onDelete,accent=C.green,disabled=false}){
 
 function SettingsCard({title,sub,subExtra,children,danger}){
   return(<div style={{background:C.card,border:`1px solid ${danger?"rgba(224,80,80,0.2)":C.border}`,borderRadius:12,padding:"16px",marginBottom:10}}><div style={{fontWeight:600,fontSize:15,marginBottom:4,color:danger?C.red:C.text}}>{title}</div><div style={{fontSize:12,color:C.muted,marginBottom:12}}>{sub}{subExtra}</div>{children}</div>);
+}
+
+// ── Payment handles (Venmo / Cash App / Zelle) ─────────────────────────────
+// Stores each buddy's actual payment handles so the settle-up buttons can
+// deep-link with a real recipient. The old code fell back to the display
+// name ("Mike"), which is never a valid Venmo/Cash App handle — that's why
+// the buttons never worked.
+// Requires on players: venmo text, cashapp text, phone text (nullable).
+function PaymentHandlesCard({player, sb, t2, setPlayers}){
+  const [venmo,setVenmo]=useState(player?.venmo||"");
+  const [cashapp,setCashapp]=useState(player?.cashapp||"");
+  const [phone,setPhone]=useState(player?.phone||"");
+  const [busy,setBusy]=useState(false);
+  useEffect(()=>{
+    setVenmo(player?.venmo||""); setCashapp(player?.cashapp||""); setPhone(player?.phone||"");
+  },[player?.id]);
+  if(!player) return null;
+  async function save(){
+    setBusy(true);
+    const payload={
+      venmo:venmo.trim().replace(/^@/,"")||null,
+      cashapp:cashapp.trim().replace(/^\$/,"")||null,
+      phone:phone.trim()||null,
+    };
+    const{error}=await sb.from("players").update(payload).eq("id",player.id);
+    setBusy(false);
+    if(error){ t2("Couldn't save — add the columns in Supabase first (SQL in chat).",true); return; }
+    setPlayers(prev=>prev.map(p=>p.id===player.id?{...p,...payload}:p));
+    t2("Payment handles saved ✓");
+  }
+  const inp={width:"100%",padding:"12px",background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,color:C.text,fontSize:15,outline:"none",boxSizing:"border-box",marginBottom:10};
+  return(
+    <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:"16px",marginBottom:10}}>
+      <div style={{fontWeight:600,fontSize:15,marginBottom:4,color:C.text}}>💳 Payment Handles</div>
+      <div style={{fontSize:12,color:C.muted,marginBottom:12}}>Your buddy's actual usernames — this is what the settle-up buttons open.</div>
+      <div style={{fontSize:11,color:C.muted,letterSpacing:1,textTransform:"uppercase",marginBottom:6,fontWeight:600}}>Venmo username <span style={{color:C.dim,letterSpacing:0,textTransform:"none"}}>(no @)</span></div>
+      <input value={venmo} onChange={e=>setVenmo(e.target.value)} placeholder="e.g. mike-caskey-42" autoCapitalize="none" autoCorrect="off" style={inp}/>
+      <div style={{fontSize:11,color:C.muted,letterSpacing:1,textTransform:"uppercase",marginBottom:6,fontWeight:600}}>Cash App cashtag <span style={{color:C.dim,letterSpacing:0,textTransform:"none"}}>(no $)</span></div>
+      <input value={cashapp} onChange={e=>setCashapp(e.target.value)} placeholder="e.g. mikecaskey" autoCapitalize="none" autoCorrect="off" style={inp}/>
+      <div style={{fontSize:11,color:C.muted,letterSpacing:1,textTransform:"uppercase",marginBottom:6,fontWeight:600}}>Phone <span style={{color:C.dim,letterSpacing:0,textTransform:"none"}}>(for Zelle)</span></div>
+      <input value={phone} onChange={e=>setPhone(e.target.value)} placeholder="e.g. 4195551234" inputMode="tel" style={inp}/>
+      <button onClick={save} disabled={busy} style={{width:"100%",padding:"12px",background:busy?"#1a2a1a":C.green,color:busy?C.muted:"#0a1a0f",border:"none",borderRadius:10,fontSize:14,fontWeight:800,cursor:busy?"not-allowed":"pointer"}}>{busy?"Saving...":"Save Handles"}</button>
+    </div>
+  );
 }
 
 // ── PRO PAYWALL SCREEN ────────────────────────────────────────────────────────
@@ -1991,6 +2029,7 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
             <SettingsCard title="Settle Up" sub="Current bank: " subExtra={<Money value={player?.bank??0} size={13}/>}>
               <GhostBtn onClick={()=>setSheet("settle")} color={C.gold}>🤝 Settle Up with {player?.name}</GhostBtn>
             </SettingsCard>
+            <PaymentHandlesCard player={player} sb={sb} t2={t2} setPlayers={setPlayers}/>
             <SettingsCard title="New Season" sub="Archives all rounds and bets. Balance must be $0.">
               <GhostBtn onClick={()=>setSheet("seasonReset")} color={C.gold}>🏆 Start New Season</GhostBtn>
             </SettingsCard>
@@ -2093,9 +2132,21 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
               <div style={{marginBottom:12}}>
                 <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>Pay With</div>
                 <div style={{display:"flex",gap:8,marginBottom:6}}>
-                  <button onClick={()=>openVenmo(player.venmo||player.name,Number(partialAmt)||player.bank)} style={{flex:1,padding:"12px 4px",background:"#008CFF",border:"none",borderRadius:8,color:"#fff",fontSize:13,fontWeight:700,cursor:"pointer"}}>Venmo</button>
-                  <button onClick={()=>openCashApp(player.cashapp||player.name,Number(partialAmt)||player.bank)} style={{flex:1,padding:"12px 4px",background:"#00D54B",border:"none",borderRadius:8,color:"#fff",fontSize:13,fontWeight:700,cursor:"pointer"}}>Cash App</button>
-                  <button onClick={()=>openZelle(player.phone||null)} style={{flex:1,padding:"12px 4px",background:"#6D1ED4",border:"none",borderRadius:8,color:"#fff",fontSize:13,fontWeight:700,cursor:"pointer"}}>Zelle</button>
+                  <button onClick={()=>{
+                    const h=(player.venmo||"").trim();
+                    if(!h){t2("Add "+player.name+"'s Venmo username under Profile → Settings first.",true);return;}
+                    openVenmo(h,Number(partialAmt)||player.bank);
+                  }} style={{flex:1,padding:"12px 4px",background:"#008CFF",border:"none",borderRadius:8,color:"#fff",fontSize:13,fontWeight:700,cursor:"pointer"}}>Venmo</button>
+                  <button onClick={()=>{
+                    const h=(player.cashapp||"").trim();
+                    if(!h){t2("Add "+player.name+"'s Cash App cashtag under Profile → Settings first.",true);return;}
+                    openCashApp(h,Number(partialAmt)||player.bank);
+                  }} style={{flex:1,padding:"12px 4px",background:"#00D54B",border:"none",borderRadius:8,color:"#fff",fontSize:13,fontWeight:700,cursor:"pointer"}}>Cash App</button>
+                  <button onClick={()=>{
+                    const h=(player.phone||"").trim();
+                    if(!h){t2("Add "+player.name+"'s phone number under Profile → Settings first.",true);return;}
+                    openZelle(h);
+                  }} style={{flex:1,padding:"12px 4px",background:"#6D1ED4",border:"none",borderRadius:8,color:"#fff",fontSize:13,fontWeight:700,cursor:"pointer"}}>Zelle</button>
                 </div>
                 <div style={{fontSize:11,color:C.muted,textAlign:"center",marginBottom:12}}>
                   Tap to open app → After paying, tap "Mark as Settled"
