@@ -223,9 +223,9 @@ export default function TeamTournament({onBack, user, onDelete}){
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"4px 0"}}>
         {label&&<div style={{fontSize:13,color:C.muted,flex:1}}>{label}</div>}
         <div style={{display:"flex",alignItems:"center",gap:12}}>
-          <button onClick={()=>onChange(Math.max(min,value-1))} style={{width:36,height:36,borderRadius:"50%",background:C.dim,border:"1px solid "+C.border,color:C.text,fontSize:20,fontWeight:700,cursor:"pointer"}}>−</button>
-          <div style={{width:32,textAlign:"center",fontSize:18,fontWeight:800,color:C.text}}>{value}</div>
-          <button onClick={()=>onChange(Math.min(max,value+1))} style={{width:36,height:36,borderRadius:"50%",background:C.dim,border:"1px solid "+C.border,color:C.text,fontSize:20,fontWeight:700,cursor:"pointer"}}>+</button>
+          <button onClick={()=>onChange(Math.max(min,value-1))} style={{width:44,height:44,borderRadius:"50%",background:C.dim,border:"1px solid "+C.border,color:C.text,fontSize:22,fontWeight:700,cursor:"pointer"}}>−</button>
+          <div style={{width:36,textAlign:"center",fontSize:20,fontWeight:800,color:C.text,fontVariantNumeric:"tabular-nums"}}>{value}</div>
+          <button onClick={()=>onChange(Math.min(max,value+1))} style={{width:44,height:44,borderRadius:"50%",background:C.dim,border:"1px solid "+C.border,color:C.text,fontSize:22,fontWeight:700,cursor:"pointer"}}>+</button>
         </div>
       </div>
     );
