@@ -216,7 +216,7 @@ export default function TourneySpectator({ tourney: initialTourney, onBack }) {
             </div>
           );
         })()}
-        {tab==="skins"&&<SkinsTab teams={tourney.teams||[]} course={course} holePars={tourney.hole_pars||{}} skinsEnabled={tourney.skins_enabled===true} bigBoyEnabled={tourney.big_boy_enabled===true}/>}
+        {tab==="skins"&&<SkinsTab teams={tourney.teams||[]} course={course} holePars={tourney.hole_pars||{}} skinsEnabled={tourney.skins_enabled===true} bigBoyEnabled={tourney.big_boy_enabled===true} teammatesTie={tourney.teammates_tie===true}/>}
 
         {tab==="ctp"&&(()=>{
           const ctpHoles=(tourney.ctp_holes||[]).sort((a,b)=>a-b);
