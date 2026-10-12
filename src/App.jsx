@@ -14,6 +14,13 @@ const PRICE_ID  = "price_1Tip7m2LCsgE9Ikh0yUEVgE8";
 const APP_URL   = "https://press-golf.vercel.app";
 const FREE_PLAYER_LIMIT = 2;
 
+// ── Payments kill-switch ─────────────────────────────────────────────────
+// false = all upgrade UI hidden, no checkout possible. Beta directors are
+// comped via the Supabase dashboard (profiles.is_pro = true). Flip to true
+// ONLY when the Stripe webhook (server-side fulfillment) is live — never
+// grant is_pro from the client.
+const PAYMENTS_ENABLED = false;
+
 // ── BETA FLAG ──────────────────────────────────────────────────────────────────
 // Set to true during beta to auto-sign-in after account creation.
 // Users skip the "check your email" step entirely.
@@ -151,7 +158,9 @@ function ProInfo({onBack, isPro, onUpgrade}) {
           <div style={{fontSize:14,color:C.muted,marginBottom:4}}>$1.99 / month</div>
           {isPro
             ? <div style={{background:"rgba(123,180,80,0.15)",border:`1px solid ${C.green}`,color:C.green,padding:"6px 20px",borderRadius:20,fontSize:13,fontWeight:700,display:"inline-block"}}>✅ You're a Pro member</div>
-            : <button onClick={onUpgrade} style={{background:`linear-gradient(135deg,${C.gold},#b8860b)`,border:"none",color:"#0a1a0f",padding:"12px 28px",borderRadius:20,fontSize:14,fontWeight:800,cursor:"pointer"}}>⭐ Upgrade to Pro</button>
+            : (PAYMENTS_ENABLED
+              ? <button onClick={onUpgrade} style={{background:`linear-gradient(135deg,${C.gold},#b8860b)`,border:"none",color:"#0a1a0f",padding:"12px 28px",borderRadius:20,fontSize:14,fontWeight:800,cursor:"pointer"}}>⭐ Upgrade to Pro</button>
+              : <div style={{fontSize:13,color:C.muted}}>Pro isn't on sale yet — beta access only.</div>)
           }
         </div>
       </div>
@@ -171,7 +180,7 @@ function ProInfo({onBack, isPro, onUpgrade}) {
           </div>
         ))}
 
-        {!isPro && (
+        {!isPro && PAYMENTS_ENABLED && (
           <div style={{marginTop:20}}>
             <button onClick={onUpgrade} style={{width:"100%",padding:"16px",background:`linear-gradient(135deg,${C.gold},#b8860b)`,border:"none",color:"#0a1a0f",borderRadius:12,fontSize:15,fontWeight:800,cursor:"pointer"}}>
               ⭐ Upgrade to Press Pro — $1.99/mo
@@ -742,12 +751,9 @@ export default function App(){
     async function checkPro(){
       const{data}=await sb.from("profiles").select("is_pro,stripe_customer_id").eq("id",user.id).single();
       if(data?.is_pro)setIsPro(true);
-      // If returning from Stripe success
-      if(stripeSuccess&&!data?.is_pro){
-        await sb.from("profiles").update({is_pro:true}).eq("id",user.id);
-        setIsPro(true);
-        window.history.replaceState({},"","/");
-      }
+      // is_pro is granted server-side only (Stripe webhook). Never set it from
+      // the client — the old ?stripe=success handler was a free-Pro hole.
+      if(stripeSuccess){ window.history.replaceState({},"","/"); }
     }
     checkPro();
   },[user,stripeSuccess]);
@@ -836,7 +842,7 @@ export default function App(){
 
     if(loading)return(<div style={{background:C.bg,minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:16}}><div style={{fontSize:46,fontWeight:800,color:C.green,letterSpacing:-2}}>Press</div><Spinner/></div>);
   if(showPrivacy)return <PrivacyPolicy onBack={()=>setShowPrivacy(false)}/>;
-  if(showPaywall)return <ProPaywall onBack={()=>setShowPaywall(false)} onUpgrade={handleUpgrade} saving={stripeSaving}/>;
+  if(showPaywall&&PAYMENTS_ENABLED)return <ProPaywall onBack={()=>setShowPaywall(false)} onUpgrade={handleUpgrade} saving={stripeSaving}/>;
   if(showProInfo)return <ProInfo onBack={()=>setShowProInfo(false)} isPro={isPro} onUpgrade={()=>{setShowProInfo(false);setShowPaywall(true);}}/>;
 
   // Opponent score entry — no login required, anyone with the link can score
@@ -1010,7 +1016,8 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
   // Pro gate check
   function requirePro(action){
     if(isPro){action();return;}
-    onUpgrade();
+    if(PAYMENTS_ENABLED){onUpgrade();return;}
+    t2("Press Pro isn't on sale yet — beta access only.",true);
   }
 
   function goProfile(id){setPid(id);setPtab("overview");setView("profile");}
@@ -1023,7 +1030,8 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
     // Free tier limit
     if(!isPro&&players.length>=FREE_PLAYER_LIMIT){
       setSheet(null);
-      onUpgrade();
+      if(PAYMENTS_ENABLED){onUpgrade();}
+      else{t2("Free limit reached — Pro isn't on sale yet.",true);}
       return;
     }
     const st=nDir==="even"?0:nDir==="received"?-Math.abs(Number(nStr)):Math.abs(Number(nStr));
@@ -1481,7 +1489,7 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
           <button onClick={onSignOut} style={{background:"none",border:"none",color:C.dim,fontSize:11,cursor:"pointer"}}>Sign out</button>
           <button onClick={()=>{setShowNotifs(true);markNotifsRead();}} style={{background:"none",border:"none",color:C.muted,fontSize:11,cursor:"pointer",display:"flex",alignItems:"center"}}>🔔<NotifBadge count={unreadNotifs+pendingActions}/></button>
         </div>
-        {!isPro&&(
+        {!isPro&&PAYMENTS_ENABLED&&(
           <div style={{display:"flex",gap:8,justifyContent:"center",marginBottom:12,flexWrap:"wrap"}}>
             <button onClick={onUpgrade} style={{background:`linear-gradient(135deg,${C.gold},#b8860b)`,border:"none",color:"#0a1a0f",padding:"8px 20px",borderRadius:20,fontSize:12,fontWeight:700,cursor:"pointer"}}>
               ⭐ Upgrade to Pro — $1.99/mo
@@ -1649,7 +1657,7 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
         })}
 
         {/* Upgrade prompt when at limit */}
-        {!isPro&&players.length>=FREE_PLAYER_LIMIT&&(
+        {!isPro&&PAYMENTS_ENABLED&&players.length>=FREE_PLAYER_LIMIT&&(
           <div style={{background:`linear-gradient(135deg,rgba(232,184,75,0.1),rgba(123,180,80,0.05))`,border:`1px solid ${C.gold}44`,borderRadius:14,padding:"20px",textAlign:"center",marginTop:8}}>
             <div style={{fontSize:20,marginBottom:6}}>⭐</div>
             <div style={{fontWeight:700,fontSize:15,marginBottom:6,color:C.gold}}>Unlock Unlimited Players</div>
@@ -1669,7 +1677,7 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
               <div style={{fontSize:32,marginBottom:10}}>⭐</div>
               <div style={{fontWeight:700,fontSize:16,marginBottom:8,color:C.gold}}>Pro Required</div>
               <div style={{fontSize:13,color:C.muted,marginBottom:20}}>Upgrade to add unlimited players.</div>
-              <BigBtn onClick={()=>{setSheet(null);onUpgrade();}} color={C.gold} textColor="#0a1a0f">Upgrade to Pro</BigBtn>
+              {PAYMENTS_ENABLED&&<BigBtn onClick={()=>{setSheet(null);onUpgrade();}} color={C.gold} textColor="#0a1a0f">Upgrade to Pro</BigBtn>}
               <GhostBtn onClick={()=>setSheet(null)} style={{marginTop:10}}>Cancel</GhostBtn>
             </div>
           ):(
@@ -1957,7 +1965,7 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
 
         {ptab==="settings"&&(
           <div>
-            {!isPro&&(
+            {!isPro&&PAYMENTS_ENABLED&&(
               <div style={{background:`linear-gradient(135deg,rgba(232,184,75,0.1),rgba(123,180,80,0.05))`,border:`1px solid ${C.gold}44`,borderRadius:12,padding:"16px",marginBottom:10,textAlign:"center"}}>
                 <div style={{fontWeight:700,fontSize:15,color:C.gold,marginBottom:4}}>⭐ Press Pro</div>
                 <div style={{fontSize:12,color:C.muted,marginBottom:12}}>Unlock invites, notifications, disputes and more.</div>
