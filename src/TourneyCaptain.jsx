@@ -3,15 +3,23 @@ import { sb } from "./supabase.js";
 import { COURSES } from "./golf.js";
 import { SkinsTab } from "./skins.jsx";
 
-const C = {
+// Dark (default) and Day (high-contrast, sunlight-readable) themes.
+// The component picks one via `dayMode` and shadows it as `C`, so every
+// existing style reference follows the active theme automatically.
+const DARK = {
   bg:"#080f0a", surface:"#0e1a10", card:"#121e14",
   border:"rgba(123,180,80,0.18)", green:"#7bb450", gold:"#e8b84b",
   red:"#e05050", text:"#e8f0e9", muted:"#6b7f6d", dim:"#1e2f20",
 };
+const LIGHT = {
+  bg:"#edf2ea", surface:"#ffffff", card:"#ffffff",
+  border:"rgba(35,100,45,0.30)", green:"#1f7a2c", gold:"#96690f",
+  red:"#c62828", text:"#0d1f10", muted:"#5b6f5d", dim:"#dde6db",
+};
 
 function safeInt(v,f=0){const n=parseInt(v,10);return isNaN(n)?f:n;}
 function relLabel(d){if(d===null||d===undefined)return"--";if(d===0)return"E";return d>0?"+"+d:String(d);}
-function relColor(d){if(d===null||d===undefined)return C.muted;if(d<0)return C.green;if(d>0)return C.red;return C.muted;}
+// relColor lives inside the component (needs the active theme)
 
 function calcTeamScore(teamScores,teamSize,holeData,birdieBonus,ballsByPar,holePars){
   const getBalls=(par)=>{
@@ -68,8 +76,21 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
   const [readOnlyMode, setReadOnlyMode] = useState(false);
   const [claiming,     setClaiming]     = useState(false); // reclaim in progress
 
+  // ── Day mode (sunlight-readable theme) — persisted per device ──────────
+  const [dayMode, setDayMode] = useState(()=>{
+    try{ return localStorage.getItem("press_daymode")==="1"; }catch(e){ return false; }
+  });
+  const C = dayMode ? LIGHT : DARK; // shadows module themes — all styles follow
+  function relColor(d){ if(d===null||d===undefined) return C.muted; if(d<0) return C.green; if(d>0) return C.red; return C.muted; }
+  function toggleDayMode(){
+    const v=!dayMode; setDayMode(v);
+    try{ localStorage.setItem("press_daymode", v?"1":"0"); }catch(e){}
+  }
+
   // localStorage key — per tourney per team
   const localKey = `press_writer_${initialTourney.id}_${teamIdx}`;
+  // Unsaved scores survive a dead phone / killed tab — restored on next open
+  const pendingKey = `press_pending_${initialTourney.id}_${teamIdx}`;
 
   const ctpEnabled  = tourney.ctp_enabled===true;
   const ctpHoles    = tourney.ctp_holes||[];
@@ -207,6 +228,20 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
   }
 
     initWriter();
+
+    // Restore unsaved scores from a previous session (phone died, tab killed).
+    // The SUBSCRIBED handler flushes pendingTeams automatically once live.
+    try{
+      const raw = localStorage.getItem(pendingKey);
+      if(raw){
+        const saved = JSON.parse(raw);
+        if(Array.isArray(saved) && saved[teamIdx]){
+          pendingTeams.current = saved;
+          setTourney(prev=>({...prev, teams: saved}));
+        }
+      }
+    }catch(e){}
+
     startSubscription();
     startPolling();
 
@@ -239,6 +274,7 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
       const{error}=await sb.from("team_tournaments").update({teams:safeTeams,updated_at:new Date().toISOString()}).eq("id",tourney.id);
       if(error) throw error; // never report "saved" when the write failed (e.g. RLS)
       pendingTeams.current=null;
+      try{ localStorage.removeItem(pendingKey); }catch(e){} // confirmed in DB — drop the backup
       lastConfirmed.current=Date.now();
       // Only NOW mark as online — scores are confirmed in the database
       clearOfflineTimer();
@@ -254,6 +290,7 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
 
   function scheduleSync(updatedTeams) {
     pendingTeams.current = updatedTeams;  // always keep latest for flush
+    try{ localStorage.setItem(pendingKey, JSON.stringify(updatedTeams)); }catch(e){} // survive dead phone
     if (saveTimer.current) clearTimeout(saveTimer.current);
     setSaveStatus("saving");
     // Claim the writer slot on first edit (not on page load — see initWriter)
@@ -384,8 +421,12 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
             <div style={{ fontSize:48, fontWeight:800, lineHeight:1 }}>{currentHole}</div>
             <div style={{ fontSize:12, color:C.green, fontWeight:600 }}>Par {effPar}{effPar!==holeData.par?" !!":""} · Hdcp {holeData.hdcp}</div>
           </div>
-          <button onClick={()=>setShowCaptainSettings(true)}
-            style={{ background:"rgba(123,180,80,0.15)", border:`1px solid ${C.green}`, color:C.green, fontSize:15, cursor:"pointer", padding:"12px 20px", borderRadius:12, fontWeight:700 }}>⚙️ Settings</button>
+          <div style={{display:"flex",gap:8,alignItems:"center"}}>
+            <button onClick={toggleDayMode} title={dayMode?"Switch to dark mode":"Day mode — easier to read in sunlight"}
+              style={{ background:dayMode?"rgba(35,100,45,0.10)":"rgba(232,184,75,0.10)", border:`1px solid ${dayMode?C.green:C.gold}`, color:dayMode?C.green:C.gold, fontSize:18, cursor:"pointer", padding:"10px 14px", borderRadius:12, fontWeight:700 }}>{dayMode?"🌙":"☀️"}</button>
+            <button onClick={()=>setShowCaptainSettings(true)}
+              style={{ background:"rgba(123,180,80,0.15)", border:`1px solid ${C.green}`, color:C.green, fontSize:15, cursor:"pointer", padding:"12px 20px", borderRadius:12, fontWeight:700 }}>⚙️ Settings</button>
+          </div>
         </div>
         {/* Progress bar */}
         <div style={{ display:"flex", gap:2, marginBottom:8 }}>
@@ -747,7 +788,7 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
                 <button onClick={()=>!readOnlyMode&&setPlayerScore(j,currentHole,score!==null?Math.max(1,score-1):effPar-1)}
                   style={{ width:56,height:56,borderRadius:"50%",background:C.dim,border:`1px solid ${C.border}`,color:readOnlyMode?C.dim:C.text,fontSize:30,fontWeight:700,cursor:readOnlyMode?"not-allowed":"pointer",opacity:readOnlyMode?0.4:1 }}>−</button>
                 <div style={{ flex:1,textAlign:"center" }}>
-                  <div style={{ fontSize:56,fontWeight:800,color:score!==null?C.text:C.muted,lineHeight:1 }}>{score!==null?score:"--"}</div>
+                  <div style={{ fontSize:56,fontWeight:800,color:score!==null?C.text:C.muted,lineHeight:1,fontVariantNumeric:"tabular-nums" }}>{score!==null?score:"--"}</div>
                   {score===null&&<div style={{ fontSize:11,color:C.muted,marginTop:4 }}>{readOnlyMode?"view only":"tap + to enter"}</div>}
                 </div>
                 <button onClick={()=>!readOnlyMode&&setPlayerScore(j,currentHole,score!==null?score+1:effPar)}
