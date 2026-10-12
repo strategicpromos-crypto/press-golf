@@ -1039,11 +1039,12 @@ export default function TeamTournament({onBack, user, onDelete}){
                       placeholder={"Player "+(j+1)} style={{flex:1,padding:"10px",background:C.surface,border:"1px solid "+C.border,borderRadius:8,color:C.text,fontSize:13,outline:"none"}}/>
                     {bigBoyEnabled&&(
                       <button onClick={()=>{const bb=[...(team.bigBoy||Array(team.size).fill(false))];bb[j]=!bb[j];updateTeam(i,{bigBoy:bb});}}
-                        style={{flexShrink:0,padding:"6px 10px",borderRadius:8,fontSize:11,fontWeight:700,cursor:"pointer",
-                          background:(team.bigBoy?.[j])?C.gold:"rgba(255,255,255,0.06)",
-                          color:(team.bigBoy?.[j])?"#0a1a0f":"rgba(255,255,255,0.4)",
-                          border:"1px solid "+((team.bigBoy?.[j])?"rgba(232,184,75,0.6)":"rgba(255,255,255,0.15)")
-                        }}>BB</button>
+                        style={{flexShrink:0,padding:"10px 14px",borderRadius:10,fontSize:12,fontWeight:800,cursor:"pointer",letterSpacing:0.5,
+                          background:(team.bigBoy?.[j])?C.gold:"rgba(232,184,75,0.08)",
+                          color:(team.bigBoy?.[j])?"#0a1a0f":C.gold,
+                          border:"1.5px solid "+((team.bigBoy?.[j])?C.gold:"rgba(232,184,75,0.45)"),
+                          boxShadow:(team.bigBoy?.[j])?"0 2px 10px rgba(232,184,75,0.4)":"none"
+                        }}>⭐ BIG BOY</button>
                     )}
                   </div>
                 ))}
