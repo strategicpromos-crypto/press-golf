@@ -1,9 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { COURSES } from "./golf.js";
 import { sb } from "./supabase.js";
-import TourneyJoin from "./TourneyJoin.jsx";
-import TourneyCaptain from "./TourneyCaptain.jsx";
-import TourneySpectator from "./TourneySpectator.jsx";
 import { calcSkins, SkinsTab } from "./skins.jsx";
 
 // Dark (default) and Day (high-contrast, sunlight-readable) themes.
@@ -254,9 +251,6 @@ export default function TeamTournament({onBack, user, onDelete}){
   const[showHelp,setShowHelp]=useState(false);
   const[loading,setLoading]=useState(false);
   const[saveStatus,setSaveStatus]=useState("");
-  const[captainTourney,setCaptainTourney]=useState(null);
-  const[captainTeamIdx,setCaptainTeamIdx]=useState(0);
-  const[spectatorTourney,setSpectatorTourney]=useState(null);
   const[lbTab,setLbTab]=useState("standings");      // leaderboard tab
   const[showSettings,setShowSettings]=useState(false); // director settings overlay
   const[ctpConfirm,setCtpConfirm]=useState(false);     // mid-round CTP enable confirmation
@@ -356,7 +350,7 @@ export default function TeamTournament({onBack, user, onDelete}){
   // The snapshot guard also skips saves when nothing changed (realtime echo of
   // our own write, or a captain's update) — killing the old infinite loop.
   useEffect(()=>{
-    if(!tourneyId||screen==="home"||screen==="saved"||screen==="join")return;
+    if(!tourneyId||screen==="home"||screen==="saved")return;
     if(lastSavedSnap.current!==null && localSnap()===lastSavedSnap.current){
       setSaveStatus("");
       return;
@@ -615,33 +609,6 @@ export default function TeamTournament({onBack, user, onDelete}){
   const isLastHole=currentHole===(course?.holes?.length||18);
 
   // JOIN (spectator / captain / director via code entry)
-  if(screen==="join"){
-    return(
-      <TourneyJoin
-        code={null}
-        teamIdx={null}
-        onDirector={()=>setScreen("home")}
-        onCaptain={(t,idx)=>{
-          setScreen("captainView");
-          setCaptainTourney(t);
-          setCaptainTeamIdx(idx);
-        }}
-        onSpectator={(t)=>{
-          setScreen("spectatorView");
-          setSpectatorTourney(t);
-        }}
-      />
-    );
-  }
-
-  if(screen==="captainView"&&captainTourney){
-    return <TourneyCaptain tourney={captainTourney} teamIdx={captainTeamIdx} onBack={()=>setScreen("join")}/>;
-  }
-
-  if(screen==="spectatorView"&&spectatorTourney){
-    return <TourneySpectator tourney={spectatorTourney} onBack={()=>setScreen("join")}/>;
-  }
-
   // HOME
   if(screen==="home"){
     // Show in "active" section: status=active OR has any scores (guards against status corruption)
@@ -785,8 +752,6 @@ export default function TeamTournament({onBack, user, onDelete}){
             setScreen("setup");
           }}>+ New Tournament Setup</BigBtn>
 
-          <div style={{height:10}}/>
-          <GhostBtn onClick={()=>setScreen("join")} color={C.green}>🔑 Join a Tournament</GhostBtn>
           <div style={{height:10}}/>
           <GhostBtn onClick={onBack}>← Back to Press</GhostBtn>
           <div style={{height:8}}/>
