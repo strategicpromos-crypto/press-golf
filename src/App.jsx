@@ -4,7 +4,7 @@ import { loadStripe } from "https://esm.sh/@stripe/stripe-js@2";
 import LiveRound from "./LiveRound.jsx";
 import IndividualRound from "./IndividualRound.jsx";
 import TeamTournament from "./TeamTournament.jsx";
-import TourneyJoin, { TourneyLoader } from "./TourneyJoin.jsx";
+import { TourneyLoader } from "./TourneyJoin.jsx";
 import TourneyCaptain from "./TourneyCaptain.jsx";
 import TourneySpectator from "./TourneySpectator.jsx";
 import OpponentScoreEntry from "./OpponentScoreEntry.jsx";
@@ -1433,15 +1433,6 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
     );
   }
 
-  // ── JOIN TOURNEY (spectator code entry with back button) ─────────────────
-  if(view==="joinTourney") return(
-    <TourneyCodeEntry
-      onBack={()=>setView("roster")}
-      onCaptain={(t,idx)=>{setTourneyData(t);setTourneyCaptainIdx(idx);setTourneyView("captain");}}
-      onSpectator={(t)=>{setTourneyData(t);setTourneyView("spectator");}}
-    />
-  );
-
   if(view==="tournament") return(
     <TeamTournament user={user} onBack={()=>setView("roster")} onDelete={()=>setActiveTourney(null)}/>
   );
@@ -1558,11 +1549,6 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
             <div style={{fontSize:11,fontWeight:600,opacity:0.75}}>Best Ball · Teams · Leaderboard</div>
             <div style={{fontSize:11,opacity:0.6,marginTop:2}}>Director sends links to captains</div>
           </div>
-        </button>
-
-        {/* ── JOIN ── */}
-        <button onClick={()=>setView("joinTourney")} style={{width:"100%",maxWidth:360,background:"transparent",border:`1.5px solid ${C.green}55`,color:C.green,padding:"10px 18px",borderRadius:14,fontSize:13,fontWeight:700,cursor:"pointer",marginBottom:12,textAlign:"left"}}>
-          🔑 Join a Tournament &nbsp;<span style={{fontSize:11,fontWeight:400,opacity:0.6}}>— got a code or link?</span>
         </button>
 
         <div style={{display:"flex",background:"rgba(0,0,0,0.35)",border:`1px solid ${C.border}`,borderRadius:14,overflow:"hidden",maxWidth:360,margin:"0 auto"}}>
