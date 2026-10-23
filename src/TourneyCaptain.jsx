@@ -189,6 +189,24 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
     setClaiming(false);
   }
 
+  // ── Lazy writer claim — first edit claims the slot, not page load ──────────
+  // MUST live at component level: scheduleSync() calls it, and a copy defined
+  // inside the useEffect below is out of scheduleSync's scope — that scoping
+  // bug silently killed every captain save (fixed Oct 23, 2026).
+  async function ensureWriter(){
+    if(isWriter.current) return true;
+    if(readOnlyMode) return false;
+    try{
+      const{data}=await sb.from("team_tournaments").select("teams").eq("id",tourney.id).single();
+      const sbToken=(data?.teams||[])[teamIdx]?.writer_token||null;
+      if(sbToken){ setReadOnlyMode(true); return false; } // someone claimed it first
+      const newToken=Date.now().toString(36)+"_"+Math.random().toString(36).slice(2,6);
+      const ok=await claimWriterToken(newToken);
+      if(ok){ localStorage.setItem(localKey,newToken); isWriter.current=true; return true; }
+    }catch(e){}
+    return false;
+  }
+
   useEffect(()=>{
     async function initWriter(){
       // 1. What token does this device have in localStorage?
@@ -211,21 +229,6 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
       // ensureWriter). This stops the director (or anyone previewing the link)
       // from accidentally locking the real captain out of scoring.
     }
-
-  // ── Lazy writer claim — first edit claims the slot, not page load ──────────
-  async function ensureWriter(){
-    if(isWriter.current) return true;
-    if(readOnlyMode) return false;
-    try{
-      const{data}=await sb.from("team_tournaments").select("teams").eq("id",tourney.id).single();
-      const sbToken=(data?.teams||[])[teamIdx]?.writer_token||null;
-      if(sbToken){ setReadOnlyMode(true); return false; } // someone claimed it first
-      const newToken=Date.now().toString(36)+"_"+Math.random().toString(36).slice(2,6);
-      const ok=await claimWriterToken(newToken);
-      if(ok){ localStorage.setItem(localKey,newToken); isWriter.current=true; return true; }
-    }catch(e){}
-    return false;
-  }
 
     initWriter();
 
@@ -270,7 +273,9 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
       const{data:current,error:readErr}=await sb.from("team_tournaments").select("teams").eq("id",tourney.id).single();
       if(readErr) throw readErr;
       const dbTeams=current?.teams||teamsToSave;
-      const safeTeams=dbTeams.map((t,i)=>i===teamIdx?teamsToSave[i]:t);
+      // Preserve the slot's writer_token — the captain's local team copy may
+      // predate the claim, and saving scores must not erase the lock.
+      const safeTeams=dbTeams.map((t,i)=>i===teamIdx?{...teamsToSave[i],writer_token:(t.writer_token||teamsToSave[i]?.writer_token||undefined)}:t);
       const{error}=await sb.from("team_tournaments").update({teams:safeTeams,updated_at:new Date().toISOString()}).eq("id",tourney.id);
       if(error) throw error; // never report "saved" when the write failed (e.g. RLS)
       pendingTeams.current=null;
