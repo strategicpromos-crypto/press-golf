@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { sb } from "./supabase.js";
 import { COURSES, getStrokeHoles, calcAutoPressNassau } from "./golf.js";
+import CourseSearch from "./CourseSearch.jsx";
 
 const C = {
   bg:"#080f0a", surface:"#0e1a10", card:"#121e14",
@@ -310,6 +311,7 @@ function getTally(scores, course, opp, courseId) {
 export default function LiveRound({ user, players, resumeRoundId, onBack, onPostToLedger }) {
   const [step,        setStep]        = useState("setup");
   const [courseId,    setCourseId]    = useState("south-toledo");
+  const [showCourseSearch, setShowCourseSearch] = useState(false);
   const [opponents,   setOpponents]   = useState([]);
   const [scores,      setScores]      = useState({});
   const [currentHole, setCurrentHole] = useState(1);
@@ -855,12 +857,14 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
         {/* Course picker */}
         <div style={{marginBottom:16}}>
           <Lbl>Select Course</Lbl>
-          <select value={courseId} onChange={e=>setCourseId(e.target.value)} style={selStyle}>
+          <select value={courseId} onChange={e=>{ if(e.target.value==="__search__"){ setShowCourseSearch(true); } else { setCourseId(e.target.value); } }} style={selStyle}>
             {Object.entries(COURSES).map(([id,c])=>(
               <option key={id} value={id}>{c.name} - {c.city}</option>
             ))}
+            <option value="__search__">🔍 Search for a course…</option>
           </select>
           {COURSES[courseId]?.note && <div style={{fontSize:11,color:C.gold,marginTop:6}}>{COURSES[courseId].note}</div>}
+          {showCourseSearch && <CourseSearch C={C} onClose={()=>setShowCourseSearch(false)} onPick={id=>{ setCourseId(id); setShowCourseSearch(false); }} />}
         </div>
 
         <div style={{fontSize:11,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>
