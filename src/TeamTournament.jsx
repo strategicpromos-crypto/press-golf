@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { COURSES } from "./golf.js";
+import CourseSearch from "./CourseSearch.jsx";
 import { sb } from "./supabase.js";
 import { calcSkins, SkinsTab } from "./skins.jsx";
 
@@ -229,6 +230,7 @@ export default function TeamTournament({onBack, user, onDelete}){
   }
   const[screen,setScreen]=useState("home");
   const[courseId,setCourseId]=useState("south-toledo");
+  const[showCourseSearch,setShowCourseSearch]=useState(false);
   const[birdieBonus,setBirdieBonus]=useState(true);
   const[ballsByPar,setBallsByPar]=useState({3:2,4:2,5:2}); // balls counted per hole by par
   const[skinsEnabled,setSkinsEnabled]=useState(false);
@@ -831,11 +833,13 @@ export default function TeamTournament({onBack, user, onDelete}){
           {/* Course */}
           <div style={{marginBottom:16}}>
             <Lbl>Course</Lbl>
-            <select value={courseId} onChange={e=>{setCourseId(e.target.value);setHolePars({});}} style={{width:"100%",padding:"14px",background:C.surface,border:"1px solid "+C.border,borderRadius:10,color:C.text,fontSize:15,outline:"none",WebkitAppearance:"none"}}>
+            <select value={courseId} onChange={e=>{ if(e.target.value==="__search__"){ setShowCourseSearch(true); } else { setCourseId(e.target.value); setHolePars({}); } }} style={{width:"100%",padding:"14px",background:C.surface,border:"1px solid "+C.border,borderRadius:10,color:C.text,fontSize:15,outline:"none",WebkitAppearance:"none"}}>
               {Object.entries(COURSES).map(([id,c])=>(
                 <option key={id} value={id}>{c.name} — Par {c.par}</option>
               ))}
+              <option value="__search__">🔍 Search for a course…</option>
             </select>
+            {showCourseSearch && <CourseSearch C={C} onClose={()=>setShowCourseSearch(false)} onPick={id=>{ setCourseId(id); setHolePars({}); setShowCourseSearch(false); }} />}
           </div>
 
           {/* South Toledo hole #4 par toggle */}
@@ -1508,6 +1512,32 @@ export default function TeamTournament({onBack, user, onDelete}){
                       <div style={{position:"absolute",top:4,left:bigBoyEnabled?26:4,width:20,height:20,borderRadius:"50%",background:"#fff",transition:"left 0.2s"}}/>
                     </button>
                   </div>
+                  {bigBoyEnabled&&(
+                    <div style={{marginTop:12,borderTop:"1px solid rgba(232,184,75,0.2)",paddingTop:12}}>
+                      <div style={{fontSize:11,color:C.gold,letterSpacing:1,textTransform:"uppercase",fontWeight:700,marginBottom:8}}>Who's in? Tap to mark</div>
+                      {teams.map((team,ti)=>(
+                        <div key={ti} style={{marginBottom:8}}>
+                          <div style={{fontSize:11,color:C.muted,marginBottom:4}}>{team.name||("Team "+(ti+1))}</div>
+                          <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                            {Array.from({length:team.size||1},(_,pi)=>{
+                              const nm=(team.players?.[pi]||"").trim()||("Player "+(pi+1));
+                              const on=team.bigBoy?.[pi]===true;
+                              return(
+                                <button key={pi} onClick={()=>{const bb=[...(team.bigBoy||Array(team.size||1).fill(false))];bb[pi]=!bb[pi];updateTeam(ti,{bigBoy:bb});}}
+                                  style={{padding:"9px 12px",borderRadius:10,fontSize:12,fontWeight:800,cursor:"pointer",letterSpacing:0.5,
+                                    background:on?C.gold:"rgba(232,184,75,0.08)",
+                                    color:on?"#0a1a0f":C.gold,
+                                    border:"1.5px solid "+(on?C.gold:"rgba(232,184,75,0.45)"),
+                                    boxShadow:on?"0 2px 10px rgba(232,184,75,0.4)":"none"
+                                  }}>{on?"⭐ ":""}{nm}</button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ))}
+                      <div style={{fontSize:10,color:C.muted,marginTop:4}}>Saves automatically · leaderboard updates live</div>
+                    </div>
+                  )}
                 </div>
               )}
               {skinsEnabled&&(
