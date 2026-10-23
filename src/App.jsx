@@ -8,6 +8,7 @@ import { TourneyLoader } from "./TourneyJoin.jsx";
 import TourneyCaptain from "./TourneyCaptain.jsx";
 import TourneySpectator from "./TourneySpectator.jsx";
 import OpponentScoreEntry from "./OpponentScoreEntry.jsx";
+import { initCourses } from "./courseStore.js";
 
 const STRIPE_PK = "pk_test_51TIp2h2LCsgE9lxhGjdLujrI8YsZTGOtj1mC8fqHFupIOonwdYHqZRf2uImMvdoXCOclEH0ll3zxzOpfs0Jdo1Fh00nFj1I8GW";
 const PRICE_ID  = "price_1Tip7m2LCsgE9Ikh0yUEVgE8";
@@ -710,6 +711,12 @@ export default function App(){
   const [showProInfo,setShowProInfo]=useState(false);
   const [stripeSaving,setStripeSaving]=useState(false);
   const [needsNewPassword,setNeedsNewPassword]=useState(false);
+
+  // Shared course library: merge Supabase-saved courses into COURSES at start
+  // (courseStore). The rev bump re-renders once the library lands so pickers
+  // and captain/spectator lookups see saved courses.
+  const [, setCoursesRev] = useState(0);
+  useEffect(()=>{ initCourses(()=>setCoursesRev(r=>r+1)); },[]);
 
   const urlParams   = new URLSearchParams(window.location.search);
   const inviteCode  = urlParams.get("invite");
