@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { sb } from "./supabase.js";
 import { COURSES, getStrokeHoles, calcAutoPressNassau } from "./golf.js";
+import CourseSearch from "./CourseSearch.jsx";
 
 const C = {
   bg:"#080f0a", surface:"#0e1a10", card:"#121e14",
@@ -130,6 +131,7 @@ export default function IndividualRound({ user, players, roundData: initialRound
 
   // ── Setup screen state ─────────────────────────────────────────────────────
   const [courseId,    setCourseId]    = useState(initialRound?.course_id || "south-toledo");
+  const [showCourseSearch, setShowCourseSearch] = useState(false);
   const [myName,      setMyName]      = useState("");
   const [opponents,   setOpponents]   = useState(initialRound?.opponents || []);
   const [addSheet,    setAddSheet]    = useState(false);
@@ -472,11 +474,13 @@ export default function IndividualRound({ user, players, roundData: initialRound
         {/* Course */}
         <div style={{marginBottom:16}}>
           <div style={{fontSize:11,color:C.green,letterSpacing:1.5,textTransform:"uppercase",marginBottom:6,fontWeight:600}}>Select Course</div>
-          <select value={courseId} onChange={e=>setCourseId(e.target.value)} style={selStyle}>
+          <select value={courseId} onChange={e=>{ if(e.target.value==="__search__"){ setShowCourseSearch(true); } else { setCourseId(e.target.value); } }} style={selStyle}>
             {Object.entries(COURSES).map(([id,c])=>(
               <option key={id} value={id}>{c.name} - {c.city}</option>
             ))}
+            <option value="__search__">🔍 Search for a course…</option>
           </select>
+          {showCourseSearch && <CourseSearch C={C} onClose={()=>setShowCourseSearch(false)} onPick={id=>{ setCourseId(id); setShowCourseSearch(false); }} />}
         </div>
         {/* Opponents */}
         <div style={{fontSize:11,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>Opponents ({opponents.length})</div>
