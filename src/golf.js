@@ -298,6 +298,37 @@ export const COURSES = {
       { hole:18, par:4, hdcp:14, side:"back" },
     ]
   },
+
+  // ── GIANT OAK GOLF CLUB — Temperance, MI ──────────────────────────────────
+  // 18-hole "Giant Oaks" course (par 72). VERIFIED against the official
+  // scorecard (photo from Michael, Oct 23, 2026) — pars AND handicap
+  // allocations. Note: Hole19 publishes a different (stale) allocation;
+  // OpenGolfAPI's matched the paper card exactly.
+  "giant-oak": {
+    name: "Giant Oak Golf Club",
+    city: "Temperance, MI",
+    par: 72,
+    holes: [
+      { hole:1,  par:5, hdcp:5,  side:"front" },
+      { hole:2,  par:5, hdcp:9,  side:"front" },
+      { hole:3,  par:3, hdcp:15, side:"front" },
+      { hole:4,  par:4, hdcp:11, side:"front" },
+      { hole:5,  par:5, hdcp:3,  side:"front" },
+      { hole:6,  par:3, hdcp:13, side:"front" },
+      { hole:7,  par:4, hdcp:7,  side:"front" },
+      { hole:8,  par:4, hdcp:1,  side:"front" },
+      { hole:9,  par:3, hdcp:17, side:"front" },
+      { hole:10, par:4, hdcp:14, side:"back" },
+      { hole:11, par:4, hdcp:2,  side:"back" },
+      { hole:12, par:4, hdcp:8,  side:"back" },
+      { hole:13, par:4, hdcp:16, side:"back" },
+      { hole:14, par:5, hdcp:4,  side:"back" },
+      { hole:15, par:3, hdcp:10, side:"back" },
+      { hole:16, par:5, hdcp:12, side:"back" },
+      { hole:17, par:3, hdcp:18, side:"back" },
+      { hole:18, par:4, hdcp:6,  side:"back" },
+    ]
+  },
 };
 
 // ── STROKE CALCULATOR ─────────────────────────────────────────────────────────
