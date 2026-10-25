@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { COURSES } from "./golf.js";
 
 // ── STABLEFORD SETUP — v1 (Oct 25, 2026) ─────────────────────────────────────
@@ -89,7 +89,7 @@ function newDay() {
   return { courseId:"south-toledo", extra9:false, extraCourseId:"south-toledo", extraNine:"front", extraIndividual:false, extraTeam:true, extraSkins:true };
 }
 
-export default function StablefordSetup({ onBack }) {
+export default function StablefordSetup({ onBack, onPlay }) {
   const [name, setName] = useState("");
   const [days, setDays] = useState(4);
   const [dayList, setDayList] = useState([newDay(), newDay(), newDay(), newDay()]);
@@ -105,6 +105,35 @@ export default function StablefordSetup({ onBack }) {
   const [adjUpCap, setAdjUpCap] = useState(2);
   const [players, setPlayers] = useState([newPlayer(), newPlayer(), newPlayer(), newPlayer()]);
   const [savedMsg, setSavedMsg] = useState("");
+  const [savedSetup, setSavedSetup] = useState(null);
+  const [savedList, setSavedList] = useState([]);
+
+  function refreshSaved() {
+    try { setSavedList(JSON.parse(localStorage.getItem(LS_KEY) || "[]")); }
+    catch { setSavedList([]); }
+  }
+  useEffect(refreshSaved, []);
+
+  // Load a saved setup back into this form for editing or replaying.
+  function loadIntoForm(s) {
+    setName(s.name || "");
+    setDays(s.days || (s.dayList || []).length || 1);
+    setDayList(s.dayList || [newDay()]);
+    setCountingMode(s.countingMode || "net");
+    setPoints({ ...DEFAULT_POINTS, ...(s.points || {}) });
+    setIndividualOn(s.individualOn !== false);
+    setTeamsOn(s.teamsOn !== false);
+    setBallsToCount(s.ballsToCount || 2);
+    setCtpOn(s.ctpOn !== false);
+    setMovementOn(s.movementOn !== false);
+    setAdjStep(s.adjStep || 3);
+    setAdjDownCap(s.adjDownCap || 3);
+    setAdjUpCap(s.adjUpCap || 2);
+    setPlayers((s.players || []).map(p => ({ ...newPlayer(), ...p, skins: { ...DEFAULT_SKINS, ...(p.skins || {}) } })));
+    setSavedSetup(s);
+    setSavedMsg("Loaded “" + (s.name || "tournament") + "” — edit it here or tap Play below.");
+    window.scrollTo(0, 0);
+  }
 
   const courseOptions = Object.entries(COURSES)
     .map(([id, c]) => ({ id, label: c.name + (c.city ? " (" + c.city + ")" : "") }))
@@ -146,7 +175,9 @@ export default function StablefordSetup({ onBack }) {
     try {
       const prev = JSON.parse(localStorage.getItem(LS_KEY) || "[]");
       localStorage.setItem(LS_KEY, JSON.stringify([setup, ...prev]));
-      setSavedMsg("Saved on this device. Scoring screens come next — this setup is ready to build on.");
+      setSavedSetup(setup);
+      refreshSaved();
+      setSavedMsg("Saved on this device — tap Play below to start scoring it.");
     } catch {
       setSavedMsg("Could not save on this device, but the setup below is ready to review.");
     }
@@ -300,6 +331,27 @@ export default function StablefordSetup({ onBack }) {
           Save setup
         </button>
         {savedMsg&&<div style={{fontSize:13,color:C.gold,marginTop:12,textAlign:"center"}}>{savedMsg}</div>}
+        {savedSetup&&onPlay&&(
+          <button onClick={()=>onPlay(savedSetup)}
+            style={{width:"100%",padding:"16px",background:C.gold,color:"#0a1a0f",border:"none",borderRadius:12,fontSize:16,fontWeight:800,cursor:"pointer",marginTop:12}}>
+            ▶ Play this tournament
+          </button>
+        )}
+        {savedList.length > 0 && (
+          <div style={{marginTop:24}}>
+            <Lbl>Saved on this device</Lbl>
+            {savedList.map(s => (
+              <div key={s.id} style={{background:C.card,border:"1px solid "+C.border,borderRadius:12,padding:"12px 14px",marginBottom:10,display:"flex",alignItems:"center",gap:10}}>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontWeight:700,fontSize:14}}>{s.name}</div>
+                  <div style={{fontSize:12,color:C.muted}}>{s.days} {s.days===1?"day":"days"} · {(s.players||[]).length} players · {s.countingMode==="net"?"Per-hole net":"Count-up"}</div>
+                </div>
+                <button onClick={()=>loadIntoForm(s)} style={{padding:"10px 14px",background:"transparent",border:"1px solid "+C.border,borderRadius:10,color:C.muted,fontSize:13,fontWeight:600,cursor:"pointer"}}>Edit</button>
+                {onPlay&&<button onClick={()=>onPlay(s)} style={{padding:"10px 14px",background:C.gold,border:"none",borderRadius:10,color:"#0a1a0f",fontSize:13,fontWeight:800,cursor:"pointer"}}>▶ Play</button>}
+              </div>
+            ))}
+          </div>
+        )}
 
         <div style={{background:C.card,border:"1px solid "+C.border,borderRadius:12,padding:"14px 16px",marginTop:20}}>
           <div style={{fontSize:11,color:C.gold,letterSpacing:1.5,textTransform:"uppercase",marginBottom:8,fontWeight:600}}>Setup summary</div>
@@ -310,6 +362,10 @@ export default function StablefordSetup({ onBack }) {
             Players: {namedCount} named · Flights, tees, and starting handicaps fixed at setup; skins switches live on each player.
           </div>
         </div>
+
+        <button onClick={onBack} style={{width:"100%",padding:"14px",background:"transparent",border:"1px solid "+C.border,borderRadius:12,color:C.muted,fontSize:14,fontWeight:600,cursor:"pointer",marginTop:20}}>
+          ‹ Back to Home
+        </button>
       </div>
     </div>
   );
