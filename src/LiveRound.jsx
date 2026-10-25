@@ -143,7 +143,7 @@ function calcNassauTotal(scores, course, myStrokeHoles, oppStrokeHoles, betAmoun
   return { front, back, total, net: front + back + total };
 }
 
-function calcSkinsTotal(scores, course, myStrokeHoles, oppStrokeHoles, betPerSkin) {
+function calcSkinsTotal(scores, course, myStrokeHoles, oppStrokeHoles, betPerSkin, carryOver = true) {
   let net = 0, carry = 0;
   for (const h of course.holes) {
     const my  = safeInt(scores["me"]?.[h.hole], -1);
@@ -154,7 +154,8 @@ function calcSkinsTotal(scores, course, myStrokeHoles, oppStrokeHoles, betPerSki
     const pot = betPerSkin + carry;
     if (myNet < oppNet)      { net += pot;  carry = 0; }
     else if (myNet > oppNet) { net -= pot;  carry = 0; }
-    else                     { carry += betPerSkin; }
+    else if (carryOver)      { carry += betPerSkin; }
+    // Without carryover the tied hole is simply dead — no pot rolls forward.
   }
   return net;
 }
@@ -257,6 +258,7 @@ function getTally(scores, course, opp, courseId) {
 
   // -- Skins: show skin count --
   if (opp.betType === "skins") {
+    const carryOver = opp.carryOver !== false; // old buddy bets carry, as before
     let mySkins = 0, oppSkins = 0, carry = 0, net = 0;
     for (const h of course.holes) {
       const my = safeInt(myScores[h.hole],  -1);
@@ -267,7 +269,7 @@ function getTally(scores, course, opp, courseId) {
       const pot = opp.betAmount + carry;
       if (myNet < oppNet)      { mySkins++; net += pot;  carry = 0; }
       else if (myNet > oppNet) { oppSkins++; net -= pot; carry = 0; }
-      else                     { carry += opp.betAmount; }
+      else if (carryOver)      { carry += opp.betAmount; }
     }
     const label = mySkins === oppSkins ? "Even"
       : mySkins > oppSkins ? "You " + mySkins + "-" + oppSkins
@@ -342,6 +344,7 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
   const [addBetType,     setAddBetType]     = useState("nassau");
   const [addPressDown,   setAddPressDown]   = useState(2);
   const [addBetAmt,      setAddBetAmt]      = useState("5");
+  const [addCarryOver,   setAddCarryOver]   = useState(true); // skins only: tied holes roll forward (default)
   const [addSameGroup,   setAddSameGroup]   = useState(true); // same group = can enter scores + manual press
 
   const course = COURSES[courseId];
@@ -704,6 +707,7 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
       betType:     addBetType,
       betAmount:   safeInt(addBetAmt, 5),
       pressDown:   addBetType === "nassau-press" ? addPressDown : 2,
+      carryOver:   addCarryOver,
       sameGroup:   addSameGroup,
       manualPresses: [], // holes where manual press was called {hole, betIndex}
       linkedUserId: player.linked_user_id || null,
@@ -893,7 +897,7 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
                       opp.betType === "match" ? "$" + opp.betAmount + "/hole"
                       : opp.betType === "nassau" ? "Nassau $" + opp.betAmount
                       : opp.betType === "nassau-press" ? "Nassau - Auto Press " + (opp.pressDown||2) + "D $" + opp.betAmount
-                      : "Skins $" + opp.betAmount
+                      : "Skins $" + opp.betAmount + (opp.carryOver===false?" · no carry":"")
                     }
                   </div>
                   {opp.strokes !== 0 && sh.length > 0 && (
@@ -977,6 +981,19 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
             <Lbl>{addBetType==="match"?"$ Per Hole":addBetType==="nassau"?"$ Per Side/Total":addBetType==="nassau-press"?"$ Per Side/Total/Press":"$ Per Skin"}</Lbl>
             <input type="number" min="1" value={addBetAmt} onChange={e=>setAddBetAmt(e.target.value)} placeholder="e.g. 5" style={{width:"100%",padding:"12px",background:C.surface,border:"1px solid "+C.border,borderRadius:10,color:C.text,fontSize:20,outline:"none",boxSizing:"border-box",textAlign:"center",fontWeight:700}} inputMode="decimal"/>
           </div>
+
+          {addBetType === "skins" && (
+            <div>
+              <Lbl>Tied holes</Lbl>
+              <div style={{display:"flex",gap:8}}>
+                <button onClick={()=>setAddCarryOver(true)} style={{flex:1,padding:"10px 4px",fontSize:12,fontWeight:addCarryOver?700:500,background:addCarryOver?C.gold:C.surface,color:addCarryOver?"#0a1a0f":C.muted,border:"1px solid "+(addCarryOver?C.gold:C.border),cursor:"pointer",borderRadius:8}}>Carry over</button>
+                <button onClick={()=>setAddCarryOver(false)} style={{flex:1,padding:"10px 4px",fontSize:12,fontWeight:!addCarryOver?700:500,background:!addCarryOver?C.gold:C.surface,color:!addCarryOver?"#0a1a0f":C.muted,border:"1px solid "+(!addCarryOver?C.gold:C.border),cursor:"pointer",borderRadius:8}}>Don't carry</button>
+              </div>
+              <div style={{fontSize:11,color:C.muted,marginTop:6,textAlign:"center"}}>
+                {addCarryOver?"A tied hole rolls forward and makes the next hole worth more.":"A tied hole is dead — every hole is worth exactly one skin."}
+              </div>
+            </div>
+          )}
 
           {/* Same Group Toggle */}
           <div style={{background:C.dim,borderRadius:12,padding:"14px 16px"}}>
