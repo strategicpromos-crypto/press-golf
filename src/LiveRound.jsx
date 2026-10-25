@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { sb } from "./supabase.js";
-import { COURSES, getStrokeHoles, calcAutoPressNassau } from "./golf.js";
+import { COURSES, getStrokeHoles, calcAutoPressNassau, courseHasHdcp } from "./golf.js";
 import CourseSearch from "./CourseSearch.jsx";
 
 const C = {
@@ -858,10 +858,10 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
         <div style={{marginBottom:16}}>
           <Lbl>Select Course</Lbl>
           <select value={courseId} onChange={e=>{ if(e.target.value==="__search__"){ setShowCourseSearch(true); } else { setCourseId(e.target.value); } }} style={selStyle}>
+            <option value="__search__">🔍 Search for a course…</option>
             {Object.entries(COURSES).map(([id,c])=>(
               <option key={id} value={id}>{c.name} - {c.city}</option>
             ))}
-            <option value="__search__">🔍 Search for a course…</option>
           </select>
           {COURSES[courseId]?.note && <div style={{fontSize:11,color:C.gold,marginTop:6}}>{COURSES[courseId].note}</div>}
           {showCourseSearch && <CourseSearch C={C} onClose={()=>setShowCourseSearch(false)} onPick={id=>{ setCourseId(id); setShowCourseSearch(false); }} />}
@@ -1643,13 +1643,16 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
                     <input value={opp.name} onChange={e=>setOpponents(prev=>prev.map(o=>o.playerId===opp.playerId?{...o,name:e.target.value}:o))}
                       style={{width:"100%",padding:"12px",background:C.surface,border:"1px solid "+C.border,borderRadius:8,color:C.text,fontSize:16,fontWeight:600,outline:"none",boxSizing:"border-box",marginBottom:12}}/>
                     <div style={{fontSize:11,color:C.muted,marginBottom:6}}>Strokes per side</div>
+                    {!courseHasHdcp(courseId)&&(
+                      <div style={{fontSize:12,color:C.gold,marginBottom:8}}>⚠ This course has no handicap data — strokes can't apply until handicaps are added (course picker → Search → Edit a saved course).</div>
+                    )}
                     <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:12}}>
-                      <button onClick={()=>setOpponents(prev=>prev.map(o=>o.playerId===opp.playerId?{...o,strokes:Math.max(0,Math.abs(o.strokes||0)-2)*(o.strokes>=0?1:-1)}:o))}
+                      <button disabled={!courseHasHdcp(courseId)} onClick={()=>setOpponents(prev=>prev.map(o=>o.playerId===opp.playerId?{...o,strokes:Math.max(0,Math.abs(o.strokes||0)-2)*(o.strokes>=0?1:-1)}:o))}
                         style={{width:36,height:36,borderRadius:"50%",background:C.dim,border:"1px solid "+C.border,color:C.text,fontSize:20,fontWeight:700,cursor:"pointer"}}>−</button>
                       <div style={{flex:1,textAlign:"center",fontSize:18,fontWeight:800}}>{perSide===0?"Even":dir==="igive"?"You give "+perSide:"You get "+perSide}</div>
-                      <button onClick={()=>setOpponents(prev=>prev.map(o=>o.playerId===opp.playerId?{...o,strokes:(Math.abs(o.strokes||0)+2)*(o.strokes>=0?1:-1)}:o))}
+                      <button disabled={!courseHasHdcp(courseId)} onClick={()=>setOpponents(prev=>prev.map(o=>o.playerId===opp.playerId?{...o,strokes:(Math.abs(o.strokes||0)+2)*(o.strokes>=0?1:-1)}:o))}
                         style={{width:36,height:36,borderRadius:"50%",background:C.dim,border:"1px solid "+C.border,color:C.text,fontSize:20,fontWeight:700,cursor:"pointer"}}>+</button>
-                      <button onClick={()=>setOpponents(prev=>prev.map(o=>o.playerId===opp.playerId?{...o,strokes:-(o.strokes||0)}:o))}
+                      <button disabled={!courseHasHdcp(courseId)} onClick={()=>setOpponents(prev=>prev.map(o=>o.playerId===opp.playerId?{...o,strokes:-(o.strokes||0)}:o))}
                         style={{padding:"8px 14px",background:"rgba(232,184,75,0.15)",border:"1px solid "+C.gold,color:C.gold,borderRadius:8,fontSize:12,fontWeight:700,cursor:"pointer"}}>Flip ⇌</button>
                     </div>
                     <div style={{fontSize:11,color:C.muted,marginBottom:6}}>Back 9 Adjustment (kicks in at hole 10)</div>
