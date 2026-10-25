@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { sb } from "./supabase.js";
-import { COURSES, getStrokeHoles, calcAutoPressNassau } from "./golf.js";
+import { COURSES, getStrokeHoles, calcAutoPressNassau, courseHasHdcp } from "./golf.js";
 import CourseSearch from "./CourseSearch.jsx";
 
 const C = {
@@ -409,7 +409,8 @@ export default function IndividualRound({ user, players, roundData: initialRound
     if(!player || opponents.find(o => o.playerId === addOppId)) return;
     const rawStrokes = safeInt(addStrokes, 0);
     const totalStrokes = rawStrokes * 2;
-    const finalStrokes = addStrokesDir==="igive" ? totalStrokes : addStrokesDir==="iget" ? -totalStrokes : 0;
+    // No handicap data on the course → strokes can't apply; play scratch.
+    const finalStrokes = !courseHasHdcp(courseId) ? 0 : (addStrokesDir==="igive" ? totalStrokes : addStrokesDir==="iget" ? -totalStrokes : 0);
     setOpponents(prev => [...prev, {
       playerId: player.id, name: player.name, strokes: finalStrokes,
       betType: addBetType, betAmount: safeInt(addBetAmt, 5),
@@ -475,10 +476,10 @@ export default function IndividualRound({ user, players, roundData: initialRound
         <div style={{marginBottom:16}}>
           <div style={{fontSize:11,color:C.green,letterSpacing:1.5,textTransform:"uppercase",marginBottom:6,fontWeight:600}}>Select Course</div>
           <select value={courseId} onChange={e=>{ if(e.target.value==="__search__"){ setShowCourseSearch(true); } else { setCourseId(e.target.value); } }} style={selStyle}>
+            <option value="__search__">🔍 Search for a course…</option>
             {Object.entries(COURSES).map(([id,c])=>(
               <option key={id} value={id}>{c.name} - {c.city}</option>
             ))}
-            <option value="__search__">🔍 Search for a course…</option>
           </select>
           {showCourseSearch && <CourseSearch C={C} onClose={()=>setShowCourseSearch(false)} onPick={id=>{ setCourseId(id); setShowCourseSearch(false); }} />}
         </div>
@@ -530,6 +531,9 @@ export default function IndividualRound({ user, players, roundData: initialRound
               </div>
               <div>
                 <div style={{fontSize:11,color:C.green,letterSpacing:1.5,textTransform:"uppercase",marginBottom:6,fontWeight:600}}>Strokes Per Side</div>
+                {!courseHasHdcp(courseId)&&(
+                  <div style={{fontSize:12,color:C.gold,marginBottom:8}}>⚠ This course has no handicap data — strokes can't apply until handicaps are added (course picker → Search → Edit a saved course). This bet will play scratch.</div>
+                )}
                 <div style={{display:"flex",gap:8,marginBottom:8}}>
                   {[["even","Even"],["igive","I Give"],["iget","I Get"]].map(([d,l])=>(
                     <button key={d} onClick={()=>setAddStrokesDir(d)} style={{flex:1,padding:"10px 4px",fontSize:11,fontWeight:addStrokesDir===d?700:500,background:addStrokesDir===d?C.green:C.surface,color:addStrokesDir===d?"#0a1a0f":C.muted,border:"1px solid "+(addStrokesDir===d?C.green:C.border),cursor:"pointer",borderRadius:8}}>{l}</button>
