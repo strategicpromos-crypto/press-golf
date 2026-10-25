@@ -15,7 +15,7 @@
 // free data is usually right (Giant Oak matched its paper card exactly) but
 // not always (its city field said "Mansfield").
 
-import { COURSES } from "./golf.js";
+import { COURSES, holesHaveFullHdcp } from "./golf.js";
 import { sb } from "./supabase.js";
 
 const API_BASE = "https://api.opengolfapi.org/api/v1";
@@ -82,6 +82,37 @@ export async function initCourses(onUpdate) {
     // Table missing (SQL not run yet) or offline — built-ins carry the app.
     console.warn("Course library unavailable:", e?.message || e);
   }
+}
+
+// Saved (non-built-in) courses, for the edit list in CourseSearch. Built-ins
+// are code-owned and never edited from the app.
+export function getLibraryCourses() {
+  return Object.entries(COURSES)
+    .filter(([id]) => !BUILTIN_IDS.has(id))
+    .map(([id, c]) => ({ id, name: c.name || id, city: c.city || "", hdcpOk: holesHaveFullHdcp(c.holes) }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+export function getLibraryCourse(id) {
+  if (!id || BUILTIN_IDS.has(id)) return null;
+  return COURSES[id] || null;
+}
+
+// Rewrite a saved course's card under the SAME id (edit flow). Only the card
+// fields are sent, so source/api_id/created_by already on the row are kept.
+export async function updateCourse(id, course) {
+  if (!id || !course || !Array.isArray(course.holes)) throw new Error("bad course");
+  mergeCourse(id, course);
+  cacheLibrary();
+  const { error } = await sb.from("courses").upsert({
+    id,
+    name: course.name,
+    city: course.city || "",
+    par: course.par,
+    holes: course.holes,
+  }, { onConflict: "id" });
+  if (error) throw error;
+  return id;
 }
 
 // ── OpenGolfAPI ──────────────────────────────────────────────────────────────
