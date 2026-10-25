@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { COURSES, courseHasHdcp } from "./golf.js";
-import CourseSearch from "./CourseSearch.jsx";
+import { isLibraryCourse } from "./courseStore.js";
+import CourseSearch, { CourseDeletePanel } from "./CourseSearch.jsx";
 import { sb } from "./supabase.js";
 import { calcSkins, SkinsTab } from "./skins.jsx";
 import { SideBetsTab } from "./sideBets.jsx";
@@ -232,6 +233,7 @@ export default function TeamTournament({onBack, user, onDelete}){
   const[screen,setScreen]=useState("home");
   const[courseId,setCourseId]=useState("south-toledo");
   const[showCourseSearch,setShowCourseSearch]=useState(false);
+  const[deleteCourseId,setDeleteCourseId]=useState(null);
   const[birdieBonus,setBirdieBonus]=useState(true);
   const[ballsByPar,setBallsByPar]=useState({3:2,4:2,5:2}); // balls counted per hole by par
   const[skinsEnabled,setSkinsEnabled]=useState(false);
@@ -907,16 +909,31 @@ export default function TeamTournament({onBack, user, onDelete}){
               {Object.entries(COURSES).map(([id,c])=>{
                 const selected=id===courseId;
                 return(
-                  <button key={id} onClick={()=>{ if(id!==courseId){ setCourseId(id); setHolePars({}); } }}
-                    style={{textAlign:"left",padding:"12px 14px",background:selected?"rgba(123,180,80,0.15)":C.surface,border:"1px solid "+(selected?C.green:C.border),borderRadius:10,color:C.text,cursor:"pointer"}}>
-                    <div style={{fontWeight:selected?800:600,fontSize:15}}>{selected?"✓ ":""}{c.name} — Par {c.par}</div>
-                    {c.city ? <div style={{fontSize:12,color:C.muted}}>{c.city}</div> : null}
-                  </button>
+                  <div key={id}>
+                    <div style={{display:"flex",gap:8}}>
+                      <button onClick={()=>{ if(id!==courseId){ setCourseId(id); setHolePars({}); } }}
+                        style={{flex:1,textAlign:"left",padding:"12px 14px",background:selected?"rgba(123,180,80,0.15)":C.surface,border:"1px solid "+(selected?C.green:C.border),borderRadius:10,color:C.text,cursor:"pointer"}}>
+                        <div style={{fontWeight:selected?800:600,fontSize:15}}>{selected?"✓ ":""}{c.name} — Par {c.par}</div>
+                        {c.city ? <div style={{fontSize:12,color:C.muted}}>{c.city}</div> : null}
+                      </button>
+                      {isLibraryCourse(id) && (
+                        <button onClick={()=>setDeleteCourseId(id)} aria-label={"Delete "+c.name}
+                          style={{padding:"12px 16px",background:"transparent",border:"1px solid "+C.red,color:C.red,borderRadius:10,fontSize:16,fontWeight:800,cursor:"pointer"}}>
+                          ✕
+                        </button>
+                      )}
+                    </div>
+                    {deleteCourseId===id && (
+                      <CourseDeletePanel course={{id, name:c.name}} C={C}
+                        onDone={()=>setDeleteCourseId(null)}
+                        onDeleted={(gone)=>{ setDeleteCourseId(null); if(gone===courseId){ const rest=Object.keys(COURSES); setCourseId(rest.length?rest[0]:""); setHolePars({}); } }} />
+                    )}
+                  </div>
                 );
               })}
             </div>
             <div ref={searchPanelRef}>
-              {showCourseSearch && <CourseSearch C={C} onClose={()=>setShowCourseSearch(false)} onPick={id=>{ setCourseId(id); setHolePars({}); setShowCourseSearch(false); }} onCourseDeleted={id=>{ if(id===courseId){ const rest=Object.keys(COURSES); setCourseId(rest.length?rest[0]:""); setHolePars({}); } }} />}
+              {showCourseSearch && <CourseSearch C={C} onClose={()=>setShowCourseSearch(false)} onPick={id=>{ setCourseId(id); setHolePars({}); setShowCourseSearch(false); }} />}
             </div>
           </div>
 
