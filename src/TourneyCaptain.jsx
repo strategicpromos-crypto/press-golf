@@ -3,6 +3,7 @@ import { sb } from "./supabase.js";
 import { COURSES } from "./golf.js";
 import { SkinsTab } from "./skins.jsx";
 import { RulesTab } from "./RulesTab.jsx";
+import { SideBetsTab } from "./sideBets.jsx";
 
 // Dark (default) and Day (high-contrast, sunlight-readable) themes.
 // The component picks one via `dayMode` and shadows it as `C`, so every
@@ -568,7 +569,7 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
               const medals=["1st","2nd","3rd"];
               return(<>
                 <div style={{display:"flex",gap:0,marginBottom:16,border:"1px solid "+C.border,borderRadius:10,overflow:"hidden"}}>
-                  {[["standings","Standings"],["top10","Individuals"],["skins","Skins"],["rules","📋 Rules"],...(ctpEnabled?[["ctp","CTP"]]:[])]
+                  {[["standings","Standings"],["top10","Individuals"],["skins","Skins"],["bets","💵 Bets"],["rules","📋 Rules"],...(ctpEnabled?[["ctp","CTP"]]:[])]
                     .map(([id,lbl])=>(
                     <button key={id} onClick={()=>setBTab(id)} style={{flex:1,padding:"11px",fontSize:12,fontWeight:bTab===id?700:500,background:bTab===id?(id==="ctp"?C.gold:C.green):"transparent",color:bTab===id?"#0a1a0f":C.muted,border:"none",cursor:"pointer"}}>{lbl}</button>
                   ))}
@@ -697,6 +698,8 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
                     })}
                   </div>
                 )}
+                {/* Bets are read-only for captains — no onDelete, so no setup or remove controls. Only the director runs bets. */}
+                {bTab==="bets"&&<SideBetsTab bets={tourney.side_bets||[]} teams={tourney.teams||[]} course={course} courseId={tourney.course_id||"south-toledo"} C={C}/>}
                 {bTab==="rules"&&<RulesTab rules={tourney.director_rules||""} holeNotes={tourney.hole_notes||{}} C={C}/>}
               </>);
             })()}
