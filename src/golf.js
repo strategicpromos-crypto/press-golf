@@ -334,9 +334,25 @@ export const COURSES = {
 // ── STROKE CALCULATOR ─────────────────────────────────────────────────────────
 // totalStrokes = strokes given to opponent (positive number)
 // Returns array of hole numbers where opponent gets a stroke
+// Handicap completeness: the stroke engine needs all 18 indexes, 1–18, each
+// used exactly once. Courses saved without handicaps (pars only) fail this
+// check, and stroke math then plays scratch instead of inventing stroke
+// holes from missing data — a silent wrong stroke is worse than none.
+export function holesHaveFullHdcp(holes) {
+  if (!Array.isArray(holes) || holes.length !== 18) return false;
+  const hdcps = holes.map(h => h.hdcp);
+  if (hdcps.some(h => !Number.isInteger(h) || h < 1 || h > 18)) return false;
+  return new Set(hdcps).size === 18;
+}
+
+export function courseHasHdcp(courseId) {
+  return holesHaveFullHdcp(COURSES[courseId]?.holes);
+}
+
 export function getStrokeHoles(courseId, totalStrokes) {
   const course = COURSES[courseId];
   if (!course || totalStrokes === 0) return [];
+  if (!holesHaveFullHdcp(course.holes)) return [];
 
   const strokesPerSide = Math.floor(totalStrokes / 2);
   const extraStroke    = totalStrokes % 2; // front gets extra if odd
