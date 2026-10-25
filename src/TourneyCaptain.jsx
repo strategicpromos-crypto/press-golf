@@ -80,6 +80,9 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
   const [ctpPopup,     setCtpPopup]     = useState(false); // simple open/close
   const [ctpName,      setCtpName]      = useState("");
   const [ctpDist,      setCtpDist]      = useState("");
+  const [ctpPrompt,    setCtpPrompt]    = useState(false); // "Did you get a closest to the pin?" gate before Next Hole
+  const [ctpAdvanceAfterSave, setCtpAdvanceAfterSave] = useState(false); // prompt flow: advance once the CTP save lands
+  const ctpAnsweredRef = useRef(new Set()); // holes answered (No, or Yes+saved) this session — don't re-prompt
   const saveTimer      = useRef(null);
   const subRef         = useRef(null);
   const pollTimer      = useRef(null);
@@ -889,7 +892,7 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
         {ctpEnabled&&ctpHoles.includes(currentHole)&&(()=>{
           const leader=ctpLeaders[currentHole];
           return(
-            <button onClick={()=>{setCtpName("");setCtpDist("");setCtpPopup(true);}}
+            <button onClick={()=>{setCtpName("");setCtpDist("");setCtpAdvanceAfterSave(false);setCtpPopup(true);}}
               style={{width:"100%",padding:"14px 16px",marginBottom:10,background:leader?"rgba(232,184,75,0.15)":"rgba(232,184,75,0.08)",border:"2px solid rgba(232,184,75,0.5)",borderRadius:12,cursor:"pointer",textAlign:"left",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <div style={{display:"flex",alignItems:"center",gap:10}}>
                 <svg width="28" height="36" viewBox="0 0 28 36" fill="none" xmlns="http://www.w3.org/2000/svg" style={{flexShrink:0,display:"block"}}><path d="M14 0C6.268 0 0 6.268 0 14c0 9.333 14 22 14 22S28 23.333 28 14C28 6.268 21.732 0 14 0z" fill="#e05050"/><circle cx="14" cy="14" r="5.5" fill="white"/></svg>
@@ -981,7 +984,13 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
           }
           // Rebuild subscription if connection dropped mid-hole
           if(connStatus==="offline"||connStatus==="syncing") startSubscription();
-          if(!isLastHole) setCurrentHole(h=>h+1);
+          // CTP gate: on a CTP hole not yet answered this session, ask first
+          // instead of advancing. Yes opens entry, No advances.
+          if(!isLastHole&&ctpEnabled&&ctpHoles.includes(currentHole)&&!ctpAnsweredRef.current.has(currentHole)){
+            setCtpPrompt(true);
+          } else if(!isLastHole){
+            setCurrentHole(h=>h+1);
+          }
         }} disabled={isLastHole} style={{
           width:"100%",padding:"18px",background:isLastHole?"#1a2a1a":C.green,
           color:isLastHole?C.muted:"#0a1a0f",border:"none",borderRadius:14,
@@ -992,6 +1001,30 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
       </div>
 
       {/* ── CAPTAIN SETTINGS OVERLAY ─────────────────────────────────── */}
+      {/* ── CTP PROMPT — "Did you get a closest to the pin?" ────────────── */}
+      {ctpPrompt&&(()=>{
+        const leader=ctpLeaders[currentHole];
+        return(
+          <div style={{position:"fixed",inset:0,zIndex:600,background:"rgba(0,0,0,0.9)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
+            <div style={{background:C.surface,border:"2px solid "+C.gold,borderRadius:20,padding:24,width:"100%",maxWidth:340,textAlign:"center"}}>
+              <div style={{fontSize:20,fontWeight:800,color:C.gold,marginBottom:6}}>📍 Closest to the Pin?</div>
+              <div style={{fontSize:13,color:C.muted,marginBottom:6}}>Hole {currentHole} - Par {effPar}</div>
+              {leader?(
+                <div style={{fontSize:13,color:C.muted,marginBottom:16}}>Current leader: <span style={{fontWeight:700,color:C.text}}>{leader.name}</span> — <span style={{fontWeight:800,color:C.gold}}>{leader.distance}</span><br/>Did anyone beat it?</div>
+              ):(
+                <div style={{fontSize:13,color:C.muted,marginBottom:16}}>Did anyone get closest to the pin on this hole?</div>
+              )}
+              <div style={{display:"flex",gap:10}}>
+                <button onClick={()=>{ctpAnsweredRef.current.add(currentHole);setCtpPrompt(false);if(!isLastHole)setCurrentHole(h=>h+1);}}
+                  style={{flex:1,padding:"14px",background:"transparent",color:C.muted,border:"1px solid "+C.border,borderRadius:12,fontSize:14,fontWeight:600,cursor:"pointer"}}>No — next hole</button>
+                <button onClick={()=>{setCtpPrompt(false);setCtpAdvanceAfterSave(true);setCtpName("");setCtpDist("");setCtpPopup(true);}}
+                  style={{flex:2,padding:"14px",background:C.gold,color:"#0a1a0f",border:"none",borderRadius:12,fontSize:15,fontWeight:800,cursor:"pointer"}}>Yes — enter it</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* ── CTP POPUP — simple: player name + distance ──────────────── */}
       {ctpPopup&&(()=>{
         const leader=ctpLeaders[currentHole];
@@ -1007,7 +1040,10 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
           }};
           await sb.from("team_tournaments").update({ctp_leaders:newLeaders,updated_at:new Date().toISOString()}).eq("id",tourney.id);
           setTourney(prev=>({...prev,ctp_leaders:newLeaders}));
+          ctpAnsweredRef.current.add(currentHole);
           setCtpPopup(false);setCtpName("");setCtpDist("");
+          // Prompt flow: they were heading to the next hole — finish the trip.
+          if(ctpAdvanceAfterSave){ setCtpAdvanceAfterSave(false); if(!isLastHole) setCurrentHole(h=>h+1); }
         }
 
         return(
@@ -1047,13 +1083,15 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
                   delete newLeaders[currentHole];
                   await sb.from("team_tournaments").update({ctp_leaders:newLeaders,updated_at:new Date().toISOString()}).eq("id",tourney.id);
                   setTourney(prev=>({...prev,ctp_leaders:newLeaders}));
+                  ctpAnsweredRef.current.delete(currentHole);
+                  setCtpAdvanceAfterSave(false);
                   setCtpPopup(false);setCtpName("");setCtpDist("");
                 }} style={{width:"100%",padding:"12px",background:"rgba(224,80,80,0.1)",border:"1px solid rgba(224,80,80,0.4)",borderRadius:10,color:C.red,fontSize:13,fontWeight:700,cursor:"pointer",marginBottom:10}}>
                   Remove CTP Entry
                 </button>
               )}
               <div style={{display:"flex",gap:10}}>
-                <button onClick={()=>{setCtpPopup(false);setCtpName("");setCtpDist("");}}
+                <button onClick={()=>{setCtpAdvanceAfterSave(false);setCtpPopup(false);setCtpName("");setCtpDist("");}}
                   style={{flex:1,padding:"14px",background:"transparent",color:C.muted,border:"1px solid "+C.border,borderRadius:12,fontSize:14,fontWeight:600,cursor:"pointer"}}>Cancel</button>
                 <button onClick={submitCtp} disabled={!canSave}
                   style={{flex:2,padding:"14px",background:canSave?C.gold:"#1a1a1a",color:canSave?"#0a1a0f":C.dim,border:"none",borderRadius:12,fontSize:15,fontWeight:800,cursor:canSave?"pointer":"not-allowed"}}>
