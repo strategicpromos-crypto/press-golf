@@ -244,6 +244,8 @@ export default function TeamTournament({onBack, user, onDelete}){
   const sideBetsRef=useRef([]);
   const lastSyncedSideBets=useRef(null);
   useEffect(()=>{ sideBetsRef.current=sideBets; },[sideBets]);
+  const searchPanelRef=useRef(null);
+  useEffect(()=>{ if(showCourseSearch&&searchPanelRef.current){ searchPanelRef.current.scrollIntoView({behavior:"smooth",block:"start"}); } },[showCourseSearch]);
   // ── Side-bet setup form state (director only, on the Bets tab) ───────────
   const[showBetSetup,setShowBetSetup]=useState(false);
   const[betA,setBetA]=useState("");
@@ -883,16 +885,39 @@ export default function TeamTournament({onBack, user, onDelete}){
         </div>
         <div style={{padding:"0 20px"}}>
 
-          {/* Course */}
+          {/* Course — no dropdown: the selected course is a card on top,
+              Search sits right underneath it, front and center, and the
+              saved courses are a plain tap list below that. Most golfers
+              live in the saved list; nobody has to open a menu to find
+              anything. Tapping the already-selected course does nothing,
+              so it can't wipe the hole-par overrides below. */}
           <div style={{marginBottom:16}}>
             <Lbl>Course</Lbl>
-            <select value={courseId} onChange={e=>{ if(e.target.value==="__search__"){ setShowCourseSearch(true); } else { setCourseId(e.target.value); setHolePars({}); } }} style={{width:"100%",padding:"14px",background:C.surface,border:"1px solid "+C.border,borderRadius:10,color:C.text,fontSize:15,outline:"none",WebkitAppearance:"none"}}>
-              <option value="__search__">🔍 Search for a course…</option>
-              {Object.entries(COURSES).map(([id,c])=>(
-                <option key={id} value={id}>{c.name} — Par {c.par}</option>
-              ))}
-            </select>
-            {showCourseSearch && <CourseSearch C={C} onClose={()=>setShowCourseSearch(false)} onPick={id=>{ setCourseId(id); setHolePars({}); setShowCourseSearch(false); }} />}
+            <div style={{background:C.card,border:"1px solid "+C.green,borderRadius:10,padding:"14px 16px",marginBottom:10}}>
+              <div style={{fontSize:11,color:C.muted,letterSpacing:1.5,textTransform:"uppercase",marginBottom:2}}>Selected</div>
+              <div style={{fontSize:17,fontWeight:800}}>{course?course.name+" — Par "+course.par:"Choose a course below"}</div>
+              {course?.city ? <div style={{fontSize:12,color:C.muted,marginTop:2}}>{course.city}</div> : null}
+            </div>
+            <button onClick={()=>setShowCourseSearch(true)}
+              style={{width:"100%",padding:"14px",background:C.green,color:"#0a1a0f",border:"none",borderRadius:10,fontWeight:800,fontSize:15,cursor:"pointer",marginBottom:12}}>
+              🔍 Search courses
+            </button>
+            <div style={{fontSize:11,color:C.muted,letterSpacing:1.5,textTransform:"uppercase",marginBottom:6}}>Saved courses</div>
+            <div style={{display:"flex",flexDirection:"column",gap:8}}>
+              {Object.entries(COURSES).map(([id,c])=>{
+                const selected=id===courseId;
+                return(
+                  <button key={id} onClick={()=>{ if(id!==courseId){ setCourseId(id); setHolePars({}); } }}
+                    style={{textAlign:"left",padding:"12px 14px",background:selected?"rgba(123,180,80,0.15)":C.surface,border:"1px solid "+(selected?C.green:C.border),borderRadius:10,color:C.text,cursor:"pointer"}}>
+                    <div style={{fontWeight:selected?800:600,fontSize:15}}>{selected?"✓ ":""}{c.name} — Par {c.par}</div>
+                    {c.city ? <div style={{fontSize:12,color:C.muted}}>{c.city}</div> : null}
+                  </button>
+                );
+              })}
+            </div>
+            <div ref={searchPanelRef}>
+              {showCourseSearch && <CourseSearch C={C} onClose={()=>setShowCourseSearch(false)} onPick={id=>{ setCourseId(id); setHolePars({}); setShowCourseSearch(false); }} />}
+            </div>
           </div>
 
           {/* South Toledo hole #4 par toggle */}
