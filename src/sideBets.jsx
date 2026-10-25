@@ -122,13 +122,15 @@ function amtColor(amt, C){
   return C.muted;
 }
 
-// Display-only. Director passes onDelete; spectators omit it (read-only).
-export function SideBetsTab({bets, teams, course, courseId, C, onDelete}){
+// Pass onDelete to show Remove buttons (director and captains both run bets);
+// spectators omit it (read-only). canSetup swaps the empty-state hint so the
+// captain view doesn't tell captains to wait for the director.
+export function SideBetsTab({bets, teams, course, courseId, C, onDelete, canSetup}){
   if(!bets||bets.length===0){
     return(
       <div style={{background:C.card,border:"1px solid "+C.border,borderRadius:14,padding:"20px",textAlign:"center"}}>
         <div style={{fontSize:14,color:C.muted}}>No side bets yet.</div>
-        <div style={{fontSize:12,color:C.muted,marginTop:6}}>The director taps ＋ Set up Bet, picks two players, and the bet tracks live from the scores already being entered.</div>
+        <div style={{fontSize:12,color:C.muted,marginTop:6}}>{canSetup?"Tap ＋ Set up Bet above, pick two players, and the bet tracks live from the scores already being entered.":"The director taps ＋ Set up Bet, picks two players, and the bet tracks live from the scores already being entered."}</div>
       </div>
     );
   }
