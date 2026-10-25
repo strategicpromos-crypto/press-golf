@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { sb } from "./supabase.js";
 import { COURSES } from "./golf.js";
 import { SkinsTab } from "./skins.jsx";
+import { RulesTab } from "./RulesTab.jsx";
 
 // Dark (default) and Day (high-contrast, sunlight-readable) themes.
 // The component picks one via `dayMode` and shadows it as `C`, so every
@@ -424,7 +425,13 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
           <div style={{ textAlign:"center" }}>
             <div style={{ fontSize:11, color:C.muted, letterSpacing:2, textTransform:"uppercase" }}>Hole</div>
             <div style={{ fontSize:48, fontWeight:800, lineHeight:1 }}>{currentHole}</div>
-            <div style={{ fontSize:12, color:C.green, fontWeight:600 }}>Par {effPar}{effPar!==holeData.par?" !!":""} · Hdcp {holeData.hdcp}</div>
+            <div style={{ fontSize:12, color:C.green, fontWeight:600 }}>Par {effPar} · Hdcp {holeData.hdcp}</div>
+            {effPar!==holeData.par&&(
+              <div style={{fontSize:12,color:C.gold,fontWeight:700,marginTop:4}}>⛳ Par {effPar} today (card: Par {holeData.par})</div>
+            )}
+            {tourney.hole_notes?.[currentHole]&&(
+              <div style={{fontSize:12,background:"rgba(123,180,80,0.12)",border:"1px solid rgba(123,180,80,0.4)",borderRadius:10,padding:"6px 10px",marginTop:6}}>📋 {tourney.hole_notes[currentHole]}</div>
+            )}
           </div>
           <div style={{display:"flex",gap:8,alignItems:"center"}}>
             <button onClick={toggleDayMode} title={dayMode?"Switch to dark mode":"Day mode — easier to read in sunlight"}
@@ -561,7 +568,7 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
               const medals=["1st","2nd","3rd"];
               return(<>
                 <div style={{display:"flex",gap:0,marginBottom:16,border:"1px solid "+C.border,borderRadius:10,overflow:"hidden"}}>
-                  {[["standings","Standings"],["top10","Individuals"],["skins","Skins"],...(ctpEnabled?[["ctp","CTP"]]:[])]
+                  {[["standings","Standings"],["top10","Individuals"],["skins","Skins"],["rules","📋 Rules"],...(ctpEnabled?[["ctp","CTP"]]:[])]
                     .map(([id,lbl])=>(
                     <button key={id} onClick={()=>setBTab(id)} style={{flex:1,padding:"11px",fontSize:12,fontWeight:bTab===id?700:500,background:bTab===id?(id==="ctp"?C.gold:C.green):"transparent",color:bTab===id?"#0a1a0f":C.muted,border:"none",cursor:"pointer"}}>{lbl}</button>
                   ))}
@@ -690,6 +697,7 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
                     })}
                   </div>
                 )}
+                {bTab==="rules"&&<RulesTab rules={tourney.director_rules||""} holeNotes={tourney.hole_notes||{}} C={C}/>}
               </>);
             })()}
 
@@ -831,6 +839,12 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
           color:C.gold,border:"1px solid "+C.gold+"44",borderRadius:12,
           fontSize:15,fontWeight:700,cursor:"pointer",marginBottom:10
         }}>📊 Leaderboard</button>
+
+        <button onClick={()=>{setBTab("rules");setShowSummary(true);}} style={{
+          width:"100%",padding:"14px",background:"rgba(123,180,80,0.12)",
+          color:C.green,border:"1px solid "+C.green+"44",borderRadius:12,
+          fontSize:15,fontWeight:700,cursor:"pointer",marginBottom:10
+        }}>📋 Rules</button>
 
         <button onClick={async()=>{
           // Hard flush before advancing — guaranteed write, no debounce
@@ -978,36 +992,6 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
                 </>);
               })()}
             </div>
-
-            {/* South Toledo hole #4 par toggle — captain can also change */}
-            {tourney.course_id==="south-toledo"&&(
-              <div style={{ background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:"14px 16px",marginBottom:16 }}>
-                <div style={{ fontWeight:700,fontSize:14,marginBottom:4 }}>⛳ Hole #4 Par Override</div>
-                <div style={{ fontSize:11,color:C.muted,marginBottom:12 }}>Change mid-round — scores recalculate instantly for everyone.</div>
-                <div style={{ display:"flex",gap:8 }}>
-                  {[3,4].map(p=>{
-                    const current = (tourney.hole_pars||{})[4]??3;
-                    return(
-                      <button key={p} onClick={async()=>{
-                        const newHolePars={...(tourney.hole_pars||{}),4:p};
-                        setTourney(prev=>({...prev,hole_pars:newHolePars}));
-                        await sb.from("team_tournaments").update({hole_pars:newHolePars,updated_at:new Date().toISOString()}).eq("id",tourney.id);
-                      }} style={{
-                        flex:1,padding:"14px",
-                        background:current===p?C.green:C.surface,
-                        color:current===p?"#0a1a0f":C.text,
-                        border:"1px solid "+(current===p?C.green:C.border),
-                        borderRadius:10,fontSize:15,fontWeight:current===p?800:500,cursor:"pointer"
-                      }}>Par {p}{p===3?" (def)":""}
-                      </button>
-                    );
-                  })}
-                </div>
-                {((tourney.hole_pars||{})[4]??3)===4&&(
-                  <div style={{ fontSize:11,color:C.gold,marginTop:8,textAlign:"center" }}>Playing as par 4 — effective course par 71</div>
-                )}
-              </div>
-            )}
 
             {/* Player names — captain's team only */}
             <div style={{ background:C.card,border:`1px solid ${C.border}`,borderRadius:14,padding:"14px" }}>
