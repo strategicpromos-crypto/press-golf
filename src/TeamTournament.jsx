@@ -242,6 +242,11 @@ export default function TeamTournament({onBack, user, onDelete}){
   const[teammatesTie,setTeammatesTie]=useState(false); // false=teammates don't cancel skin, true=stricter
   const[ctpEnabled,setCtpEnabled]=useState(false);
   const[ctpHoles,setCtpHoles]=useState([]);          // hole numbers designated as CTP
+  // Director CTP reminder (Oct 25, 2026): a plain did-you-forget at Create,
+  // for new/forgetful directors — not an auto-add, and it never nags twice
+  // for the same setup (dismissed flag below).
+  const[ctpReminder,setCtpReminder]=useState(false);
+  const[ctpReminderDismissed,setCtpReminderDismissed]=useState(false);
   const[ctpLeaders,setCtpLeaders]=useState({});      // {holeNum: {name,teamName,distance,teamIdx,playerIdx}}
   const[sideBets,setSideBets]=useState([]);          // director side bets (see sideBets.jsx)
   const sideBetsRef=useRef([]);
@@ -478,8 +483,12 @@ export default function TeamTournament({onBack, user, onDelete}){
   },[teams,currentHole,courseId,birdieBonus,holePars,ballsByPar,skinsEnabled,bigBoyEnabled,teammatesTie,ctpEnabled,ctpHoles,ctpLeaders,sideBets,tourneyId]);
 
   // ── Create new tournament in DB ────────────────────────────────────────────
-  async function createTourney(builtTeams){
+  async function createTourney(builtTeams, ctpOverride){
     if(!user?.id)return null;
+    // ctpOverride lets the "Leave it off" reminder path save a clean
+    // CTP-off state even before the matching setState calls have flushed.
+    const effCtpEnabled=ctpOverride?ctpOverride.enabled:ctpEnabled;
+    const effCtpHoles=ctpOverride?ctpOverride.holes:ctpHoles;
 
     // Generate codes: day+date+unique suffix e.g. WEDS48-ABC
     const now      = new Date();
@@ -509,8 +518,8 @@ export default function TeamTournament({onBack, user, onDelete}){
       skins_enabled:skinsEnabled,
       big_boy_enabled:bigBoyEnabled,
       teammates_tie:teammatesTie,
-      ctp_enabled:ctpEnabled,
-      ctp_holes:ctpHoles,
+      ctp_enabled:effCtpEnabled,
+      ctp_holes:effCtpHoles,
       ctp_leaders:{},
       side_bets:[],
       teams:teamsWithPins,
@@ -1091,7 +1100,7 @@ export default function TeamTournament({onBack, user, onDelete}){
           )}
 
           {/* CTP — Closest to the Pin */}
-          <div style={{background:C.card,border:"1px solid "+C.border,borderRadius:12,padding:"14px 16px",marginBottom:ctpEnabled?8:16}}>
+          <div id="ctp-setup-section" style={{background:C.card,border:"1px solid "+C.border,borderRadius:12,padding:"14px 16px",marginBottom:ctpEnabled?8:16}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <div>
                 <div style={{fontWeight:700,fontSize:15}}>📍 Closest to the Pin</div>
@@ -1275,7 +1284,40 @@ export default function TeamTournament({onBack, user, onDelete}){
           <div style={{height:8}}/>
           {/* Two-step Tee Off: first create/save the tournament and show links, then go to scoring */}
           {!tourneyId ? (
+            <>
+            {ctpReminder&&(
+              <div style={{background:"rgba(232,184,75,0.08)",border:"1px solid rgba(232,184,75,0.4)",borderRadius:12,padding:"14px 16px",marginBottom:12}}>
+                <div style={{fontSize:13,fontWeight:700,color:C.gold,marginBottom:6}}>Did you forget CTP?</div>
+                <div style={{fontSize:12,color:C.muted,marginBottom:12,lineHeight:1.5}}>
+                  {!ctpEnabled
+                    ? "Closest to the Pin is off for this tournament, so captains won't be prompted on any hole."
+                    : "CTP is on, but no holes are picked yet, so captains still won't be prompted anywhere."}
+                  {" "}Turn it on and pick holes above, or leave it off.
+                </div>
+                <div style={{display:"flex",gap:8}}>
+                  <button onClick={()=>{setCtpEnabled(true);setCtpReminder(false);document.getElementById("ctp-setup-section")?.scrollIntoView({behavior:"smooth",block:"start"});}}
+                    style={{flex:2,padding:"10px",background:C.gold,color:"#0a1a0f",border:"none",borderRadius:8,fontSize:13,fontWeight:800,cursor:"pointer"}}>Add CTP holes</button>
+                  <button onClick={async()=>{
+                    const leaveOff = ctpHoles.length===0;
+                    setCtpReminderDismissed(true);setCtpReminder(false);
+                    if(leaveOff){ setCtpEnabled(false); setCtpHoles([]); }
+                    setLoading(true);
+                    const id = await createTourney(teams, leaveOff?{enabled:false,holes:[]}:undefined);
+                    if(id) setTourneyId(id);
+                    setLoading(false);
+                  }}
+                    style={{flex:1,padding:"10px",background:"transparent",color:C.muted,border:"1px solid "+C.border,borderRadius:8,fontSize:13,fontWeight:600,cursor:"pointer"}}>Leave it off — create anyway</button>
+                </div>
+              </div>
+            )}
             <BigBtn onClick={async()=>{
+              // Did-you-forget gate: CTP off, or on with no holes, stops at
+              // the reminder above instead of creating. Dismissed = never
+              // ask again for this setup.
+              if(!ctpReminderDismissed && (!ctpEnabled || ctpHoles.length===0)){
+                setCtpReminder(true);
+                return;
+              }
               setLoading(true);
               // Create the DB entry now — links become available immediately
               const id = await createTourney(teams);
@@ -1285,6 +1327,7 @@ export default function TeamTournament({onBack, user, onDelete}){
             }}>
               {loading?"Creating...":"Create Tournament & Get Links"}
             </BigBtn>
+            </>
           ) : (
             <>
               <div style={{background:"rgba(123,180,80,0.08)",border:"1px solid rgba(123,180,80,0.3)",borderRadius:10,padding:"10px 14px",marginBottom:10,fontSize:12,color:C.green,textAlign:"center"}}>
