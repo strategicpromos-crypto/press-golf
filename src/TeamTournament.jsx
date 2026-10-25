@@ -916,7 +916,7 @@ export default function TeamTournament({onBack, user, onDelete}){
               })}
             </div>
             <div ref={searchPanelRef}>
-              {showCourseSearch && <CourseSearch C={C} onClose={()=>setShowCourseSearch(false)} onPick={id=>{ setCourseId(id); setHolePars({}); setShowCourseSearch(false); }} />}
+              {showCourseSearch && <CourseSearch C={C} onClose={()=>setShowCourseSearch(false)} onPick={id=>{ setCourseId(id); setHolePars({}); setShowCourseSearch(false); }} onCourseDeleted={id=>{ if(id===courseId){ const rest=Object.keys(COURSES); setCourseId(rest.length?rest[0]:""); setHolePars({}); } }} />}
             </div>
           </div>
 
