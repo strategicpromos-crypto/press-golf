@@ -258,6 +258,7 @@ export default function TeamTournament({onBack, user, onDelete}){
   const[betStrokesTo,setBetStrokesTo]=useState("none"); // "none" | "A" | "B"
   const[betStrokesCount,setBetStrokesCount]=useState(2); // split per side: 2 = 1 front + 1 back
   const[betPressDown,setBetPressDown]=useState(2);
+  const[betCarryOver,setBetCarryOver]=useState(true); // skins only: tied holes roll forward (default)
   const[ctpPopup,setCtpPopup]=useState(null);        // {holeNum,teamIdx,playerIdx,playerName} — active entry popup
   // Director scoring CTP prompt (Oct 25, 2026): same did-you-forget as the
   // captain prompt — Next on a CTP hole asks first. Once per hole per session.
@@ -677,7 +678,7 @@ export default function TeamTournament({onBack, user, onDelete}){
     if(strokes!==0&&!courseHasHdcp(courseId)){ window.alert("This course has no handicap data, so strokes can't apply here. Add handicaps first (course picker → Search for a course… → Edit a saved course), or set strokes to No strokes."); return; }
     const bet={ id:"bet_"+Date.now()+"_"+Math.floor(Math.random()*1000),
       a:parseRef(betA), b:parseRef(betB), betType, betAmount,
-      strokes, pressDown:betType==="nassau-press"?betPressDown:2 };
+      strokes, pressDown:betType==="nassau-press"?betPressDown:2, carryOver:betCarryOver };
     setSideBets(prev=>[...prev, bet]);
     setShowBetSetup(false);
   }
@@ -2098,6 +2099,16 @@ export default function TeamTournament({onBack, user, onDelete}){
                     ))}
                   </div>
                   <NumStepper value={betAmount} onChange={setBetAmount} min={1} max={99} label={betType==="skins"?"$ per skin":betType==="match"?"$ per hole":"$ per side / total"}/>
+                  {betType==="skins"&&(
+                    <>
+                      <Lbl>Tied holes</Lbl>
+                      <div style={{display:"flex",gap:6,marginBottom:12}}>
+                        <button onClick={()=>setBetCarryOver(true)} style={{flex:1,padding:"10px 4px",borderRadius:8,background:betCarryOver?C.gold:C.surface,color:betCarryOver?"#0a1a0f":C.muted,border:"1px solid "+(betCarryOver?C.gold:C.border),cursor:"pointer",fontSize:12,fontWeight:betCarryOver?700:500}}>Carry over</button>
+                        <button onClick={()=>setBetCarryOver(false)} style={{flex:1,padding:"10px 4px",borderRadius:8,background:!betCarryOver?C.gold:C.surface,color:!betCarryOver?"#0a1a0f":C.muted,border:"1px solid "+(!betCarryOver?C.gold:C.border),cursor:"pointer",fontSize:12,fontWeight:!betCarryOver?700:500}}>Don't carry</button>
+                      </div>
+                      <div style={{fontSize:11,color:C.muted,marginBottom:12}}>{betCarryOver?"A tied hole rolls forward and makes the next hole worth more.":"A tied hole is dead — every hole is worth exactly one skin."}</div>
+                    </>
+                  )}
                   <Lbl>Strokes — belong to the bet, not the tournament</Lbl>
                   <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}}>
                     {[["none","No strokes"],["A",(betAName||"Player A")+" gets strokes"],["B",(betBName||"Player B")+" gets strokes"]].map(([id,lbl])=>(
