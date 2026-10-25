@@ -76,6 +76,7 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
   const [betStrokesTo, setBetStrokesTo] = useState("none"); // "none" | "A" | "B"
   const [betStrokesCount, setBetStrokesCount] = useState(2);
   const [betPressDown, setBetPressDown] = useState(2);
+  const [betCarryOver, setBetCarryOver] = useState(true); // skins only: tied holes roll forward (default)
   const [betSaving, setBetSaving] = useState(false);
   const [ctpPopup,     setCtpPopup]     = useState(false); // simple open/close
   const [ctpName,      setCtpName]      = useState("");
@@ -376,7 +377,7 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
     if(strokes!==0&&!courseHasHdcp(cid)){ window.alert("This course has no handicap data, so strokes can't apply here. Ask the director to add handicaps, or set strokes to No strokes."); return; }
     const bet={ id:"bet_"+Date.now()+"_"+Math.floor(Math.random()*1000),
       a:parseRef(betA), b:parseRef(betB), betType, betAmount,
-      strokes, pressDown:betType==="nassau-press"?betPressDown:2 };
+      strokes, pressDown:betType==="nassau-press"?betPressDown:2, carryOver:betCarryOver };
     setBetSaving(true);
     try{
       const{data,error:readErr}=await sb.from("team_tournaments").select("side_bets").eq("id",tourney.id).single();
@@ -792,6 +793,16 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
                           <div style={{flex:1,textAlign:"center",fontSize:20,fontWeight:800}}>${betAmount}</div>
                           <button onClick={()=>setBetAmount(Math.min(99,betAmount+1))} style={{width:44,height:44,borderRadius:"50%",background:C.dim,border:"1px solid "+C.border,color:C.text,fontSize:22,fontWeight:700,cursor:"pointer"}}>+</button>
                         </div>
+                        {betType==="skins"&&(
+                          <>
+                            <div style={{fontSize:11,color:C.muted,letterSpacing:1.5,textTransform:"uppercase",marginBottom:6,fontWeight:600}}>Tied holes</div>
+                            <div style={{display:"flex",gap:6,marginBottom:6}}>
+                              <button onClick={()=>setBetCarryOver(true)} style={{flex:1,padding:"10px 4px",borderRadius:8,background:betCarryOver?C.gold:C.surface,color:betCarryOver?"#0a1a0f":C.muted,border:"1px solid "+(betCarryOver?C.gold:C.border),cursor:"pointer",fontSize:12,fontWeight:betCarryOver?700:500}}>Carry over</button>
+                              <button onClick={()=>setBetCarryOver(false)} style={{flex:1,padding:"10px 4px",borderRadius:8,background:!betCarryOver?C.gold:C.surface,color:!betCarryOver?"#0a1a0f":C.muted,border:"1px solid "+(!betCarryOver?C.gold:C.border),cursor:"pointer",fontSize:12,fontWeight:!betCarryOver?700:500}}>Don't carry</button>
+                            </div>
+                            <div style={{fontSize:11,color:C.muted,marginBottom:12}}>{betCarryOver?"A tied hole rolls forward and makes the next hole worth more.":"A tied hole is dead — every hole is worth exactly one skin."}</div>
+                          </>
+                        )}
                         <div style={{fontSize:11,color:C.muted,letterSpacing:1.5,textTransform:"uppercase",marginBottom:6,fontWeight:600}}>Strokes — belong to the bet, not the tournament</div>
                         <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}}>
                           {[["none","No strokes"],["A",(captainBetAName||"Player A")+" gets strokes"],["B",(captainBetBName||"Player B")+" gets strokes"]].map(([id,lbl])=>(
