@@ -3,6 +3,7 @@ import { sb } from "./supabase.js";
 import { COURSES } from "./golf.js";
 import { SkinsTab } from "./skins.jsx";
 import { SideBetsTab } from "./sideBets.jsx";
+import { RulesTab } from "./RulesTab.jsx";
 
 const C = {
   bg:"#080f0a", surface:"#0e1a10", card:"#121e14",
@@ -96,7 +97,7 @@ export default function TourneySpectator({ tourney: initialTourney, onBack }) {
 
       {/* Tabs */}
       <div style={{ display:"flex", borderBottom:`1px solid ${C.border}`, background:"rgba(0,0,0,0.2)", overflowX:"auto" }}>
-        {[["board","🏆 Standings"],["scorecard","📋 Scorecard"],["top10","⭐ Top 10"],["skins","💰 Skins"],["bets","💵 Bets"],
+        {[["board","🏆 Standings"],["scorecard","📋 Scorecard"],["top10","⭐ Top 10"],["skins","💰 Skins"],["bets","💵 Bets"],["rules","📋 Rules"],
           ...(tourney.ctp_enabled&&(tourney.ctp_holes||[]).length>0?[["ctp","📍 CTP"]]:[])]
           .map(([id,lbl])=>(
           <button key={id} onClick={()=>setTab(id)} style={{ flex:1, padding:"10px 2px", fontSize:11, fontWeight:tab===id?700:500, background:"transparent", color:tab===id?(id==="ctp"?C.gold:C.green):C.muted, border:"none", borderBottom:tab===id?`2px solid ${id==="ctp"?C.gold:C.green}`:"2px solid transparent", cursor:"pointer", whiteSpace:"nowrap", flexShrink:0 }}>{lbl}</button>
@@ -167,6 +168,14 @@ export default function TourneySpectator({ tourney: initialTourney, onBack }) {
                 })}
               </tbody>
             </table>
+            {Object.keys(tourney.hole_notes||{}).filter(hn=>String(tourney.hole_notes[hn]||"").trim()!=="").length>0&&(
+              <div style={{background:C.card,border:"1px solid "+C.border,borderRadius:12,padding:"14px 16px",marginTop:14}}>
+                <div style={{fontWeight:700,fontSize:14,marginBottom:8}}>📋 Hole notes</div>
+                {Object.keys(tourney.hole_notes).filter(hn=>String(tourney.hole_notes[hn]||"").trim()!=="").sort((a,b)=>a-b).map(hn=>(
+                  <div key={hn} style={{fontSize:13,lineHeight:1.5,marginBottom:4}}>Hole {hn} — {tourney.hole_notes[hn]}</div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
@@ -181,7 +190,7 @@ export default function TourneySpectator({ tourney: initialTourney, onBack }) {
               let total=0,holesPlayed=0;
               for(const h of course.holes){
                 const s=team.scores?.[pi]?.[h.hole];
-                if(s!==undefined&&s!==null){total+=safeInt(s)-h.par;holesPlayed++;}
+                if(s!==undefined&&s!==null){total+=safeInt(s)-((tourney.hole_pars||{})[h.hole]??h.par);holesPlayed++;}
               }
               if(holesPlayed>0)players.push({name,teamName,teamColor,total,holesPlayed,ti,pi});
             }
@@ -220,6 +229,8 @@ export default function TourneySpectator({ tourney: initialTourney, onBack }) {
         {tab==="skins"&&<SkinsTab teams={tourney.teams||[]} course={course} holePars={tourney.hole_pars||{}} skinsEnabled={tourney.skins_enabled===true} bigBoyEnabled={tourney.big_boy_enabled===true} teammatesTie={tourney.teammates_tie===true}/>}
 
         {tab==="bets"&&<SideBetsTab bets={tourney.side_bets||[]} teams={tourney.teams||[]} course={course} courseId={tourney.course_id||"south-toledo"} C={C}/>}
+
+        {tab==="rules"&&<RulesTab rules={tourney.director_rules||""} holeNotes={tourney.hole_notes||{}} C={C}/>}
 
         {tab==="ctp"&&(()=>{
           const ctpHoles=(tourney.ctp_holes||[]).sort((a,b)=>a-b);
