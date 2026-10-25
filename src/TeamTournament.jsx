@@ -2076,7 +2076,7 @@ export default function TeamTournament({onBack, user, onDelete}){
 
           {lbTab==="bets"&&(
             <div>
-              <div style={{fontSize:11,color:C.gold,letterSpacing:1.5,textTransform:"uppercase",marginBottom:12,fontWeight:600}}>Side Bets · set up by the director</div>
+              <div style={{fontSize:11,color:C.gold,letterSpacing:1.5,textTransform:"uppercase",marginBottom:12,fontWeight:600}}>Side Bets · create your bets</div>
               <div style={{marginBottom:14}}>
                 <GhostBtn onClick={()=>setShowBetSetup(v=>!v)}>{showBetSetup?"− Close setup":"＋ Set up Bet"}</GhostBtn>
               </div>
