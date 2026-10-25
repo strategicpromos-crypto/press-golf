@@ -5,6 +5,7 @@ import LiveRound from "./LiveRound.jsx";
 import IndividualRound from "./IndividualRound.jsx";
 import TeamTournament from "./TeamTournament.jsx";
 import StablefordSetup from "./StablefordSetup.jsx";
+import StablefordPlay from "./StablefordPlay.jsx";
 import { TourneyLoader } from "./TourneyJoin.jsx";
 import TourneyCaptain from "./TourneyCaptain.jsx";
 import TourneySpectator from "./TourneySpectator.jsx";
@@ -921,7 +922,8 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
   const [loading,setLoading]=useState(true);
   const [saving,setSaving]=useState(false);
   const [toast,setToast]=useState({msg:"",error:false});
-  const [view,setView]=useState("roster"); // roster | profile | liveround | tournament
+  const [view,setView]=useState("roster"); // roster | profile | liveround | tournament | stableford | stableford-play
+  const [activeStableford,setActiveStableford]=useState(null); // saved Stableford setup currently being played
   const [activeRounds,  setActiveRounds]  = useState([]);
   const [activeRound,   setActiveRound]   = useState(null);
   const [opponentRound, setOpponentRound] = useState(null);
@@ -1445,9 +1447,12 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
     <TeamTournament user={user} onBack={()=>setView("roster")} onDelete={()=>setActiveTourney(null)}/>
   );
 
-  // ── Stableford setup (v1: setup only — scoring comes next) ────────────────
+  // ── Stableford setup + play ────────────────────────────────────────────────
   if(view==="stableford") return(
-    <StablefordSetup onBack={()=>setView("roster")}/>
+    <StablefordSetup onBack={()=>setView("roster")} onPlay={(s)=>{setActiveStableford(s);setView("stableford-play");}}/>
+  );
+  if(view==="stableford-play"&&activeStableford) return(
+    <StablefordPlay setup={activeStableford} onBack={()=>setView("stableford")}/>
   );
 
   // ── Individual round: resume prompt (mirrors captain_resume exactly) ────────
