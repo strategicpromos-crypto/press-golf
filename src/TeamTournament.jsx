@@ -3,6 +3,7 @@ import { COURSES } from "./golf.js";
 import CourseSearch from "./CourseSearch.jsx";
 import { sb } from "./supabase.js";
 import { calcSkins, SkinsTab } from "./skins.jsx";
+import { SideBetsTab } from "./sideBets.jsx";
 
 // Dark (default) and Day (high-contrast, sunlight-readable) themes.
 // The TeamTournament component picks one via `dayMode` and shadows it as
@@ -239,6 +240,19 @@ export default function TeamTournament({onBack, user, onDelete}){
   const[ctpEnabled,setCtpEnabled]=useState(false);
   const[ctpHoles,setCtpHoles]=useState([]);          // hole numbers designated as CTP
   const[ctpLeaders,setCtpLeaders]=useState({});      // {holeNum: {name,teamName,distance,teamIdx,playerIdx}}
+  const[sideBets,setSideBets]=useState([]);          // director side bets (see sideBets.jsx)
+  const sideBetsRef=useRef([]);
+  const lastSyncedSideBets=useRef(null);
+  useEffect(()=>{ sideBetsRef.current=sideBets; },[sideBets]);
+  // ── Side-bet setup form state (director only, on the Bets tab) ───────────
+  const[showBetSetup,setShowBetSetup]=useState(false);
+  const[betA,setBetA]=useState("");
+  const[betB,setBetB]=useState("");
+  const[betType,setBetType]=useState("skins");
+  const[betAmount,setBetAmount]=useState(5);
+  const[betStrokesTo,setBetStrokesTo]=useState("none"); // "none" | "A" | "B"
+  const[betStrokesCount,setBetStrokesCount]=useState(2); // split per side: 2 = 1 front + 1 back
+  const[betPressDown,setBetPressDown]=useState(2);
   const[ctpPopup,setCtpPopup]=useState(null);        // {holeNum,teamIdx,playerIdx,playerName} — active entry popup
   const[ctpInput,setCtpInput]=useState("");           // distance input
   const[ctpName,setCtpName]=useState("");             // player name for CTP
@@ -259,6 +273,10 @@ export default function TeamTournament({onBack, user, onDelete}){
   const saveTimer=useRef(null);
   const subRef=useRef(null);
   const course=COURSES[courseId];
+  // Every named player in the tournament, for the side-bet pickers.
+  const allPlayers=teams.flatMap((t,ti)=>(t.players||[]).map((p,pi)=>({team:ti,pi,name:(p||"").trim(),teamName:t.name||("Team "+(ti+1))})).filter(x=>x.name!==""));
+  const betAName=allPlayers.find(p=>p.team+":"+p.pi===betA)?.name;
+  const betBName=allPlayers.find(p=>p.team+":"+p.pi===betB)?.name;
 
   useEffect(()=>{ loadSaved(); },[]);
 
@@ -279,13 +297,13 @@ export default function TeamTournament({onBack, user, onDelete}){
     ball_count_by_par:s?.ball_count_by_par, hole_pars:s?.hole_pars,
     skins_enabled:s?.skins_enabled, big_boy_enabled:s?.big_boy_enabled,
     teammates_tie:s?.teammates_tie, ctp_enabled:s?.ctp_enabled,
-    ctp_holes:s?.ctp_holes, ctp_leaders:s?.ctp_leaders||{}, current_hole:s?.current_hole,
+    ctp_holes:s?.ctp_holes, ctp_leaders:s?.ctp_leaders||{}, side_bets:s?.side_bets||[], current_hole:s?.current_hole,
   });
   const localSnap=()=>stateSnap({
     teams, course_id:courseId, birdie_bonus:birdieBonus, ball_count_by_par:ballsByPar,
     hole_pars:holePars, skins_enabled:skinsEnabled, big_boy_enabled:bigBoyEnabled,
     teammates_tie:teammatesTie, ctp_enabled:ctpEnabled, ctp_holes:ctpHoles,
-    ctp_leaders:ctpLeaders, current_hole:currentHole,
+    ctp_leaders:ctpLeaders, side_bets:sideBets, current_hole:currentHole,
   });
 
   // ── Real-time: director sees captain scores instantly (always on) ──────────
@@ -322,6 +340,16 @@ export default function TeamTournament({onBack, user, onDelete}){
             if(payload.new.ctp_leaders){
               setCtpLeaders(payload.new.ctp_leaders);
               lastSyncedCtp.current=snap(payload.new.ctp_leaders);
+            }
+            if(payload.new.side_bets!==undefined){
+              const incoming=snap(payload.new.side_bets||[]);
+              // Director-only data: apply only when the director has no
+              // unsaved side-bet edits (local matches last synced). His own
+              // save echo is a no-op because it equals the synced value.
+              if(snap(sideBetsRef.current)===lastSyncedSideBets.current){
+                setSideBets(payload.new.side_bets||[]);
+                lastSyncedSideBets.current=incoming;
+              }
             }
             lastSavedSnap.current=stateSnap(payload.new);
           })
@@ -402,6 +430,7 @@ export default function TeamTournament({onBack, user, onDelete}){
           ctp_enabled:ctpEnabled,
           ctp_holes:ctpHoles,
           ctp_leaders:ctpToWrite,
+          side_bets:sideBets,
           current_hole:currentHole,
           status:"active", // never downgrade — once scoring starts, always stay "active"
           updated_at:new Date().toISOString(),
@@ -413,8 +442,9 @@ export default function TeamTournament({onBack, user, onDelete}){
           teams:mergedTeams, course_id:courseId, birdie_bonus:birdieBonus,
           ball_count_by_par:ballsByPar, hole_pars:holePars, skins_enabled:skinsEnabled,
           big_boy_enabled:bigBoyEnabled, teammates_tie:teammatesTie, ctp_enabled:ctpEnabled,
-          ctp_holes:ctpHoles, ctp_leaders:ctpToWrite, current_hole:currentHole,
+          ctp_holes:ctpHoles, ctp_leaders:ctpToWrite, side_bets:sideBets, current_hole:currentHole,
         });
+        lastSyncedSideBets.current=snap(sideBets);
         // Reconcile in case the merge kept DB data we hadn't seen yet
         if(snap(mergedTeams)!==snap(teams)) setTeams(mergedTeams);
         if(snap(ctpToWrite)!==snap(ctpLeaders)) setCtpLeaders(ctpToWrite);
@@ -431,7 +461,7 @@ export default function TeamTournament({onBack, user, onDelete}){
     };
     saveTimer.current=setTimeout(doSave,800);
     return()=>clearTimeout(saveTimer.current);
-  },[teams,currentHole,courseId,birdieBonus,holePars,ballsByPar,skinsEnabled,bigBoyEnabled,teammatesTie,ctpEnabled,ctpHoles,ctpLeaders,tourneyId]);
+  },[teams,currentHole,courseId,birdieBonus,holePars,ballsByPar,skinsEnabled,bigBoyEnabled,teammatesTie,ctpEnabled,ctpHoles,ctpLeaders,sideBets,tourneyId]);
 
   // ── Create new tournament in DB ────────────────────────────────────────────
   async function createTourney(builtTeams){
@@ -466,6 +496,7 @@ export default function TeamTournament({onBack, user, onDelete}){
       ctp_enabled:ctpEnabled,
       ctp_holes:ctpHoles,
       ctp_leaders:{},
+      side_bets:[],
       teams:teamsWithPins,
       current_hole:1,
       status:"active",
@@ -477,6 +508,7 @@ export default function TeamTournament({onBack, user, onDelete}){
       setTeams(teamsWithPins);
       lastSyncedTeams.current=snap(teamsWithPins);
       lastSyncedCtp.current=snap({});
+      lastSyncedSideBets.current=snap([]);
       lastSavedSnap.current=stateSnap(data);
       await loadSaved();
     }
@@ -499,9 +531,11 @@ export default function TeamTournament({onBack, user, onDelete}){
       setCtpEnabled(data.ctp_enabled===true);
       setCtpHoles(data.ctp_holes||[]);
       setCtpLeaders(data.ctp_leaders||{});
+      setSideBets(data.side_bets||[]);
       setTeams(data.teams||[]);
       lastSyncedTeams.current=snap(data.teams||[]);
       lastSyncedCtp.current=snap(data.ctp_leaders||{});
+      lastSyncedSideBets.current=snap(data.side_bets||[]);
       lastSavedSnap.current=stateSnap(data);
       setNumTeams((data.teams||[]).length);
       setCurrentHole(data.current_hole||1);
@@ -530,6 +564,7 @@ export default function TeamTournament({onBack, user, onDelete}){
             if(typeof s.ctp_enabled==="boolean") setCtpEnabled(s.ctp_enabled);
             if(s.ctp_holes) setCtpHoles(s.ctp_holes);
             if(s.ctp_leaders) setCtpLeaders(s.ctp_leaders);
+            if(s.side_bets) setSideBets(s.side_bets);
             if(s.current_hole) setCurrentHole(s.current_hole);
             setNumTeams((s.teams||[]).length);
             if(bak.lastSyncedTeams) lastSyncedTeams.current=bak.lastSyncedTeams;
@@ -600,6 +635,23 @@ export default function TeamTournament({onBack, user, onDelete}){
   function getPlayerScore(team,pi,hole){
     const v=team.scores?.[pi]?.[hole];
     return(v===undefined||v===null)?null:safeInt(v);
+  }
+
+  // ── Side bets: director setup ──────────────────────────────────────────────
+  // Strokes live on the bet, never on the tournament. No manual presses here:
+  // a manual press is a call made in person, and side-bet opponents may be in
+  // different groups — Nassau presses on tournament side bets are auto only.
+  function saveBet(){
+    if(!betA||!betB){ window.alert("Pick two players first."); return; }
+    if(betA===betB){ window.alert("Pick two different players."); return; }
+    const parseRef=(v)=>{ const parts=v.split(":"); return {team:parseInt(parts[0],10),pi:parseInt(parts[1],10)}; };
+    const count=betStrokesTo==="none"?0:betStrokesCount;
+    const strokes=betStrokesTo==="B"?count:betStrokesTo==="A"?-count:0;
+    const bet={ id:"bet_"+Date.now()+"_"+Math.floor(Math.random()*1000),
+      a:parseRef(betA), b:parseRef(betB), betType, betAmount,
+      strokes, pressDown:betType==="nassau-press"?betPressDown:2 };
+    setSideBets(prev=>[...prev, bet]);
+    setShowBetSetup(false);
   }
 
   function getLeaderboard(){
@@ -1774,7 +1826,7 @@ export default function TeamTournament({onBack, user, onDelete}){
 
         {/* Tabs */}
         <div style={{display:"flex",borderBottom:"1px solid "+C.border,background:"rgba(0,0,0,0.2)",overflowX:"auto"}}>
-          {[["standings","Standings"],["scorecard","Scorecard"],["top10","Individuals"],["skins","Skins"],...(ctpEnabled?[["ctp","CTP"]]:[])]
+          {[["standings","Standings"],["scorecard","Scorecard"],["top10","Individuals"],["skins","Skins"],["bets","💵 Bets"],...(ctpEnabled?[["ctp","CTP"]]:[])]
             .map(([id,lbl])=>(
             <button key={id} onClick={()=>setLbTab(id)} style={{flex:1,padding:"10px 2px",fontSize:11,fontWeight:lbTab===id?700:500,background:"transparent",color:lbTab===id?(id==="ctp"?C.gold:C.green):C.muted,border:"none",borderBottom:lbTab===id?"2px solid "+(id==="ctp"?C.gold:C.green):"2px solid transparent",cursor:"pointer",whiteSpace:"nowrap",flexShrink:0}}>{lbl}</button>
           ))}
@@ -1847,6 +1899,61 @@ export default function TeamTournament({onBack, user, onDelete}){
           {lbTab==="top10"&&<Top10Tab teams={teams} course={course} holePars={holePars} C={C}/>}
 
           {lbTab==="skins"&&<SkinsTab teams={teams} course={course} holePars={holePars} skinsEnabled={skinsEnabled} bigBoyEnabled={bigBoyEnabled} teammatesTie={teammatesTie}/>}
+
+          {lbTab==="bets"&&(
+            <div>
+              <div style={{fontSize:11,color:C.gold,letterSpacing:1.5,textTransform:"uppercase",marginBottom:12,fontWeight:600}}>Side Bets · set up by the director</div>
+              <div style={{marginBottom:14}}>
+                <GhostBtn onClick={()=>setShowBetSetup(v=>!v)}>{showBetSetup?"− Close setup":"＋ Set up Bet"}</GhostBtn>
+              </div>
+              {showBetSetup&&(
+                <div style={{background:C.card,border:"1px solid "+C.border,borderRadius:14,padding:"14px",marginBottom:14}}>
+                  <Lbl>Player A</Lbl>
+                  <select value={betA} onChange={e=>setBetA(e.target.value)} style={{width:"100%",padding:"12px",borderRadius:10,background:C.surface,color:C.text,border:"1px solid "+C.border,fontSize:14,marginBottom:12}}>
+                    <option value="">— pick a player —</option>
+                    {allPlayers.map(p=><option key={p.team+":"+p.pi} value={p.team+":"+p.pi}>{p.name} ({p.teamName})</option>)}
+                  </select>
+                  <Lbl>Player B</Lbl>
+                  <select value={betB} onChange={e=>setBetB(e.target.value)} style={{width:"100%",padding:"12px",borderRadius:10,background:C.surface,color:C.text,border:"1px solid "+C.border,fontSize:14,marginBottom:12}}>
+                    <option value="">— pick a player —</option>
+                    {allPlayers.map(p=><option key={p.team+":"+p.pi} value={p.team+":"+p.pi}>{p.name} ({p.teamName})</option>)}
+                  </select>
+                  <Lbl>Game</Lbl>
+                  <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:12}}>
+                    {[["skins","Skins"],["nassau","Nassau"],["nassau-press","Nassau + Auto Press"],["match","Match Play"]].map(([id,lbl])=>(
+                      <button key={id} onClick={()=>setBetType(id)} style={{flex:1,padding:"10px 4px",borderRadius:8,background:betType===id?C.green:C.surface,color:betType===id?"#0a1a0f":C.muted,border:"1px solid "+(betType===id?C.green:C.border),cursor:"pointer",fontSize:12,fontWeight:betType===id?700:500,whiteSpace:"nowrap"}}>{lbl}</button>
+                    ))}
+                  </div>
+                  <NumStepper value={betAmount} onChange={setBetAmount} min={1} max={99} label={betType==="skins"?"$ per skin":betType==="match"?"$ per hole":"$ per side / total"}/>
+                  <Lbl>Strokes — belong to the bet, not the tournament</Lbl>
+                  <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}}>
+                    {[["none","No strokes"],["A",(betAName||"Player A")+" gets strokes"],["B",(betBName||"Player B")+" gets strokes"]].map(([id,lbl])=>(
+                      <button key={id} onClick={()=>setBetStrokesTo(id)} style={{flex:1,padding:"10px 4px",borderRadius:8,background:betStrokesTo===id?C.gold:C.surface,color:betStrokesTo===id?"#0a1a0f":C.muted,border:"1px solid "+(betStrokesTo===id?C.gold:C.border),cursor:"pointer",fontSize:12,fontWeight:betStrokesTo===id?700:500,whiteSpace:"nowrap"}}>{lbl}</button>
+                    ))}
+                  </div>
+                  {betStrokesTo!=="none"&&(
+                    <>
+                      <NumStepper value={betStrokesCount} onChange={setBetStrokesCount} min={1} max={18} label="Strokes (split per side — 2 = 1 front + 1 back)"/>
+                      <div style={{fontSize:11,color:C.muted,marginBottom:12}}>Strokes fall on the hardest holes of each side.</div>
+                    </>
+                  )}
+                  {betType==="nassau-press"&&(
+                    <>
+                      <Lbl>Auto press triggers when</Lbl>
+                      <div style={{display:"flex",gap:6,marginBottom:8}}>
+                        {[1,2,3].map(n=>(
+                          <button key={n} onClick={()=>setBetPressDown(n)} style={{flex:1,padding:"12px",borderRadius:8,background:betPressDown===n?C.gold:C.surface,color:betPressDown===n?"#0a1a0f":C.muted,border:"1px solid "+(betPressDown===n?C.gold:C.border),cursor:"pointer",fontSize:13,fontWeight:betPressDown===n?700:500}}>{n} down</button>
+                        ))}
+                      </div>
+                      <div style={{fontSize:11,color:C.muted,marginBottom:12}}>Auto presses only — no manual presses on tournament side bets.</div>
+                    </>
+                  )}
+                  <BigBtn onClick={saveBet}>Save bet</BigBtn>
+                </div>
+              )}
+              <SideBetsTab bets={sideBets} teams={teams} course={course} courseId={courseId} C={C} onDelete={(id)=>setSideBets(prev=>prev.filter(b=>b.id!==id))}/>
+            </div>
+          )}
 
           {lbTab==="ctp"&&(
             <div>
