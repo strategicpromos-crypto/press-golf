@@ -23,7 +23,7 @@
 // blocks strokes on it. Handicaps must be all 18 (1–18, each once) or all
 // empty; a half-filled row blocks save until it is finished or cleared.
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { searchCourseAPI, fetchCourseFromAPI, saveCourse, getLibraryCourses, getLibraryCourse, updateCourse, courseUsage, deleteCourse } from "./courseStore.js";
 
 const DEFAULT_C = {
@@ -32,7 +32,92 @@ const DEFAULT_C = {
   red:"#e05050", text:"#e8f0e9", muted:"#6b7f6d", dim:"#1e2f20",
 };
 
-export default function CourseSearch({ C: Cin, onPick, onClose, onCourseDeleted }) {
+// Shared delete confirmation, used both by the red ✕ on the Tournament
+// Setup saved list and by the edit list inside CourseSearch — same safety
+// everywhere: tournament usage blocks the delete, otherwise the user must
+// type DELETE. The parent only tracks which row's panel is open.
+export function CourseDeletePanel({ course, C: Cin, onDone, onDeleted }) {
+  const C = { ...DEFAULT_C, ...(Cin || {}) };
+  const [input, setInput] = useState("");
+  const [checking, setChecking] = useState(true);
+  const [usage, setUsage] = useState(null);
+  const [err, setErr] = useState("");
+  const [deleting, setDeleting] = useState(false);
+
+  useEffect(() => {
+    let live = true;
+    courseUsage(course.id).then(rows => {
+      if (!live) return;
+      setUsage(rows); setChecking(false);
+    }).catch(e => {
+      if (!live) return;
+      setErr("Couldn't check whether tournaments use this course — delete blocked to be safe. (" + (e.message || e) + ")");
+      setUsage(null); setChecking(false);
+    });
+    return () => { live = false; };
+  }, [course.id]);
+
+  async function confirm() {
+    setDeleting(true); setErr("");
+    try {
+      await deleteCourse(course.id);
+      onDeleted && onDeleted(course.id);
+    } catch (e) {
+      setErr("Delete didn't go through — make sure you're signed in as a director, then try again. (" + (e.message || e) + ")");
+      setDeleting(false);
+    }
+  }
+
+  const inp = {
+    width:"100%", padding:"12px", background:C.surface,
+    border:`1px solid ${C.border}`, borderRadius:10, color:C.text,
+    fontSize:15, outline:"none", boxSizing:"border-box",
+  };
+  const smallBtn = {
+    padding:"12px 14px", background:C.surface, color:C.text,
+    border:`1px solid ${C.border}`, borderRadius:10, fontWeight:700,
+    fontSize:13, cursor:"pointer", whiteSpace:"nowrap",
+  };
+
+  return (
+    <div style={{marginTop:8,background:C.surface,border:"1px solid "+C.border,borderRadius:10,padding:12}}>
+      {checking ? (
+        <div style={{fontSize:13,color:C.muted}}>Checking tournaments…</div>
+      ) : err && usage===null ? (
+        <>
+          <div style={{fontSize:13,color:C.red,marginBottom:8}}>{err}</div>
+          <button onClick={onDone} style={smallBtn}>Done</button>
+        </>
+      ) : usage && usage.length>0 ? (
+        <>
+          <div style={{fontSize:13,fontWeight:700,marginBottom:4}}>Can't delete — this course is used by:</div>
+          {usage.slice(0,5).map(t=>(
+            <div key={t.id} style={{fontSize:13,color:C.muted}}>• {t.name || "Unnamed tournament"}{t.status ? " ("+t.status+")" : ""}</div>
+          ))}
+          {usage.length>5 && <div style={{fontSize:12,color:C.muted}}>…and {usage.length-5} more</div>}
+          <div style={{fontSize:12,color:C.muted,marginTop:6}}>Finish or delete those tournaments first, then delete the course.</div>
+          <button onClick={onDone} style={{...smallBtn,marginTop:8}}>Done</button>
+        </>
+      ) : (
+        <>
+          <div style={{fontSize:13,marginBottom:8}}>Permanently remove <b>{course.name}</b> from the library? This can't be undone. Type <b>DELETE</b> to confirm.</div>
+          <input value={input} onChange={e=>setInput(e.target.value)} placeholder="Type DELETE" autoCapitalize="characters"
+            style={{...inp, marginBottom:8, textAlign:"center", fontWeight:700, letterSpacing:2}} />
+          {err && <div style={{fontSize:12,color:C.red,marginBottom:8}}>{err}</div>}
+          <div style={{display:"flex",gap:8}}>
+            <button onClick={confirm} disabled={deleting || input.toUpperCase()!=="DELETE"}
+              style={{flex:1,padding:"12px",background:C.red,color:"#fff",border:"none",borderRadius:10,fontWeight:800,fontSize:14,cursor:"pointer",opacity:(deleting || input.toUpperCase()!=="DELETE")?0.5:1}}>
+              {deleting ? "Deleting…" : "Delete course"}
+            </button>
+            <button onClick={onDone} style={{...smallBtn, flex:1, textAlign:"center"}}>Cancel</button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+export default function CourseSearch({ C: Cin, onPick, onClose }) {
   const C = { ...DEFAULT_C, ...(Cin || {}) };
   const [phase, setPhase] = useState("search"); // search | check
   const [query, setQuery] = useState("");
@@ -52,14 +137,10 @@ export default function CourseSearch({ C: Cin, onPick, onClose, onCourseDeleted 
   const [qfPar, setQfPar] = useState("");
   const [qfHdcp, setQfHdcp] = useState("");
   const [qfErr, setQfErr] = useState("");
-  // Delete flow: which saved course is being confirmed, what the user typed,
-  // whether its tournament usage is still being checked, and what uses it.
-  const [deleteId, setDeleteId] = useState(null);
-  const [deleteInput, setDeleteInput] = useState("");
-  const [deleteChecking, setDeleteChecking] = useState(false);
-  const [deleteUsage, setDeleteUsage] = useState(null);
-  const [deleteErr, setDeleteErr] = useState("");
-  const [deleting, setDeleting] = useState(false);
+  // NOTE: deleting a course is intentionally NOT offered in this panel.
+  // Delete lives only on the Tournament Setup saved list (red ✕ beside each
+  // imported course), using CourseDeletePanel above. This panel is for
+  // finding, importing, and editing cards only.
 
   const libCourses = getLibraryCourses();
 
@@ -218,36 +299,6 @@ export default function CourseSearch({ C: Cin, onPick, onClose, onCourseDeleted 
     }
   }
 
-  // Delete flow: first check whether any tournament uses the course. If one
-  // does, the delete is blocked and the tournaments are named — deleting
-  // would strand their scorecards. Otherwise the user must type DELETE,
-  // exactly like deleting a tournament.
-  async function startDelete(lib) {
-    setDeleteId(lib.id); setDeleteInput(""); setDeleteErr(""); setDeleteUsage(null); setDeleting(false);
-    setDeleteChecking(true);
-    try {
-      setDeleteUsage(await courseUsage(lib.id));
-    } catch (e) {
-      setDeleteErr("Couldn't check whether tournaments use this course — delete blocked to be safe. (" + (e.message || e) + ")");
-      setDeleteUsage(null);
-    }
-    setDeleteChecking(false);
-  }
-
-  async function confirmDeleteCourse() {
-    if (!deleteId) return;
-    setDeleting(true); setDeleteErr("");
-    try {
-      await deleteCourse(deleteId);
-      const gone = deleteId;
-      setDeleteId(null); setDeleteInput(""); setDeleteUsage(null); setDeleting(false);
-      onCourseDeleted && onCourseDeleted(gone);
-    } catch (e) {
-      setDeleteErr("Delete didn't go through — make sure you're signed in as a director, then try again. (" + (e.message || e) + ")");
-      setDeleting(false);
-    }
-  }
-
   function renderCell(row, idx) {
     const h = draft.holes[idx];
     const val = row === "par" ? h.par : h.hdcp;
@@ -316,59 +367,15 @@ export default function CourseSearch({ C: Cin, onPick, onClose, onCourseDeleted 
 
         <div style={{marginTop:16,borderTop:`1px solid ${C.border}`,paddingTop:12}}>
           <div style={{fontWeight:800,fontSize:14,marginBottom:4}}>✏️ Edit a saved course</div>
-          <div style={{fontSize:12,color:C.muted,marginBottom:8}}>Fix a card, add missing handicaps, or remove a course — no search needed. Built-in courses can't be deleted here; they live in the app itself.</div>
+          <div style={{fontSize:12,color:C.muted,marginBottom:8}}>Fix a card, or add handicaps to a course saved without them — no search needed.</div>
           <div style={{display:"flex",flexDirection:"column",gap:8}}>
             {libCourses.map(c => (
-              <div key={c.id}>
-                <div style={{display:"flex",gap:8}}>
-                  <button onClick={()=>startEdit(c)} style={{...resultBtn, flex:1, width:"auto"}}>
-                    <div style={{fontWeight:700,fontSize:15}}>{c.name}</div>
-                    <div style={{fontSize:12,color:c.hdcpOk?C.muted:C.gold}}>
-                      {c.city || "Saved course"}{c.hdcpOk ? " · handicaps set" : " · ⚠ no handicaps"}
-                    </div>
-                  </button>
-                  <button onClick={()=>startDelete(c)}
-                    style={{padding:"12px 14px",background:"transparent",border:"1px solid "+C.red,color:C.red,borderRadius:10,fontSize:12,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}>
-                    Delete
-                  </button>
+              <button key={c.id} onClick={()=>startEdit(c)} style={resultBtn}>
+                <div style={{fontWeight:700,fontSize:15}}>{c.name}</div>
+                <div style={{fontSize:12,color:c.hdcpOk?C.muted:C.gold}}>
+                  {c.city || "Saved course"}{c.hdcpOk ? " · handicaps set" : " · ⚠ no handicaps"}
                 </div>
-                {deleteId===c.id && (
-                  <div style={{marginTop:8,background:C.surface,border:"1px solid "+C.border,borderRadius:10,padding:12}}>
-                    {deleteChecking ? (
-                      <div style={{fontSize:13,color:C.muted}}>Checking tournaments…</div>
-                    ) : deleteErr && deleteUsage===null ? (
-                      <>
-                        <div style={{fontSize:13,color:C.red,marginBottom:8}}>{deleteErr}</div>
-                        <button onClick={()=>{setDeleteId(null);setDeleteErr("");}} style={smallBtn}>Done</button>
-                      </>
-                    ) : deleteUsage && deleteUsage.length>0 ? (
-                      <>
-                        <div style={{fontSize:13,fontWeight:700,marginBottom:4}}>Can't delete — this course is used by:</div>
-                        {deleteUsage.slice(0,5).map(t=>(
-                          <div key={t.id} style={{fontSize:13,color:C.muted}}>• {t.name || "Unnamed tournament"}{t.status ? " ("+t.status+")" : ""}</div>
-                        ))}
-                        {deleteUsage.length>5 && <div style={{fontSize:12,color:C.muted}}>…and {deleteUsage.length-5} more</div>}
-                        <div style={{fontSize:12,color:C.muted,marginTop:6}}>Finish or delete those tournaments first, then delete the course.</div>
-                        <button onClick={()=>{setDeleteId(null);setDeleteUsage(null);}} style={{...smallBtn,marginTop:8}}>Done</button>
-                      </>
-                    ) : (
-                      <>
-                        <div style={{fontSize:13,marginBottom:8}}>Permanently remove <b>{c.name}</b> from the library? This can't be undone. Type <b>DELETE</b> to confirm.</div>
-                        <input value={deleteInput} onChange={e=>setDeleteInput(e.target.value)} placeholder="Type DELETE" autoCapitalize="characters"
-                          style={{...inp, marginBottom:8, textAlign:"center", fontWeight:700, letterSpacing:2}} />
-                        {deleteErr && <div style={{fontSize:12,color:C.red,marginBottom:8}}>{deleteErr}</div>}
-                        <div style={{display:"flex",gap:8}}>
-                          <button onClick={confirmDeleteCourse} disabled={deleting || deleteInput.toUpperCase()!=="DELETE"}
-                            style={{flex:1,padding:"12px",background:C.red,color:"#fff",border:"none",borderRadius:10,fontWeight:800,fontSize:14,cursor:"pointer",opacity:(deleting || deleteInput.toUpperCase()!=="DELETE")?0.5:1}}>
-                            {deleting ? "Deleting…" : "Delete course"}
-                          </button>
-                          <button onClick={()=>{setDeleteId(null);setDeleteInput("");setDeleteErr("");}} style={{...smallBtn, flex:1, textAlign:"center"}}>Cancel</button>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                )}
-              </div>
+              </button>
             ))}
           </div>
           {libCourses.length === 0 && (
