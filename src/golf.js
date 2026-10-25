@@ -539,7 +539,7 @@ export function calcAutoPressNassau(scores, holeData, myStrokeHoles, oppStrokeHo
   };
 }
 
-export function calcSkins(scores, holeData, myStrokeHoles, oppStrokeHoles, betPerSkin) {
+export function calcSkins(scores, holeData, myStrokeHoles, oppStrokeHoles, betPerSkin, carryOver = true) {
   let me = 0, opp = 0, net = 0, carry = 0;
   const holes = [];
 
@@ -554,7 +554,11 @@ export function calcSkins(scores, holeData, myStrokeHoles, oppStrokeHoles, betPe
 
     if (myNet < oppNet)      { me++;  net += pot;  holes.push({hole:h.hole, winner:"me",  pot}); carry = 0; }
     else if (myNet > oppNet) { opp++; net -= pot;  holes.push({hole:h.hole, winner:"opp", pot}); carry = 0; }
-    else                     {        carry += betPerSkin; holes.push({hole:h.hole, winner:"carry", pot:carry}); }
+    // Tie: carryOver (default) rolls the skin forward; without it the
+    // hole is simply dead — worth nothing, and the next hole is still
+    // worth exactly one skin.
+    else if (carryOver)      {        carry += betPerSkin; holes.push({hole:h.hole, winner:"carry", pot:carry}); }
+    else                     {        holes.push({hole:h.hole, winner:"tie", pot:0}); }
   }
 
   return { me, opp, net, carries:carry, holes };
