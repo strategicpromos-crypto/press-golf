@@ -1637,7 +1637,8 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
             <div style={{flex:1,minWidth:0,marginRight:12}}>
               <div style={{fontWeight:700,fontSize:14,color:C.gold,marginBottom:2}}>🏆 Tournament In Progress</div>
               <div style={{fontSize:12,color:C.muted}}>{activeTourney.name} · Hole {activeTourney.current_hole}</div>
-              <div style={{fontSize:11,color:C.dim,marginTop:1}}>{(activeTourney.teams||[]).length} teams</div>
+              {/* Teams line was C.dim (#1e2f20) at size 11 on a near-black background — effectively invisible. Same readable muted tone/size as the name line above. */}
+              <div style={{fontSize:12,color:C.muted,marginTop:1}}>{(activeTourney.teams||[]).length} teams</div>
             </div>
             <button onClick={()=>setView("tournament")} style={{background:C.gold,border:"none",color:"#0a1a0f",padding:"10px 16px",borderRadius:12,fontSize:13,fontWeight:800,cursor:"pointer",flexShrink:0}}>
               Resume →
