@@ -1633,10 +1633,11 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
         {/* Resume Tournament banner */}
         {activeTourney&&(
           <div style={{background:`linear-gradient(135deg,rgba(232,184,75,0.15),rgba(232,184,75,0.05))`,border:`1px solid ${C.gold}44`,borderRadius:14,padding:"14px 16px",marginBottom:14,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-            <div>
+            {/* No join code here anymore (Oct 25, 2026): the Join screen was removed Oct 12 and sharing is link-based, so the code had nothing to join with — and it was the line running off the edge. */}
+            <div style={{flex:1,minWidth:0,marginRight:12}}>
               <div style={{fontWeight:700,fontSize:14,color:C.gold,marginBottom:2}}>🏆 Tournament In Progress</div>
               <div style={{fontSize:12,color:C.muted}}>{activeTourney.name} · Hole {activeTourney.current_hole}</div>
-              <div style={{fontSize:11,color:C.dim,marginTop:1}}>{(activeTourney.teams||[]).length} teams · Code: {activeTourney.director_code?.split("#")[0]}</div>
+              <div style={{fontSize:11,color:C.dim,marginTop:1}}>{(activeTourney.teams||[]).length} teams</div>
             </div>
             <button onClick={()=>setView("tournament")} style={{background:C.gold,border:"none",color:"#0a1a0f",padding:"10px 16px",borderRadius:12,fontSize:13,fontWeight:800,cursor:"pointer",flexShrink:0}}>
               Resume →
