@@ -67,6 +67,30 @@ export default function StablefordPlay({ setup, onBack }) {
     catch { /* storage blocked — scores still live in memory this session */ }
   }, [scores, setup.id]);
 
+  // Closest to the pin, per day per hole: { [day]: { [hole]: {playerId, inches} } }.
+  // Any hole can take an entry; the leader is simply the closest distance.
+  const [ctp, setCtp] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("pg-stableford-ctp-" + setup.id) || "{}"); }
+    catch { return {}; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem("pg-stableford-ctp-" + setup.id, JSON.stringify(ctp)); }
+    catch { /* storage blocked */ }
+  }, [ctp, setup.id]);
+  const [ctpPlayer, setCtpPlayer] = useState(null);
+  const [ctpFt, setCtpFt] = useState(0);
+  const [ctpIn, setCtpIn] = useState(0);
+  const [ctpMsg, setCtpMsg] = useState("");
+  const ctpEntry = (ctp[dayIdx] || {})[hole];
+  // When the hole changes, load that hole's entry into the form (or clear it).
+  useEffect(() => {
+    const e = (ctp[dayIdx] || {})[hole];
+    if (e) { setCtpPlayer(e.playerId); setCtpFt(Math.floor(e.inches / 12)); setCtpIn(e.inches % 12); }
+    else { setCtpPlayer(null); setCtpFt(0); setCtpIn(0); }
+    setCtpMsg("");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dayIdx, hole]);
+
   const day = days[dayIdx] || { courseId:"south-toledo" };
   const course = COURSES[day.courseId] || COURSES["south-toledo"];
   const holes = course?.holes || [];
@@ -149,6 +173,62 @@ export default function StablefordPlay({ setup, onBack }) {
     return sum;
   }
 
+  // ── Skins (locked design: FOUR independent pots, ties ALWAYS dead) ─────────
+  // Gross field / gross flight / net field / net flight. A player's four
+  // skins switches from setup decide which pots they are in; old setups
+  // without a skins object count as in everywhere. Net = gross minus that
+  // day's strokes on the hole. No stakes live in setup yet, so skins are
+  // counted, not dollarized.
+  function skinsEligible(p, pot) { return !p.skins || p.skins[pot] !== false; }
+  function playerName(id) { return (setup.players || []).find(p => p.id === id)?.name || "—"; }
+  function scoreForSkin(p, d, h, net) {
+    const g = grossOf(p.id, d, h.hole);
+    if (g === null || isNaN(g)) return null;
+    if (!net) return g;
+    const c = COURSES[(days[d] || {}).courseId] || course;
+    return g - strokesOnHole(hdcpOnDay(p, d), h, c?.holes || []);
+  }
+  function skinsWinners(d, h) {
+    const players = setup.players || [];
+    function fieldWinner(net) {
+      const cand = players
+        .filter(p => skinsEligible(p, net ? "netField" : "grossField"))
+        .map(p => ({ id: p.id, s: scoreForSkin(p, d, h, net) }))
+        .filter(x => x.s !== null);
+      if (!cand.length) return null;
+      const best = Math.min(...cand.map(x => x.s));
+      const win = cand.filter(x => x.s === best);
+      return win.length === 1 ? win[0].id : null; // tie = dead, never carried
+    }
+    function flightWinners(net) {
+      const out = {};
+      ["A", "B", "C"].forEach(fl => {
+        const cand = players
+          .filter(p => p.flight === fl && skinsEligible(p, net ? "netFlight" : "grossFlight"))
+          .map(p => ({ id: p.id, s: scoreForSkin(p, d, h, net) }))
+          .filter(x => x.s !== null);
+        if (!cand.length) return;
+        const best = Math.min(...cand.map(x => x.s));
+        const win = cand.filter(x => x.s === best);
+        out[fl] = win.length === 1 ? win[0].id : null;
+      });
+      return out;
+    }
+    return { grossField: fieldWinner(false), netField: fieldWinner(true), grossFlight: flightWinners(false), netFlight: flightWinners(true) };
+  }
+  function skinsTotals(d) {
+    const totals = { grossField: {}, netField: {}, grossFlight: {}, netFlight: {} };
+    const c = COURSES[(days[d] || {}).courseId] || course;
+    for (const h of (c?.holes || [])) {
+      const w = skinsWinners(d, h);
+      if (w.grossField) totals.grossField[w.grossField] = (totals.grossField[w.grossField] || 0) + 1;
+      if (w.netField) totals.netField[w.netField] = (totals.netField[w.netField] || 0) + 1;
+      Object.values(w.grossFlight).forEach(id => { if (id) totals.grossFlight[id] = (totals.grossFlight[id] || 0) + 1; });
+      Object.values(w.netFlight).forEach(id => { if (id) totals.netFlight[id] = (totals.netFlight[id] || 0) + 1; });
+    }
+    return totals;
+  }
+
   function setScore(playerId, h, value) {
     setScores(prev => ({
       ...prev,
@@ -227,6 +307,53 @@ export default function StablefordPlay({ setup, onBack }) {
           );
         })}
 
+        {setup.ctpOn && (
+          <div style={{background:C.card,border:"1px solid "+C.border,borderRadius:12,padding:"14px 16px",marginBottom:12}}>
+            <div style={{fontSize:11,color:C.gold,letterSpacing:1.5,textTransform:"uppercase",marginBottom:10,fontWeight:600}}>📍 Closest to the Pin — Hole {hole}</div>
+            {ctpEntry && (
+              <div style={{fontSize:14,marginBottom:10}}>
+                Leader: <b>{playerName(ctpEntry.playerId)}</b> — {Math.floor(ctpEntry.inches / 12)} ft {ctpEntry.inches % 12} in
+                <button onClick={() => setCtp(prev => {
+                  const next = { ...prev, [dayIdx]: { ...(prev[dayIdx] || {}) } };
+                  delete next[dayIdx][hole];
+                  return next;
+                })}
+                  style={{marginLeft:10,padding:"6px 12px",background:"transparent",border:"1px solid "+C.red,borderRadius:8,color:C.red,fontSize:12,fontWeight:600,cursor:"pointer"}}>Remove</button>
+              </div>
+            )}
+            <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:10}}>
+              {(setup.players || []).map(p => (
+                <button key={p.id} onClick={()=>setCtpPlayer(p.id)}
+                  style={{padding:"8px 12px",borderRadius:20,background:ctpPlayer===p.id?C.gold:C.surface,color:ctpPlayer===p.id?"#0a1a0f":C.muted,border:"1px solid "+(ctpPlayer===p.id?C.gold:C.border),cursor:"pointer",fontSize:13,fontWeight:ctpPlayer===p.id?700:500}}>
+                  {p.name}
+                </button>
+              ))}
+            </div>
+            <div style={{display:"flex",alignItems:"center",gap:10}}>
+              <button onClick={()=>setCtpFt(Math.max(0, ctpFt - 1))} style={{width:40,height:40,borderRadius:"50%",background:C.dim,border:"1px solid "+C.border,color:C.text,fontSize:20,fontWeight:700,cursor:"pointer"}}>−</button>
+              <span style={{fontSize:16,fontWeight:700}}>{ctpFt} ft</span>
+              <button onClick={()=>setCtpFt(ctpFt + 1)} style={{width:40,height:40,borderRadius:"50%",background:C.dim,border:"1px solid "+C.border,color:C.text,fontSize:20,fontWeight:700,cursor:"pointer"}}>+</button>
+              <button onClick={()=>setCtpIn((ctpIn + 11) % 12)} style={{width:40,height:40,borderRadius:"50%",background:C.dim,border:"1px solid "+C.border,color:C.text,fontSize:20,fontWeight:700,cursor:"pointer"}}>−</button>
+              <span style={{fontSize:16,fontWeight:700}}>{ctpIn} in</span>
+              <button onClick={()=>setCtpIn((ctpIn + 1) % 12)} style={{width:40,height:40,borderRadius:"50%",background:C.dim,border:"1px solid "+C.border,color:C.text,fontSize:20,fontWeight:700,cursor:"pointer"}}>+</button>
+              <button onClick={() => {
+                if (!ctpPlayer) return;
+                const inches = ctpFt * 12 + ctpIn;
+                const cur = (ctp[dayIdx] || {})[hole];
+                if (cur && inches >= cur.inches) { setCtpMsg("That's farther than the current leader — not saved."); return; }
+                setCtp(prev => ({ ...prev, [dayIdx]: { ...(prev[dayIdx] || {}), [hole]: { playerId: ctpPlayer, inches } } }));
+                setCtpMsg("");
+              }}
+                disabled={!ctpPlayer}
+                style={{marginLeft:"auto",padding:"12px 18px",background:ctpPlayer?C.gold:C.dim,color:ctpPlayer?"#0a1a0f":C.muted,border:"none",borderRadius:10,fontSize:14,fontWeight:800,cursor:ctpPlayer?"pointer":"default"}}>
+                Save
+              </button>
+            </div>
+            {ctpMsg && <div style={{fontSize:12,color:C.red,marginTop:8}}>{ctpMsg}</div>}
+            <div style={{fontSize:11,color:C.muted,marginTop:8}}>Only a closer distance replaces the leader. Pick the player, set feet and inches, save.</div>
+          </div>
+        )}
+
         <button onClick={()=>{ if (hole < 18) setHole(hole + 1); }}
           style={{width:"100%",padding:"16px",background:hole < 18 ? C.green : C.dim,color:hole < 18 ? "#0a1a0f" : C.muted,border:"none",borderRadius:12,fontSize:15,fontWeight:800,cursor:hole < 18 ? "pointer" : "default",marginTop:4}}>
           {hole < 18 ? "Next — Hole " + (hole + 1) : "Day " + (dayIdx + 1) + " complete"}
@@ -252,9 +379,72 @@ export default function StablefordPlay({ setup, onBack }) {
           {setup.countingMode === "countup" && <div style={{fontSize:11,color:C.muted,marginTop:8}}>Count-up totals include each player's handicap for that day.</div>}
         </div>
 
+        {setup.ctpOn && (
+          <div style={{background:C.card,border:"1px solid "+C.border,borderRadius:12,padding:"14px 16px",marginTop:12}}>
+            <div style={{fontSize:11,color:C.gold,letterSpacing:1.5,textTransform:"uppercase",marginBottom:10,fontWeight:600}}>📍 Closest to the Pin — Day {dayIdx + 1}</div>
+            {holes.slice(0, 18).filter(h => (ctp[dayIdx] || {})[h.hole]).length === 0 && (
+              <div style={{fontSize:13,color:C.muted}}>No closest-to-the-pin entries yet — enter one on a hole above.</div>
+            )}
+            {holes.slice(0, 18).filter(h => (ctp[dayIdx] || {})[h.hole]).map(h => {
+              const e = (ctp[dayIdx] || {})[h.hole];
+              return (
+                <div key={h.hole} style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderBottom:"1px solid "+C.dim}}>
+                  <span style={{fontSize:14}}>Hole {h.hole}</span>
+                  <span style={{fontSize:14,fontWeight:700}}>{playerName(e.playerId)} · {Math.floor(e.inches / 12)} ft {e.inches % 12} in</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        <div style={{background:C.card,border:"1px solid "+C.border,borderRadius:12,padding:"14px 16px",marginTop:12}}>
+          <div style={{fontSize:11,color:C.gold,letterSpacing:1.5,textTransform:"uppercase",marginBottom:10,fontWeight:600}}>Skins — Day {dayIdx + 1} · ties dead, no carryovers</div>
+          {(() => {
+            const totals = skinsTotals(dayIdx);
+            const potRows = (title, obj) => {
+              const entries = Object.entries(obj).sort((a, b) => b[1] - a[1]);
+              return (
+                <div style={{marginBottom:12}}>
+                  <div style={{fontSize:13,fontWeight:700,marginBottom:4}}>{title}</div>
+                  {entries.length === 0
+                    ? <div style={{fontSize:13,color:C.muted}}>No skins yet — every hole tied, or no one is in this pot.</div>
+                    : entries.map(([id, n]) => (
+                      <div key={id} style={{display:"flex",justifyContent:"space-between",padding:"4px 0",fontSize:14}}>
+                        <span>{playerName(id)}</span><span style={{fontWeight:700}}>{n}</span>
+                      </div>
+                    ))}
+                </div>
+              );
+            };
+            const c = course;
+            return (
+              <div>
+                {potRows("Gross — Field", totals.grossField)}
+                {potRows("Gross — Flight", totals.grossFlight)}
+                {potRows("Net — Field", totals.netField)}
+                {potRows("Net — Flight", totals.netFlight)}
+                <div style={{fontSize:11,color:C.muted,marginTop:4,marginBottom:10}}>Hole by hole, for settling arguments:</div>
+                {holes.slice(0, 18).map(h => {
+                  const anyScore = (setup.players || []).some(p => grossOf(p.id, dayIdx, h.hole) !== null);
+                  if (!anyScore) return null;
+                  const w = skinsWinners(dayIdx, h);
+                  const flightLine = (obj) => Object.entries(obj).map(([fl, id]) => fl + ": " + (id ? playerName(id) : "tie")).join(" · ");
+                  return (
+                    <div key={h.hole} style={{padding:"6px 0",borderBottom:"1px solid "+C.dim,fontSize:12,lineHeight:1.5}}>
+                      <b>H{h.hole}</b> · Gross field: {w.grossField ? playerName(w.grossField) : "tie"} · Net field: {w.netField ? playerName(w.netField) : "tie"}
+                      <br /><span style={{color:C.muted}}>Gross flight — {flightLine(w.grossFlight)} · Net flight — {flightLine(w.netFlight)}</span>
+                    </div>
+                  );
+                })}
+                <div style={{fontSize:11,color:C.muted,marginTop:10}}>Skins are counted here, not dollarized — setup has no $ per skin yet. Say the word and stakes go on the setup screen next.</div>
+              </div>
+            );
+          })()}
+        </div>
+
         <div style={{background:C.card,border:"1px solid "+C.border,borderRadius:12,padding:"14px 16px",marginTop:12}}>
           <div style={{fontSize:13,color:C.muted,lineHeight:1.6}}>
-            Still to come: daily team setup and team totals, skins pots, CTP entry, and saving this tournament to the database so other players can open it. Scores entered here save on this device for now.
+            Still to come: daily team setup and team totals, and saving this tournament to the database so other players can open it. Scores, skins, and closest-to-the-pin entries here save on this device for now.
           </div>
         </div>
 
