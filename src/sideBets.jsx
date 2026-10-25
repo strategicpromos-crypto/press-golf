@@ -4,7 +4,10 @@ import { getStrokeHoles, calcAutoPressNassau, calcSkins, courseHasHdcp } from ".
 // ── TOURNAMENT SIDE BETS ─────────────────────────────────────────────────────
 // A side bet is a buddy-game calculation that runs on TOP of tournament
 // scores. It is stored on the team_tournaments row as side_bets:
-//   { id, a:{team,pi}, b:{team,pi}, betType, betAmount, strokes, pressDown }
+//   { id, a:{team,pi}, b:{team,pi}, betType, betAmount, strokes, pressDown, carryOver }
+//   carryOver (skins only): true = tied holes roll forward (default, and
+//     the behavior of every bet saved before this field existed);
+//     false = a tied hole is dead, each hole is worth exactly one skin.
 //   betType: "skins" | "match" | "nassau" | "nassau-press"
 //   betAmount: $ per skin / per hole / per side+total
 //   strokes: SIGNED — >0 means player B receives that many, <0 means player A
@@ -69,8 +72,9 @@ export function calcSideBet(bet, teams, course, courseId){
   }
 
   if(bet.betType==="skins"){
-    const r=calcSkins({me:aScores,opp:bScores}, holes, aStrokeHoles, bStrokeHoles, bet.betAmount);
-    return {type:"skins",aName,bName,total:r.net,aWon:r.me,bWon:r.opp,carry:r.carries,
+    const carryOver=bet.carryOver!==false;
+    const r=calcSkins({me:aScores,opp:bScores}, holes, aStrokeHoles, bStrokeHoles, bet.betAmount, carryOver);
+    return {type:"skins",aName,bName,total:r.net,aWon:r.me,bWon:r.opp,carry:r.carries,carryOver,
       holes:r.holes,holesPlayed,aStrokeHoles,bStrokeHoles};
   }
 
@@ -149,6 +153,9 @@ export function SideBetsTab({bets, teams, course, courseId, C, onDelete, canSetu
                   {sideBetStrokeLabel(bet, calc.aName, calc.bName)}
                   {strokeHoles.length>0&&<span style={{color:C.gold}}> · holes {strokeHoles.join(", ")}</span>}
                 </div>
+                {calc.type==="skins"&&!calc.carryOver&&(
+                  <div style={{fontSize:12,color:C.muted,marginTop:2}}>Tied holes don't carry — each hole is worth one skin.</div>
+                )}
                 {bet.strokes!==0&&!courseHasHdcp(courseId)&&(
                   <div style={{fontSize:12,color:C.gold,marginTop:2}}>⚠ This course has no handicap data — this bet is playing scratch until handicaps are added.</div>
                 )}
@@ -165,7 +172,7 @@ export function SideBetsTab({bets, teams, course, courseId, C, onDelete, canSetu
               <>
                 <div style={{display:"flex",flexWrap:"wrap",gap:4,marginTop:12}}>
                   {calc.holes.map(h=>(
-                    <div key={h.hole} title={"Hole "+h.hole+(h.winner==="carry"?" — tied, $"+h.pot+" carries":" — $"+h.pot)}
+                    <div key={h.hole} title={"Hole "+h.hole+(h.winner==="carry"?" — tied, $"+h.pot+" carries":h.winner==="tie"?" — tied, no carry":" — $"+h.pot)}
                       style={{minWidth:30,textAlign:"center",borderRadius:8,padding:"6px 0 4px",
                         background:h.winner==="me"?"rgba(123,180,80,0.22)":h.winner==="opp"?"rgba(224,80,80,0.16)":C.dim,
                         outline:strokeHoles.includes(h.hole)?"1.5px solid "+C.gold:"none"}}>
