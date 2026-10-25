@@ -1,5 +1,5 @@
 import React from "react";
-import { getStrokeHoles, calcAutoPressNassau, calcSkins } from "./golf.js";
+import { getStrokeHoles, calcAutoPressNassau, calcSkins, courseHasHdcp } from "./golf.js";
 
 // ── TOURNAMENT SIDE BETS ─────────────────────────────────────────────────────
 // A side bet is a buddy-game calculation that runs on TOP of tournament
@@ -147,6 +147,9 @@ export function SideBetsTab({bets, teams, course, courseId, C, onDelete}){
                   {sideBetStrokeLabel(bet, calc.aName, calc.bName)}
                   {strokeHoles.length>0&&<span style={{color:C.gold}}> · holes {strokeHoles.join(", ")}</span>}
                 </div>
+                {bet.strokes!==0&&!courseHasHdcp(courseId)&&(
+                  <div style={{fontSize:12,color:C.gold,marginTop:2}}>⚠ This course has no handicap data — this bet is playing scratch until handicaps are added.</div>
+                )}
               </div>
               {onDelete&&(
                 <button onClick={()=>{if(window.confirm("Remove this side bet? Scores are not affected."))onDelete(bet.id);}}
