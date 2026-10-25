@@ -115,6 +115,26 @@ export async function updateCourse(id, course) {
   return id;
 }
 
+// Tournaments that reference a saved course (team_tournaments rows carry
+// course_id). Deleting a course in use would strand those tournaments'
+// scorecards, so callers block the delete and name the tournaments instead.
+export async function courseUsage(id) {
+  const { data, error } = await sb.from("team_tournaments").select("id,name,status").eq("course_id", id);
+  if (error) throw error;
+  return data || [];
+}
+
+// Delete a saved library course: server row + local merge + local cache.
+// Built-ins can't be deleted (they're code, not library rows) — callers only
+// offer delete for getLibraryCourses() entries. Requires a signed-in
+// director: the courses table grants DELETE to authenticated only.
+export async function deleteCourse(id) {
+  const { error } = await sb.from("courses").delete().eq("id", id);
+  if (error) throw error;
+  delete COURSES[id];
+  cacheLibrary();
+}
+
 // ── OpenGolfAPI ──────────────────────────────────────────────────────────────
 
 export async function searchCourseAPI(query) {
