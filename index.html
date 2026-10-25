@@ -38,12 +38,14 @@
         try {
           var p = new URLSearchParams(window.location.search);
           var tid = p.get("tourney");
+          var sf = p.get("sf");
           var team = p.get("team");
           var spec = p.get("spectate");
-          if(tid) {
+          if(tid || sf) {
             // Save link params so PWA can read them even after iOS strips the URL
             localStorage.setItem("press_link_params", JSON.stringify({
               tourney: tid,
+              sf: sf,
               team: team,
               spectate: spec,
               savedAt: Date.now()
