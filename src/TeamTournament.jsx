@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { COURSES } from "./golf.js";
+import { COURSES, courseHasHdcp } from "./golf.js";
 import CourseSearch from "./CourseSearch.jsx";
 import { sb } from "./supabase.js";
 import { calcSkins, SkinsTab } from "./skins.jsx";
@@ -647,6 +647,7 @@ export default function TeamTournament({onBack, user, onDelete}){
     const parseRef=(v)=>{ const parts=v.split(":"); return {team:parseInt(parts[0],10),pi:parseInt(parts[1],10)}; };
     const count=betStrokesTo==="none"?0:betStrokesCount;
     const strokes=betStrokesTo==="B"?count:betStrokesTo==="A"?-count:0;
+    if(strokes!==0&&!courseHasHdcp(courseId)){ window.alert("This course has no handicap data, so strokes can't apply here. Add handicaps first (course picker → Search for a course… → Edit a saved course), or set strokes to No strokes."); return; }
     const bet={ id:"bet_"+Date.now()+"_"+Math.floor(Math.random()*1000),
       a:parseRef(betA), b:parseRef(betB), betType, betAmount,
       strokes, pressDown:betType==="nassau-press"?betPressDown:2 };
@@ -886,10 +887,10 @@ export default function TeamTournament({onBack, user, onDelete}){
           <div style={{marginBottom:16}}>
             <Lbl>Course</Lbl>
             <select value={courseId} onChange={e=>{ if(e.target.value==="__search__"){ setShowCourseSearch(true); } else { setCourseId(e.target.value); setHolePars({}); } }} style={{width:"100%",padding:"14px",background:C.surface,border:"1px solid "+C.border,borderRadius:10,color:C.text,fontSize:15,outline:"none",WebkitAppearance:"none"}}>
+              <option value="__search__">🔍 Search for a course…</option>
               {Object.entries(COURSES).map(([id,c])=>(
                 <option key={id} value={id}>{c.name} — Par {c.par}</option>
               ))}
-              <option value="__search__">🔍 Search for a course…</option>
             </select>
             {showCourseSearch && <CourseSearch C={C} onClose={()=>setShowCourseSearch(false)} onPick={id=>{ setCourseId(id); setHolePars({}); setShowCourseSearch(false); }} />}
           </div>
