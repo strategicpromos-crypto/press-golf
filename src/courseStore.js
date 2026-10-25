@@ -98,6 +98,12 @@ export function getLibraryCourse(id) {
   return COURSES[id] || null;
 }
 
+// True for imported library courses, false for built-ins (code-owned) and
+// unknown ids. The setup list only offers the red ✕ on library courses.
+export function isLibraryCourse(id) {
+  return !!COURSES[id] && !BUILTIN_IDS.has(id);
+}
+
 // Rewrite a saved course's card under the SAME id (edit flow). Only the card
 // fields are sent, so source/api_id/created_by already on the row are kept.
 export async function updateCourse(id, course) {
