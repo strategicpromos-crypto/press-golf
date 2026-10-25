@@ -4,6 +4,7 @@ import { loadStripe } from "https://esm.sh/@stripe/stripe-js@2";
 import LiveRound from "./LiveRound.jsx";
 import IndividualRound from "./IndividualRound.jsx";
 import TeamTournament from "./TeamTournament.jsx";
+import StablefordSetup from "./StablefordSetup.jsx";
 import { TourneyLoader } from "./TourneyJoin.jsx";
 import TourneyCaptain from "./TourneyCaptain.jsx";
 import TourneySpectator from "./TourneySpectator.jsx";
@@ -1444,6 +1445,11 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
     <TeamTournament user={user} onBack={()=>setView("roster")} onDelete={()=>setActiveTourney(null)}/>
   );
 
+  // ── Stableford setup (v1: setup only — scoring comes next) ────────────────
+  if(view==="stableford") return(
+    <StablefordSetup onBack={()=>setView("roster")}/>
+  );
+
   // ── Individual round: resume prompt (mirrors captain_resume exactly) ────────
   if(liveSession?.view==="resume"&&liveSession?.data){
     const d=liveSession.data;
@@ -1555,6 +1561,15 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
             <div style={{fontSize:16,fontWeight:800,letterSpacing:0.3,marginBottom:3}}>🏆 Outing / Tournament</div>
             <div style={{fontSize:11,fontWeight:600,opacity:0.75}}>Best Ball · Teams · Leaderboard</div>
             <div style={{fontSize:11,opacity:0.6,marginTop:2}}>Director sends links to captains</div>
+          </div>
+        </button>
+
+        {/* ── STABLEFORD ── */}
+        <button onClick={()=>setView("stableford")} style={{width:"100%",maxWidth:360,background:`linear-gradient(135deg,#8fb8e8,#4a7ab5)`,border:"none",color:"#0a1a0f",padding:"0",borderRadius:16,cursor:"pointer",marginBottom:10,boxShadow:`0 4px 16px #4a7ab533`,textAlign:"left",overflow:"hidden"}}>
+          <div style={{padding:"14px 18px"}}>
+            <div style={{fontSize:16,fontWeight:800,letterSpacing:0.3,marginBottom:3}}>🎯 Stableford</div>
+            <div style={{fontSize:11,fontWeight:600,opacity:0.75}}>Multi-day · Teams · Flights · Skins</div>
+            <div style={{fontSize:11,opacity:0.6,marginTop:2}}>One-day games or full tournaments · adjustable points</div>
           </div>
         </button>
 
