@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { sb } from "./supabase.js";
-import { COURSES } from "./golf.js";
+import { COURSES, courseHasHdcp } from "./golf.js";
 import { SkinsTab } from "./skins.jsx";
 import { RulesTab } from "./RulesTab.jsx";
 import { SideBetsTab } from "./sideBets.jsx";
@@ -65,6 +65,18 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
   const [showSummary,       setShowSummary]       = useState(false);
   const [showCaptainSettings, setShowCaptainSettings] = useState(false);
   const [bTab,         setBTab]         = useState("standings");
+  // ── Captain side bets — captains run their own bets (Oct 25, 2026) ──────
+  // This is the one exception to "captains change nothing": bets only.
+  // Setup / hole pars / rules stay director-only.
+  const [showBetSetup, setShowBetSetup] = useState(false);
+  const [betA, setBetA] = useState("");
+  const [betB, setBetB] = useState("");
+  const [betType, setBetType] = useState("skins");
+  const [betAmount, setBetAmount] = useState(5);
+  const [betStrokesTo, setBetStrokesTo] = useState("none"); // "none" | "A" | "B"
+  const [betStrokesCount, setBetStrokesCount] = useState(2);
+  const [betPressDown, setBetPressDown] = useState(2);
+  const [betSaving, setBetSaving] = useState(false);
   const [ctpPopup,     setCtpPopup]     = useState(false); // simple open/close
   const [ctpName,      setCtpName]      = useState("");
   const [ctpDist,      setCtpDist]      = useState("");
@@ -340,6 +352,54 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
   function getPlayerScore(pi, hole) {
     const v = team?.scores?.[pi]?.[hole];
     return (v === undefined || v === null) ? null : safeInt(v);
+  }
+
+  // ── Captain side bets: write ONLY the side_bets column ──────────────────
+  // Never teams/scores, so a bet save can't clobber scoring — and it does
+  // NOT need the writer lock, so a captain can set up a bet before entering
+  // a score. Read-current-first so a bet saved a moment earlier by the
+  // director or another captain isn't overwritten by a stale local list.
+  const captainAllPlayers=(tourney.teams||[]).flatMap((t,ti)=>(t.players||[]).map((p,pi)=>({team:ti,pi,name:(p||"").trim(),teamName:t.name||("Team "+(ti+1))})).filter(x=>x.name!==""));
+  const captainBetAName=captainAllPlayers.find(p=>p.team+":"+p.pi===betA)?.name;
+  const captainBetBName=captainAllPlayers.find(p=>p.team+":"+p.pi===betB)?.name;
+
+  async function saveCaptainBet(){
+    if(!betA||!betB){ window.alert("Pick two players first."); return; }
+    if(betA===betB){ window.alert("Pick two different players."); return; }
+    const parseRef=(v)=>{ const p=v.split(":"); return {team:parseInt(p[0],10),pi:parseInt(p[1],10)}; };
+    const count=betStrokesTo==="none"?0:betStrokesCount;
+    const strokes=betStrokesTo==="B"?count:betStrokesTo==="A"?-count:0;
+    const cid=tourney.course_id||"south-toledo";
+    if(strokes!==0&&!courseHasHdcp(cid)){ window.alert("This course has no handicap data, so strokes can't apply here. Ask the director to add handicaps, or set strokes to No strokes."); return; }
+    const bet={ id:"bet_"+Date.now()+"_"+Math.floor(Math.random()*1000),
+      a:parseRef(betA), b:parseRef(betB), betType, betAmount,
+      strokes, pressDown:betType==="nassau-press"?betPressDown:2 };
+    setBetSaving(true);
+    try{
+      const{data,error:readErr}=await sb.from("team_tournaments").select("side_bets").eq("id",tourney.id).single();
+      if(readErr) throw readErr;
+      const next=[...(data?.side_bets||[]), bet];
+      const{error}=await sb.from("team_tournaments").update({side_bets:next,updated_at:new Date().toISOString()}).eq("id",tourney.id);
+      if(error) throw error;
+      setTourney(prev=>({...prev, side_bets:next}));
+      setBetA(""); setBetB(""); setShowBetSetup(false);
+    }catch(e){
+      window.alert("Couldn't save that bet — check your connection and try again. Scores are not affected.");
+    }
+    setBetSaving(false);
+  }
+
+  async function deleteCaptainBet(id){
+    try{
+      const{data,error:readErr}=await sb.from("team_tournaments").select("side_bets").eq("id",tourney.id).single();
+      if(readErr) throw readErr;
+      const next=(data?.side_bets||[]).filter(b=>b.id!==id);
+      const{error}=await sb.from("team_tournaments").update({side_bets:next,updated_at:new Date().toISOString()}).eq("id",tourney.id);
+      if(error) throw error;
+      setTourney(prev=>({...prev, side_bets:next}));
+    }catch(e){
+      window.alert("Couldn't remove that bet — check your connection and try again.");
+    }
   }
 
   if (!team || !holeData) return <div style={{ background:C.bg, minHeight:"100vh", display:"flex", alignItems:"center", justifyContent:"center", color:C.muted }}>Loading...</div>;
@@ -698,8 +758,71 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
                     })}
                   </div>
                 )}
-                {/* Bets are read-only for captains — no onDelete, so no setup or remove controls. Only the director runs bets. */}
-                {bTab==="bets"&&<SideBetsTab bets={tourney.side_bets||[]} teams={tourney.teams||[]} course={course} courseId={tourney.course_id||"south-toledo"} C={C}/>}
+                {/* Captains run their own bets: same setup + remove as the director, on the shared bet list. */}
+                {bTab==="bets"&&(
+                  <div>
+                    <div style={{fontSize:11,color:C.gold,letterSpacing:1.5,textTransform:"uppercase",marginBottom:12,fontWeight:600}}>Side Bets · run your own here</div>
+                    <div style={{marginBottom:14}}>
+                      <button onClick={()=>setShowBetSetup(v=>!v)} style={{background:"rgba(123,180,80,0.15)",border:"1px solid "+C.green,color:C.green,fontSize:13,cursor:"pointer",padding:"10px 16px",borderRadius:12,fontWeight:700}}>{showBetSetup?"− Close setup":"＋ Set up Bet"}</button>
+                    </div>
+                    {showBetSetup&&(
+                      <div style={{background:C.card,border:"1px solid "+C.border,borderRadius:14,padding:"14px",marginBottom:14}}>
+                        <div style={{fontSize:11,color:C.muted,letterSpacing:1.5,textTransform:"uppercase",marginBottom:6,fontWeight:600}}>Player A</div>
+                        <select value={betA} onChange={e=>setBetA(e.target.value)} style={{width:"100%",padding:"12px",borderRadius:10,background:C.surface,color:C.text,border:"1px solid "+C.border,fontSize:14,marginBottom:12}}>
+                          <option value="">— pick a player —</option>
+                          {captainAllPlayers.map(p=><option key={p.team+":"+p.pi} value={p.team+":"+p.pi}>{p.name} ({p.teamName})</option>)}
+                        </select>
+                        <div style={{fontSize:11,color:C.muted,letterSpacing:1.5,textTransform:"uppercase",marginBottom:6,fontWeight:600}}>Player B</div>
+                        <select value={betB} onChange={e=>setBetB(e.target.value)} style={{width:"100%",padding:"12px",borderRadius:10,background:C.surface,color:C.text,border:"1px solid "+C.border,fontSize:14,marginBottom:12}}>
+                          <option value="">— pick a player —</option>
+                          {captainAllPlayers.map(p=><option key={p.team+":"+p.pi} value={p.team+":"+p.pi}>{p.name} ({p.teamName})</option>)}
+                        </select>
+                        <div style={{fontSize:11,color:C.muted,letterSpacing:1.5,textTransform:"uppercase",marginBottom:6,fontWeight:600}}>Game</div>
+                        <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:12}}>
+                          {[["skins","Skins"],["nassau","Nassau"],["nassau-press","Nassau + Auto Press"],["match","Match Play"]].map(([id,lbl])=>(
+                            <button key={id} onClick={()=>setBetType(id)} style={{flex:1,padding:"10px 4px",borderRadius:8,background:betType===id?C.green:C.surface,color:betType===id?"#0a1a0f":C.muted,border:"1px solid "+(betType===id?C.green:C.border),cursor:"pointer",fontSize:12,fontWeight:betType===id?700:500,whiteSpace:"nowrap"}}>{lbl}</button>
+                          ))}
+                        </div>
+                        <div style={{fontSize:11,color:C.muted,letterSpacing:1.5,textTransform:"uppercase",marginBottom:6,fontWeight:600}}>{betType==="skins"?"$ per skin":betType==="match"?"$ per hole":"$ per side / total"}</div>
+                        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
+                          <button onClick={()=>setBetAmount(Math.max(1,betAmount-1))} style={{width:44,height:44,borderRadius:"50%",background:C.dim,border:"1px solid "+C.border,color:C.text,fontSize:22,fontWeight:700,cursor:"pointer"}}>−</button>
+                          <div style={{flex:1,textAlign:"center",fontSize:20,fontWeight:800}}>${betAmount}</div>
+                          <button onClick={()=>setBetAmount(Math.min(99,betAmount+1))} style={{width:44,height:44,borderRadius:"50%",background:C.dim,border:"1px solid "+C.border,color:C.text,fontSize:22,fontWeight:700,cursor:"pointer"}}>+</button>
+                        </div>
+                        <div style={{fontSize:11,color:C.muted,letterSpacing:1.5,textTransform:"uppercase",marginBottom:6,fontWeight:600}}>Strokes — belong to the bet, not the tournament</div>
+                        <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}}>
+                          {[["none","No strokes"],["A",(captainBetAName||"Player A")+" gets strokes"],["B",(captainBetBName||"Player B")+" gets strokes"]].map(([id,lbl])=>(
+                            <button key={id} onClick={()=>setBetStrokesTo(id)} style={{flex:1,padding:"10px 4px",borderRadius:8,background:betStrokesTo===id?C.gold:C.surface,color:betStrokesTo===id?"#0a1a0f":C.muted,border:"1px solid "+(betStrokesTo===id?C.gold:C.border),cursor:"pointer",fontSize:12,fontWeight:betStrokesTo===id?700:500,whiteSpace:"nowrap"}}>{lbl}</button>
+                          ))}
+                        </div>
+                        {betStrokesTo!=="none"&&(
+                          <>
+                            <div style={{fontSize:11,color:C.muted,letterSpacing:1.5,textTransform:"uppercase",marginBottom:6,fontWeight:600}}>Strokes (split per side — 2 = 1 front + 1 back)</div>
+                            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:6}}>
+                              <button onClick={()=>setBetStrokesCount(Math.max(1,betStrokesCount-1))} style={{width:44,height:44,borderRadius:"50%",background:C.dim,border:"1px solid "+C.border,color:C.text,fontSize:22,fontWeight:700,cursor:"pointer"}}>−</button>
+                              <div style={{flex:1,textAlign:"center",fontSize:20,fontWeight:800}}>{betStrokesCount}</div>
+                              <button onClick={()=>setBetStrokesCount(Math.min(18,betStrokesCount+1))} style={{width:44,height:44,borderRadius:"50%",background:C.dim,border:"1px solid "+C.border,color:C.text,fontSize:22,fontWeight:700,cursor:"pointer"}}>+</button>
+                            </div>
+                            <div style={{fontSize:11,color:C.muted,marginBottom:12}}>Strokes fall on the hardest holes of each side.</div>
+                          </>
+                        )}
+                        {betType==="nassau-press"&&(
+                          <>
+                            <div style={{fontSize:11,color:C.muted,letterSpacing:1.5,textTransform:"uppercase",marginBottom:6,fontWeight:600}}>Auto press triggers when</div>
+                            <div style={{display:"flex",gap:6,marginBottom:8}}>
+                              {[1,2,3].map(n=>(
+                                <button key={n} onClick={()=>setBetPressDown(n)} style={{flex:1,padding:"12px",borderRadius:8,background:betPressDown===n?C.gold:C.surface,color:betPressDown===n?"#0a1a0f":C.muted,border:"1px solid "+(betPressDown===n?C.gold:C.border),cursor:"pointer",fontSize:13,fontWeight:betPressDown===n?700:500}}>{n} down</button>
+                              ))}
+                            </div>
+                            <div style={{fontSize:11,color:C.muted,marginBottom:12}}>Auto presses only — no manual presses on tournament side bets.</div>
+                          </>
+                        )}
+                        <button onClick={saveCaptainBet} disabled={betSaving} style={{width:"100%",padding:"16px",background:betSaving?C.dim:C.green,color:betSaving?C.muted:"#0a1a0f",border:"none",borderRadius:12,fontSize:15,fontWeight:800,cursor:betSaving?"not-allowed":"pointer",opacity:betSaving?0.6:1}}>{betSaving?"Saving...":"Save bet"}</button>
+                      </div>
+                    )}
+                    <SideBetsTab bets={tourney.side_bets||[]} teams={tourney.teams||[]} course={course} courseId={tourney.course_id||"south-toledo"} C={C} canSetup onDelete={deleteCaptainBet}/>
+                  </div>
+                )}
                 {bTab==="rules"&&<RulesTab rules={tourney.director_rules||""} holeNotes={tourney.hole_notes||{}} C={C}/>}
               </>);
             })()}
