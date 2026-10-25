@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { sb } from "./supabase.js";
 import { COURSES } from "./golf.js";
 import { SkinsTab } from "./skins.jsx";
+import { SideBetsTab } from "./sideBets.jsx";
 
 const C = {
   bg:"#080f0a", surface:"#0e1a10", card:"#121e14",
@@ -95,7 +96,7 @@ export default function TourneySpectator({ tourney: initialTourney, onBack }) {
 
       {/* Tabs */}
       <div style={{ display:"flex", borderBottom:`1px solid ${C.border}`, background:"rgba(0,0,0,0.2)", overflowX:"auto" }}>
-        {[["board","🏆 Standings"],["scorecard","📋 Scorecard"],["top10","⭐ Top 10"],["skins","💰 Skins"],
+        {[["board","🏆 Standings"],["scorecard","📋 Scorecard"],["top10","⭐ Top 10"],["skins","💰 Skins"],["bets","💵 Bets"],
           ...(tourney.ctp_enabled&&(tourney.ctp_holes||[]).length>0?[["ctp","📍 CTP"]]:[])]
           .map(([id,lbl])=>(
           <button key={id} onClick={()=>setTab(id)} style={{ flex:1, padding:"10px 2px", fontSize:11, fontWeight:tab===id?700:500, background:"transparent", color:tab===id?(id==="ctp"?C.gold:C.green):C.muted, border:"none", borderBottom:tab===id?`2px solid ${id==="ctp"?C.gold:C.green}`:"2px solid transparent", cursor:"pointer", whiteSpace:"nowrap", flexShrink:0 }}>{lbl}</button>
@@ -217,6 +218,8 @@ export default function TourneySpectator({ tourney: initialTourney, onBack }) {
           );
         })()}
         {tab==="skins"&&<SkinsTab teams={tourney.teams||[]} course={course} holePars={tourney.hole_pars||{}} skinsEnabled={tourney.skins_enabled===true} bigBoyEnabled={tourney.big_boy_enabled===true} teammatesTie={tourney.teammates_tie===true}/>}
+
+        {tab==="bets"&&<SideBetsTab bets={tourney.side_bets||[]} teams={tourney.teams||[]} course={course} courseId={tourney.course_id||"south-toledo"} C={C}/>}
 
         {tab==="ctp"&&(()=>{
           const ctpHoles=(tourney.ctp_holes||[]).sort((a,b)=>a-b);
