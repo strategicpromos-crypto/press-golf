@@ -924,6 +924,9 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
   const [toast,setToast]=useState({msg:"",error:false});
   const [view,setView]=useState("roster"); // roster | profile | liveround | tournament | stableford | stableford-play
   const [activeStableford,setActiveStableford]=useState(null); // saved Stableford setup currently being played
+  const [activeStablefordEdit,setActiveStablefordEdit]=useState(null); // setup being edited, or null for a new one
+  const [stablefordSaves,setStablefordSaves]=useState([]); // device-saved Stableford setups, for the home list
+  useEffect(()=>{ if(view==="roster"){ try{ setStablefordSaves(JSON.parse(localStorage.getItem("pg-stableford-setups")||"[]")); }catch{ setStablefordSaves([]); } } },[view]);
   const [activeRounds,  setActiveRounds]  = useState([]);
   const [activeRound,   setActiveRound]   = useState(null);
   const [opponentRound, setOpponentRound] = useState(null);
@@ -1448,11 +1451,15 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
   );
 
   // ── Stableford setup + play ────────────────────────────────────────────────
+  // Home is the hub: setup saves return to the home list, Play opens from
+  // there, and Play's Back returns home. Edit remounts setup via key.
   if(view==="stableford") return(
-    <StablefordSetup onBack={()=>setView("roster")} onPlay={(s)=>{setActiveStableford(s);setView("stableford-play");}}/>
+    <StablefordSetup key={activeStablefordEdit?activeStablefordEdit.id:"new"} editSetup={activeStablefordEdit}
+      onBack={()=>setView("roster")}
+      onSaved={()=>{setActiveStablefordEdit(null);setView("roster");}}/>
   );
   if(view==="stableford-play"&&activeStableford) return(
-    <StablefordPlay setup={activeStableford} onBack={()=>setView("stableford")}/>
+    <StablefordPlay setup={activeStableford} onBack={()=>setView("roster")}/>
   );
 
   // ── Individual round: resume prompt (mirrors captain_resume exactly) ────────
@@ -1570,13 +1577,48 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
         </button>
 
         {/* ── STABLEFORD ── */}
-        <button onClick={()=>setView("stableford")} style={{width:"100%",maxWidth:360,background:`linear-gradient(135deg,#8fb8e8,#4a7ab5)`,border:"none",color:"#0a1a0f",padding:"0",borderRadius:16,cursor:"pointer",marginBottom:10,boxShadow:`0 4px 16px #4a7ab533`,textAlign:"left",overflow:"hidden"}}>
+        <button onClick={()=>{setActiveStablefordEdit(null);setView("stableford");}} style={{width:"100%",maxWidth:360,background:`linear-gradient(135deg,#8fb8e8,#4a7ab5)`,border:"none",color:"#0a1a0f",padding:"0",borderRadius:16,cursor:"pointer",marginBottom:10,boxShadow:`0 4px 16px #4a7ab533`,textAlign:"left",overflow:"hidden"}}>
           <div style={{padding:"14px 18px"}}>
             <div style={{fontSize:16,fontWeight:800,letterSpacing:0.3,marginBottom:3}}>🎯 Stableford</div>
-            <div style={{fontSize:11,fontWeight:600,opacity:0.75}}>Multi-day · Teams · Flights · Skins</div>
-            <div style={{fontSize:11,opacity:0.6,marginTop:2}}>One-day games or full tournaments · adjustable points</div>
+            <div style={{fontSize:11,fontWeight:600,opacity:0.75}}>One-day games or full tournaments</div>
+            <div style={{fontSize:11,opacity:0.6,marginTop:2}}>New tournament · saved tournaments live below</div>
           </div>
         </button>
+
+        {/* ── SAVED STABLEFORD TOURNAMENTS (home list, like Outing's) ── */}
+        {stablefordSaves.length>0&&(
+          <div style={{maxWidth:360,margin:"0 auto 10px auto",width:"100%"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-end",marginBottom:6}}>
+              <div style={{fontSize:11,color:C.green,letterSpacing:1.5,textTransform:"uppercase",fontWeight:600}}>Stableford tournaments</div>
+              <button onClick={()=>{
+                const keyOf=(s)=>{const{id,createdAt,...rest}=s;return JSON.stringify(rest);};
+                const seen=new Set(); const kept=[];
+                for(const s of stablefordSaves){const k=keyOf(s); if(!seen.has(k)){seen.add(k);kept.push(s);}}
+                const removed=stablefordSaves.filter(s=>!kept.some(k=>k.id===s.id));
+                if(removed.length===0){window.alert("No exact duplicates found.");return;}
+                if(!window.confirm("Remove "+removed.length+" duplicate "+(removed.length===1?"copy":"copies")+"? The newest copy of each setup is kept."))return;
+                try{ localStorage.setItem("pg-stableford-setups",JSON.stringify(kept)); removed.forEach(s=>{localStorage.removeItem("pg-stableford-scores-"+s.id);localStorage.removeItem("pg-stableford-ctp-"+s.id);}); }catch{}
+                setStablefordSaves(kept);
+              }} style={{background:"none",border:"none",color:C.red,fontSize:11,fontWeight:600,cursor:"pointer",padding:0}}>Remove duplicates</button>
+            </div>
+            {stablefordSaves.map(s=>(
+              <div key={s.id} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:"12px 14px",marginBottom:8,display:"flex",alignItems:"center",gap:8}}>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontWeight:700,fontSize:14}}>{s.name}</div>
+                  <div style={{fontSize:12,color:C.muted}}>{s.days>1?"Multiday tournament":"Stableford"} · {s.days} {s.days===1?"day":"days"} · {(s.players||[]).length} players{s.teamsOn?" · Teams":""}</div>
+                </div>
+                <button onClick={()=>{
+                  if(!window.confirm("Delete “"+s.name+"”? Its scores and closest-to-the-pin entries go with it."))return;
+                  const next=stablefordSaves.filter(x=>x.id!==s.id);
+                  try{ localStorage.setItem("pg-stableford-setups",JSON.stringify(next)); localStorage.removeItem("pg-stableford-scores-"+s.id); localStorage.removeItem("pg-stableford-ctp-"+s.id); }catch{}
+                  setStablefordSaves(next);
+                }} title="Delete this tournament" style={{padding:"10px 8px",background:"transparent",border:"none",color:C.red,fontSize:18,fontWeight:700,cursor:"pointer"}}>✕</button>
+                <button onClick={()=>{setActiveStablefordEdit(s);setView("stableford");}} style={{padding:"10px 14px",background:"transparent",border:`1px solid ${C.border}`,borderRadius:10,color:C.muted,fontSize:13,fontWeight:600,cursor:"pointer"}}>Edit</button>
+                <button onClick={()=>{setActiveStableford(s);setView("stableford-play");}} style={{padding:"10px 14px",background:C.gold,border:"none",borderRadius:10,color:"#0a1a0f",fontSize:13,fontWeight:800,cursor:"pointer"}}>▶ Play</button>
+              </div>
+            ))}
+          </div>
+        )}
 
         <div style={{display:"flex",background:"rgba(0,0,0,0.35)",border:`1px solid ${C.border}`,borderRadius:14,overflow:"hidden",maxWidth:360,margin:"0 auto"}}>
           {[{l:"Rounds",v:sRound},{l:"Side Bets",v:sBet},{l:"Season Bank",v:sBank}].map((item,i,arr)=>(<div key={i} style={{flex:1,textAlign:"center",padding:"13px 4px",borderRight:i<arr.length-1?`1px solid ${C.border}`:"none"}}><Money value={item.v} size={15}/><div style={{fontSize:8,color:C.muted,letterSpacing:1.5,textTransform:"uppercase",marginTop:3}}>{item.l}</div></div>))}
