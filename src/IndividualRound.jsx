@@ -481,7 +481,7 @@ export default function IndividualRound({ user, players, roundData: initialRound
               <option key={id} value={id}>{c.name} - {c.city}</option>
             ))}
           </select>
-          {showCourseSearch && <CourseSearch C={C} onClose={()=>setShowCourseSearch(false)} onPick={id=>{ setCourseId(id); setShowCourseSearch(false); }} />}
+          {showCourseSearch && <CourseSearch C={C} onClose={()=>setShowCourseSearch(false)} onPick={id=>{ setCourseId(id); setShowCourseSearch(false); }} onCourseDeleted={id=>{ if(id===courseId){ const rest=Object.keys(COURSES); if(rest.length) setCourseId(rest[0]); } }} />}
         </div>
         {/* Opponents */}
         <div style={{fontSize:11,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>Opponents ({opponents.length})</div>
