@@ -996,6 +996,8 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
   const [opponentRound, setOpponentRound] = useState(null);
   const [liveSession,   setLiveSession]   = useState(null); // rounds where user is a linked opponent
   const [activeTourney, setActiveTourney]=useState(null); // active team tournament
+  const [activeSfTourney, setActiveSfTourney]=useState(null); // active Stableford game, for the blue home banner (Step 2)
+  const [sfResumeId, setSfResumeId]=useState(null); // id the home banner Resume hands to the clone
   const [pid,setPid]=useState(null);
   const [ptab,setPtab]=useState("overview");
   const [sheet,setSheet]=useState(null);
@@ -1073,6 +1075,16 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
   },[user.id]);
 
   useEffect(()=>{loadAll();},[loadAll]);
+
+  // Step 2: keep the blue Stableford banner fresh — refetch whenever home shows
+  // (login + every return from a game). Same active-or-scored guard as the Outing banner.
+  useEffect(()=>{ if(view!=="roster") return;
+    (async()=>{
+      const{data}=await sb.from("sf_tournaments").select("id,name,course_id,current_hole,teams,director_code,status").eq("owner_id",user.id).in("status",["active","setup"]).order("updated_at",{ascending:false}).limit(1).maybeSingle();
+      const hasScores=(data?.teams||[]).some(t=>Object.keys(t?.scores||{}).length>0);
+      setActiveSfTourney((data?.status==="active"||hasScores)?data:null);
+    })();
+  },[view,user.id]);
 
   const LIVE_KEY = "press_live_" + user.id;
 
@@ -1514,7 +1526,7 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
     <TeamTournament user={user} onBack={()=>setView("roster")} onDelete={()=>setActiveTourney(null)}/>
   );
   if(view==="sf-outing") return(
-    <SfTeamTournament user={user} onBack={()=>setView("roster")} onDelete={()=>{}}/>
+    <SfTeamTournament user={user} resumeId={sfResumeId} onBack={()=>{setSfResumeId(null);setView("roster");}} onDelete={()=>{setActiveSfTourney(null);setSfResumeId(null);}}/>
   );
 
   // ── Individual round: resume prompt (mirrors captain_resume exactly) ────────
@@ -1632,7 +1644,7 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
         </button>
 
         {/* ── STABLEFORD ── */}
-        <button onClick={()=>{setView("sf-outing");}} style={{width:"100%",maxWidth:360,background:`linear-gradient(135deg,#8fb8e8,#4a7ab5)`,border:"none",color:"#0a1a0f",padding:"0",borderRadius:16,cursor:"pointer",marginBottom:10,boxShadow:`0 4px 16px #4a7ab533`,textAlign:"left",overflow:"hidden"}}>
+        <button onClick={()=>{setSfResumeId(null);setView("sf-outing");}} style={{width:"100%",maxWidth:360,background:`linear-gradient(135deg,#8fb8e8,#4a7ab5)`,border:"none",color:"#0a1a0f",padding:"0",borderRadius:16,cursor:"pointer",marginBottom:10,boxShadow:`0 4px 16px #4a7ab533`,textAlign:"left",overflow:"hidden"}}>
           <div style={{padding:"14px 18px"}}>
             <div style={{fontSize:16,fontWeight:800,letterSpacing:0.3,marginBottom:3}}>🎯 Stableford</div>
             <div style={{fontSize:11,fontWeight:600,opacity:0.75}}>One-day Stableford · Outing style</div>
@@ -1723,6 +1735,20 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
               <div style={{fontSize:12,color:C.muted,marginTop:1}}>{(activeTourney.teams||[]).length} teams</div>
             </div>
             <button onClick={()=>setView("tournament")} style={{background:C.gold,border:"none",color:"#0a1a0f",padding:"10px 16px",borderRadius:12,fontSize:13,fontWeight:800,cursor:"pointer",flexShrink:0}}>
+              Resume →
+            </button>
+          </div>
+        )}
+
+        {/* Stableford Game In Progress banner (Step 2) — blue like the 🎯 button, directly below the Outing banner */}
+        {activeSfTourney&&(
+          <div style={{background:`linear-gradient(135deg,#8fb8e8,#4a7ab5)`,border:"none",borderRadius:14,padding:"14px 16px",marginBottom:14,display:"flex",justifyContent:"space-between",alignItems:"center",boxShadow:`0 4px 16px #4a7ab533`}}>
+            <div style={{flex:1,minWidth:0,marginRight:12}}>
+              <div style={{fontWeight:700,fontSize:14,color:"#0a1a0f",marginBottom:2}}>🎯 Stableford Game In Progress</div>
+              <div style={{fontSize:12,color:"#0a1a0f",opacity:0.75}}>{activeSfTourney.name} · Hole {activeSfTourney.current_hole}</div>
+              <div style={{fontSize:12,color:"#0a1a0f",opacity:0.75,marginTop:1}}>{(activeSfTourney.teams||[]).length===1&&activeSfTourney.teams[0]?.isField?`${(activeSfTourney.teams[0].players||[]).length} players`:`${(activeSfTourney.teams||[]).length} teams`}</div>
+            </div>
+            <button onClick={()=>{setSfResumeId(activeSfTourney.id);setView("sf-outing");}} style={{background:"#0a1a0f",border:"none",color:"#e8f0e9",padding:"10px 16px",borderRadius:12,fontSize:13,fontWeight:800,cursor:"pointer",flexShrink:0}}>
               Resume →
             </button>
           </div>
