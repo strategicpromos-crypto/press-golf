@@ -738,9 +738,9 @@ export default function SfTeamTournament({onBack, user, onDelete, resumeId}){
         <div style={{background:"linear-gradient(180deg,"+C.card+" 0%,transparent 100%)",padding:"50px 24px 24px"}}>
           <button onClick={onBack} style={{background:"rgba(123,180,80,0.15)",border:"1px solid "+C.green,color:C.green,fontSize:13,cursor:"pointer",padding:"8px 16px",borderRadius:20,fontWeight:700,marginBottom:20}}>‹ Back</button>
           <div style={{textAlign:"center"}}>
-            <div style={{fontSize:48}}>🏆</div>
-            <div style={{fontSize:26,fontWeight:800,marginTop:8}}>Team Tournament</div>
-            <div style={{fontSize:13,color:C.muted,marginTop:4}}>2 Best Ball · Front / Back / Total</div>
+            <div style={{fontSize:48}}>🎯</div>
+            <div style={{fontSize:26,fontWeight:800,marginTop:8}}>Stableford</div>
+            <div style={{fontSize:13,color:C.muted,marginTop:4}}>Stableford points · Outing style</div>
           </div>
         </div>
 
@@ -749,9 +749,9 @@ export default function SfTeamTournament({onBack, user, onDelete, resumeId}){
           {/* Active (in-progress) tournaments */}
           {active.length>0&&(
             <div style={{marginBottom:20}}>
-              <div style={{fontSize:11,color:C.gold,letterSpacing:1.5,textTransform:"uppercase",marginBottom:10,fontWeight:600}}>▶ In Progress</div>
+              <div style={{fontSize:11,color:"#8fb8e8",letterSpacing:1.5,textTransform:"uppercase",marginBottom:10,fontWeight:600}}>▶ In Progress</div>
               {active.map(t=>(
-                <div key={t.id} style={{background:"rgba(232,184,75,0.08)",border:"1px solid "+C.gold+"44",borderRadius:14,padding:"14px 16px",marginBottom:8}}>
+                <div key={t.id} style={{background:"rgba(143,184,232,0.10)",border:"1px solid #8fb8e844",borderRadius:14,padding:"14px 16px",marginBottom:8}}>
                   {confirmDelete===t.id?(
                     <div>
                       <div style={{fontSize:13,color:C.red,fontWeight:700,marginBottom:8,textAlign:"center"}}>⚠️ Type DELETE to confirm</div>
@@ -768,21 +768,21 @@ export default function SfTeamTournament({onBack, user, onDelete, resumeId}){
                   ):(
                     <>
                       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:2}}>
-                        <div style={{fontWeight:700,fontSize:15,color:C.gold}}>{t.name||"Tournament"}</div>
+                        <div style={{fontWeight:700,fontSize:15,color:"#8fb8e8"}}>{t.name||"Tournament"}</div>
                         <button onClick={()=>deleteTourney(t.id)} style={{background:"transparent",border:"none",color:C.muted,fontSize:18,cursor:"pointer",padding:"0 4px"}}>✕</button>
                       </div>
                       <div style={{fontSize:11,color:C.muted,marginBottom:4}}>
                         {COURSES[t.course_id]?.name||t.course_id} · Hole {t.current_hole} · {(t.teams||[]).length} teams
                       </div>
                       {/* Lock notice — active tournament links are permanent */}
-                      <div style={{fontSize:10,color:"rgba(232,184,75,0.6)",marginBottom:10}}>
+                      <div style={{fontSize:10,color:"rgba(143,184,232,0.7)",marginBottom:10}}>
                         🔒 Links locked — captain links are permanent for this tournament
                       </div>
                       <div style={{display:"flex",gap:8}}>
-                        <button onClick={()=>resumeTourney(t)} disabled={loading} style={{flex:2,padding:"11px",background:C.gold,color:"#0a1a0f",border:"none",borderRadius:10,fontSize:14,fontWeight:800,cursor:"pointer"}}>
+                        <button onClick={()=>resumeTourney(t)} disabled={loading} style={{flex:2,padding:"11px",background:`linear-gradient(135deg,#8fb8e8,#4a7ab5)`,color:"#0a1a0f",border:"none",borderRadius:10,fontSize:14,fontWeight:800,cursor:"pointer"}}>
                           {loading?"Loading...":"Resume Round"}
                         </button>
-                        <button onClick={async()=>{await resumeTourney(t);setScreen("leaderboard");}} style={{flex:1,padding:"11px",background:"transparent",color:C.gold,border:"1px solid "+C.gold+"44",borderRadius:10,fontSize:13,fontWeight:700,cursor:"pointer"}}>
+                        <button onClick={async()=>{await resumeTourney(t);setScreen("leaderboard");}} style={{flex:1,padding:"11px",background:"transparent",color:"#8fb8e8",border:"1px solid #8fb8e844",borderRadius:10,fontSize:13,fontWeight:700,cursor:"pointer"}}>
                           📊 LB
                         </button>
                       </div>
