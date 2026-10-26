@@ -204,7 +204,7 @@ function calcTeamScore(teamScores,teamSize,holeData,birdieBonus,ballsByPar,holeP
 }
 
 
-export default function SfTeamTournament({onBack, user, onDelete}){
+export default function SfTeamTournament({onBack, user, onDelete, resumeId}){
 
   // ── Day mode (sunlight-readable theme) — persisted per device ──────────
   const [dayMode, setDayMode] = useState(()=>{
@@ -304,6 +304,20 @@ export default function SfTeamTournament({onBack, user, onDelete}){
   const betBName=allPlayers.find(p=>p.team+":"+p.pi===betB)?.name;
 
   useEffect(()=>{ loadSaved(); },[]);
+
+  // Step 2: home-banner Resume passes an sf tournament id — load the full row
+  // and resume it through the same path as the saved list (scoring if active
+  // or scored, else setup). Guarded by !tourneyId so it never re-fires mid-game.
+  useEffect(()=>{
+    if(!resumeId||tourneyId) return;
+    let cancelled=false;
+    (async()=>{
+      const{data}=await sb.from("sf_tournaments").select("*").eq("id",resumeId).single();
+      if(!cancelled&&data&&data.status!=="deleted") await resumeTourney(data);
+    })();
+    return ()=>{cancelled=true;};
+    /* eslint-disable-next-line react-hooks/exhaustive-deps */
+  },[resumeId]);
 
   // ── Sync snapshots — fix for captain scores being clobbered ────────────────
   // lastSyncedTeams / lastSyncedCtp: JSON of teams[] / ctp_leaders as last
