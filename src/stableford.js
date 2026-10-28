@@ -1,3 +1,4 @@
+// SFTOGGLE-2026-10-28 (stableford.js — gross strokes in sfIndividualPoints)
 // ── STABLEFORD MATH — shared by the Outing fold-in (1-day) ───────────────────
 // The Outing tournament object already carries teams, scores, course, hole
 // pars, skins, Big Boy, CTP, and captain links. Stableford adds only this:
@@ -94,19 +95,30 @@ export function sfIndividualPoints(teams, holes, holePars, cfg) {
       const name = (team.players?.[pi] || "").trim() || ("Player " + (pi + 1));
       const hdcp = team.hdcp?.[pi] ?? 12;
       const byHole = {};
+      // PG-SFTOGGLE-2026-10-28 — gross strokes alongside points, for the Points/Strokes toggle.
+      // Gross comes straight from the scores captains entered; points are unchanged.
+      const grossByHole = {};
       let sum = 0, front = 0, back = 0, holesPlayed = 0;
+      let grossTotal = 0, grossFront = 0, grossBack = 0;
       for (const h of holes || []) {
         const effPar = holePars?.[h.hole] ?? h.par;
-        const pts = sfHolePoints(team.scores?.[pi]?.[h.hole], hdcp, h, holes, effPar, cfg.points, cfg.counting);
+        const gross = team.scores?.[pi]?.[h.hole];
+        const pts = sfHolePoints(gross, hdcp, h, holes, effPar, cfg.points, cfg.counting);
         if (pts !== null) {
           byHole[h.hole] = pts;
           sum += pts;
           if (h.side === "front") front += pts; else back += pts;
           holesPlayed++;
         }
+        if (gross !== undefined && gross !== null && gross !== "") {
+          const g = safeInt(gross);
+          grossByHole[h.hole] = g;
+          grossTotal += g;
+          if (h.side === "front") grossFront += g; else grossBack += g;
+        }
       }
       const total = cfg.counting === "countup" && holesPlayed > 0 ? sum + hdcp : sum;
-      out.push({ name, teamName: team.name || ("Team " + (ti + 1)), teamColor: team.color, teamIdx: ti, pi, hdcp, total, front, back, holesPlayed, byHole });
+      out.push({ name, teamName: team.name || ("Team " + (ti + 1)), teamColor: team.color, teamIdx: ti, pi, hdcp, total, front, back, holesPlayed, byHole, grossByHole, grossTotal, grossFront, grossBack });
     }
   });
   out.sort((a, b) => b.total !== a.total ? b.total - a.total : b.holesPlayed - a.holesPlayed);
