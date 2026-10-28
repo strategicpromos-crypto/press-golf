@@ -1,3 +1,4 @@
+// HEADERSTACK-2026-10-28 (includes TABSTACK + STROKES-TOGGLE)
 // TABSTACK-2026-10-28 (includes STROKES-TOGGLE-2026-10-28)
 // STROKES-TOGGLE-2026-10-28
 import React, { useState, useEffect, useRef } from "react";
@@ -1365,17 +1366,20 @@ export default function TeamTournament({onBack, user, onDelete}){
               )}
               {saveStatus&&<div style={{fontSize:10,color:saveStatus==="saving"?C.gold:C.green,marginTop:2}}>{saveStatus==="saving"?"Saving...":"Saved"}</div>}
             </div>
-            <div style={{display:"flex",flexDirection:"column",gap:6,alignItems:"flex-end"}}>
-              <button onClick={()=>setScreen("home")}
-                style={{background:"rgba(123,180,80,0.15)",border:"1px solid "+C.green,color:C.green,fontSize:11,cursor:"pointer",padding:"5px 10px",borderRadius:12,fontWeight:700}}>🏠 Home</button>
+            {/* PG-HEADERSTACK-2026-10-28: clean right stack — Home+Rules side by side, then Leaderboard, Settings, Day/Dark mode last */}
+            <div style={{display:"flex",flexDirection:"column",gap:6,width:136}}>
+              <div style={{display:"flex",gap:6}}>
+                <button onClick={()=>setScreen("home")}
+                  style={{flex:1,background:"rgba(123,180,80,0.15)",border:"1px solid "+C.green,color:C.green,fontSize:12,cursor:"pointer",padding:"9px 2px",borderRadius:12,fontWeight:700,whiteSpace:"nowrap",textAlign:"center"}}>🏠 Home</button>
+                <button onClick={()=>{setLbTab("rules");setScreen("leaderboard");}}
+                  style={{flex:1,background:"rgba(123,180,80,0.15)",border:"1px solid "+C.green,color:C.green,fontSize:12,cursor:"pointer",padding:"9px 2px",borderRadius:12,fontWeight:700,whiteSpace:"nowrap",textAlign:"center"}}>📋 Rules</button>
+              </div>
               <button onClick={()=>{setLbTab("standings");setScreen("leaderboard");}}
-                style={{background:"rgba(232,184,75,0.15)",border:"1px solid "+C.gold,color:C.gold,fontSize:11,cursor:"pointer",padding:"5px 10px",borderRadius:12,fontWeight:700}}>📊 Leaderboard</button>
-              <button onClick={()=>{setLbTab("rules");setScreen("leaderboard");}}
-                style={{background:"rgba(123,180,80,0.15)",border:"1px solid "+C.green,color:C.green,fontSize:11,cursor:"pointer",padding:"5px 10px",borderRadius:12,fontWeight:700}}>📋 Rules</button>
+                style={{background:"rgba(232,184,75,0.15)",border:"1px solid "+C.gold,color:C.gold,fontSize:12,cursor:"pointer",padding:"9px 4px",borderRadius:12,fontWeight:700,whiteSpace:"nowrap",textAlign:"center"}}>📊 Leaderboard</button>
               <button onClick={()=>setShowSettings(true)}
-                style={{background:"rgba(123,180,80,0.15)",border:"1px solid "+C.green,color:C.green,fontSize:13,cursor:"pointer",padding:"8px 14px",borderRadius:12,fontWeight:700}}>⚙️ Settings</button>
-              <button onClick={toggleDayMode} title={dayMode?"Switch to dark mode":"Day mode — easier to read in sunlight"}
-                style={{background:dayMode?"rgba(35,100,45,0.10)":"rgba(232,184,75,0.10)",border:"1px solid "+(dayMode?C.green:C.gold),color:dayMode?C.green:C.gold,fontSize:13,cursor:"pointer",padding:"8px 12px",borderRadius:12,fontWeight:700}}>{dayMode?"🌙":"☀️"}</button>
+                style={{background:"rgba(123,180,80,0.15)",border:"1px solid "+C.green,color:C.green,fontSize:12,cursor:"pointer",padding:"9px 4px",borderRadius:12,fontWeight:700,whiteSpace:"nowrap",textAlign:"center"}}>⚙️ Settings</button>
+              <button onClick={toggleDayMode} title={dayMode?"Switch to dark mode":"Switch to day mode — easier to read in sunlight"}
+                style={{background:"rgba(232,184,75,0.10)",border:"1px solid "+C.gold,color:C.gold,fontSize:12,cursor:"pointer",padding:"9px 4px",borderRadius:12,fontWeight:700,whiteSpace:"nowrap",textAlign:"center"}}>{dayMode?"🌙 Dark mode":"☀️ Day mode"}</button>
             </div>
           </div>
           <div style={{display:"flex",gap:2}}>
