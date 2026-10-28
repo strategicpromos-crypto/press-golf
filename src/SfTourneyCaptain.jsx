@@ -1,3 +1,4 @@
+// SFMATCH-2026-10-28 (SfTourneyCaptain — includes header stack, tab stack, Edit Roster, Tournament Settings title)
 // ── STABLEFORD CLONE of TourneyCaptain.jsx ─────────────────────────────
 // Same captain shell (writer lock, own-team-only writes, CTP prompt, bets)
 // with Stableford scoring throughout. Reads/writes ONLY sf_tournaments.
@@ -503,11 +504,16 @@ export default function SfTourneyCaptain({ tourney: initialTourney, teamIdx, onB
               <div style={{fontSize:12,background:"rgba(123,180,80,0.12)",border:"1px solid rgba(123,180,80,0.4)",borderRadius:10,padding:"6px 10px",marginTop:6}}>📋 {tourney.hole_notes[currentHole]}</div>
             )}
           </div>
-          <div style={{display:"flex",gap:8,alignItems:"center"}}>
-            <button onClick={toggleDayMode} title={dayMode?"Switch to dark mode":"Day mode — easier to read in sunlight"}
-              style={{ background:dayMode?"rgba(35,100,45,0.10)":"rgba(232,184,75,0.10)", border:`1px solid ${dayMode?C.green:C.gold}`, color:dayMode?C.green:C.gold, fontSize:18, cursor:"pointer", padding:"10px 14px", borderRadius:12, fontWeight:700 }}>{dayMode?"🌙":"☀️"}</button>
+          {/* PG-SFMATCH-2026-10-28: captain header stack, same as Outing captain — Leaderboard, Rules, Settings, Day mode last */}
+          <div style={{display:"flex",flexDirection:"column",gap:6,width:136,flexShrink:0}}>
+            <button onClick={()=>setShowSummary(true)}
+              style={{ background:"rgba(232,184,75,0.15)", border:`1px solid ${C.gold}`, color:C.gold, fontSize:12, cursor:"pointer", padding:"9px 4px", borderRadius:12, fontWeight:700, whiteSpace:"nowrap", textAlign:"center" }}>📊 Leaderboard</button>
+            <button onClick={()=>{setBTab("rules");setShowSummary(true);}}
+              style={{ background:"rgba(123,180,80,0.15)", border:`1px solid ${C.green}`, color:C.green, fontSize:12, cursor:"pointer", padding:"9px 4px", borderRadius:12, fontWeight:700, whiteSpace:"nowrap", textAlign:"center" }}>📋 Rules</button>
             <button onClick={()=>setShowCaptainSettings(true)}
-              style={{ background:"rgba(123,180,80,0.15)", border:`1px solid ${C.green}`, color:C.green, fontSize:15, cursor:"pointer", padding:"12px 20px", borderRadius:12, fontWeight:700 }}>⚙️ Settings</button>
+              style={{ background:"rgba(123,180,80,0.15)", border:`1px solid ${C.green}`, color:C.green, fontSize:12, cursor:"pointer", padding:"9px 4px", borderRadius:12, fontWeight:700, whiteSpace:"nowrap", textAlign:"center" }}>⚙️ Settings</button>
+            <button onClick={toggleDayMode} title={dayMode?"Switch to dark mode":"Switch to day mode — easier to read in sunlight"}
+              style={{ background:"rgba(232,184,75,0.10)", border:`1px solid ${C.gold}`, color:C.gold, fontSize:12, cursor:"pointer", padding:"9px 4px", borderRadius:12, fontWeight:700, whiteSpace:"nowrap", textAlign:"center" }}>{dayMode?"🌙 Dark mode":"☀️ Day mode"}</button>
           </div>
         </div>
         {/* Progress bar */}
@@ -630,11 +636,19 @@ export default function SfTourneyCaptain({ tourney: initialTourney, teamIdx, onB
             {(()=>{
               const medals=["1st","2nd","3rd"];
               return(<>
-                <div style={{display:"flex",gap:0,marginBottom:16,border:"1px solid "+C.border,borderRadius:10,overflow:"hidden"}}>
-                  {[["standings","Standings"],["individual","Individuals"],["skins","Skins"],["bets","💵 Bets"],["rules","📋 Rules"],...(ctpEnabled?[["ctp","CTP"]]:[])]
-                    .map(([id,lbl])=>(
-                    <button key={id} onClick={()=>setBTab(id)} style={{flex:1,padding:"11px",fontSize:12,fontWeight:bTab===id?700:500,background:bTab===id?(id==="ctp"?C.gold:C.green):"transparent",color:bTab===id?"#0a1a0f":C.muted,border:"none",cursor:"pointer"}}>{lbl}</button>
-                  ))}
+                <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:16}}>
+                  <div style={{display:"flex",gap:0,border:"1px solid "+C.border,borderRadius:10,overflow:"hidden"}}>
+                    {[["standings","Standings"],["individual","Individuals"],["skins","Skins"]]
+                      .map(([id,lbl])=>(
+                      <button key={id} onClick={()=>setBTab(id)} style={{flex:1,padding:"11px",fontSize:12,fontWeight:bTab===id?700:500,background:bTab===id?C.green:"transparent",color:bTab===id?"#0a1a0f":C.muted,border:"none",cursor:"pointer"}}>{lbl}</button>
+                    ))}
+                  </div>
+                  <div style={{display:"flex",gap:0,border:"1px solid "+C.border,borderRadius:10,overflow:"hidden"}}>
+                    {[["bets","💵 Bets"],["rules","📋 Rules"],...(ctpEnabled?[["ctp","CTP"]]:[])]
+                      .map(([id,lbl])=>(
+                      <button key={id} onClick={()=>setBTab(id)} style={{flex:1,padding:"11px",fontSize:12,fontWeight:bTab===id?(id==="ctp"?C.gold:C.green):"transparent",color:bTab===id?"#0a1a0f":C.muted,border:"none",cursor:"pointer"}}>{lbl}</button>
+                    ))}
+                  </div>
                 </div>
 
                 {bTab==="standings"&&(<>
@@ -804,11 +818,13 @@ export default function SfTourneyCaptain({ tourney: initialTourney, teamIdx, onB
                 </div>
               ))}
             </div>
-            <button onClick={()=>setTab("roster")} style={{ background:"rgba(123,180,80,0.12)", border:`1px solid ${C.green}33`, color:C.green, fontSize:11, fontWeight:700, padding:"6px 10px", borderRadius:8, cursor:"pointer" }}>
-              👥 Roster
-            </button>
           </div>
         </div>
+      </div>
+      <div style={{ padding:"0 16px 4px" }}>
+        <button onClick={()=>setTab("roster")} style={{ width:"100%", background:"rgba(123,180,80,0.12)", border:`1px solid ${C.green}33`, color:C.green, fontSize:13, fontWeight:700, padding:"10px 14px", borderRadius:10, cursor:"pointer" }}>
+          👥 Edit Roster — team name & players
+        </button>
       </div>
 
       <div style={{ padding:"14px 16px" }}>
@@ -861,18 +877,7 @@ export default function SfTourneyCaptain({ tourney: initialTourney, teamIdx, onB
           );
         })()}
 
-        {/* Next hole */}
-        <button onClick={()=>setShowSummary(true)} style={{
-          width:"100%",padding:"14px",background:"rgba(232,184,75,0.12)",
-          color:C.gold,border:"1px solid "+C.gold+"44",borderRadius:12,
-          fontSize:15,fontWeight:700,cursor:"pointer",marginBottom:10
-        }}>📊 Leaderboard</button>
-
-        <button onClick={()=>{setBTab("rules");setShowSummary(true);}} style={{
-          width:"100%",padding:"14px",background:"rgba(123,180,80,0.12)",
-          color:C.green,border:"1px solid "+C.green+"44",borderRadius:12,
-          fontSize:15,fontWeight:700,cursor:"pointer",marginBottom:10
-        }}>📋 Rules</button>
+        {/* Next hole — Leaderboard/Rules now live in the header stack above */}
 
         <button onClick={async()=>{
           // Hard flush before advancing — guaranteed write, no debounce
@@ -1006,7 +1011,7 @@ export default function SfTourneyCaptain({ tourney: initialTourney, teamIdx, onB
         <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.92)",zIndex:600,overflowY:"auto",fontFamily:"Georgia,serif" }}>
           <div style={{ padding:"50px 20px 60px",maxWidth:480,margin:"0 auto" }}>
             <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6 }}>
-              <div style={{ fontSize:20,fontWeight:800 }}>⚙️ Team Settings</div>
+              <div style={{ fontSize:20,fontWeight:800 }}>⚙️ Tournament Settings</div>
               <button onClick={()=>setShowCaptainSettings(false)} style={{ background:C.dim,border:"none",color:C.muted,width:34,height:34,borderRadius:"50%",fontSize:16,cursor:"pointer" }}>✕</button>
             </div>
             <div style={{ fontSize:12,color:C.muted,marginBottom:20 }}>Changes save automatically and update the leaderboard in real time.</div>
