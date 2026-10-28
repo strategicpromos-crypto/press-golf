@@ -1,3 +1,4 @@
+// TABSTACK-2026-10-28 (includes STROKES-TOGGLE-2026-10-28)
 // STROKES-TOGGLE-2026-10-28
 import React, { useState, useEffect, useRef } from "react";
 import { COURSES, courseHasHdcp } from "./golf.js";
@@ -2003,12 +2004,20 @@ export default function TeamTournament({onBack, user, onDelete}){
           </div>
         </div>
 
-        {/* Tabs */}
-        <div style={{display:"flex",borderBottom:"1px solid "+C.border,background:"rgba(0,0,0,0.2)",overflowX:"auto"}}>
-          {[["standings","Standings"],["scorecard","Scorecard"],["top10","Individuals"],["skins","Skins"],["bets","💵 Bets"],["rules","📋 Rules"],...(ctpEnabled?[["ctp","CTP"]]:[])]
-            .map(([id,lbl])=>(
-            <button key={id} onClick={()=>setLbTab(id)} style={{flex:1,padding:"10px 2px",fontSize:11,fontWeight:lbTab===id?700:500,background:"transparent",color:lbTab===id?(id==="ctp"?C.gold:C.green):C.muted,border:"none",borderBottom:lbTab===id?"2px solid "+(id==="ctp"?C.gold:C.green):"2px solid transparent",cursor:"pointer",whiteSpace:"nowrap",flexShrink:0}}>{lbl}</button>
-          ))}
+        {/* Tabs — PG-TABSTACK-2026-10-28: stacked, captain-style segmented rows. Row 1 = Standings/Scorecard/Individuals, row 2 = the rest */}
+        <div style={{padding:"0 16px 4px",display:"flex",flexDirection:"column",gap:8}}>
+          <div style={{display:"flex",gap:0,border:"1px solid "+C.border,borderRadius:10,overflow:"hidden"}}>
+            {[["standings","Standings"],["scorecard","Scorecard"],["top10","Individuals"]]
+              .map(([id,lbl])=>(
+              <button key={id} onClick={()=>setLbTab(id)} style={{flex:1,padding:"11px",fontSize:12,fontWeight:lbTab===id?700:500,background:lbTab===id?C.green:"transparent",color:lbTab===id?"#0a1a0f":C.muted,border:"none",cursor:"pointer"}}>{lbl}</button>
+            ))}
+          </div>
+          <div style={{display:"flex",gap:0,border:"1px solid "+C.border,borderRadius:10,overflow:"hidden"}}>
+            {[["skins","Skins"],["bets","💵 Bets"],["rules","📋 Rules"],...(ctpEnabled?[["ctp","CTP"]]:[])]
+              .map(([id,lbl])=>(
+              <button key={id} onClick={()=>setLbTab(id)} style={{flex:1,padding:"11px",fontSize:12,fontWeight:lbTab===id?700:500,background:lbTab===id?(id==="ctp"?C.gold:C.green):"transparent",color:lbTab===id?"#0a1a0f":C.muted,border:"none",cursor:"pointer"}}>{lbl}</button>
+            ))}
+          </div>
         </div>
 
         <div style={{padding:"16px"}}>
