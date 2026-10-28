@@ -1,3 +1,4 @@
+// TEAMSCORECARD-2026-10-28 (includes HEADERSTACK + TABSTACK + STROKES-TOGGLE)
 // HEADERSTACK-2026-10-28 (includes TABSTACK + STROKES-TOGGLE)
 // TABSTACK-2026-10-28 (includes STROKES-TOGGLE-2026-10-28)
 // STROKES-TOGGLE-2026-10-28
@@ -299,6 +300,11 @@ export default function TeamTournament({onBack, user, onDelete}){
   const[loading,setLoading]=useState(false);
   const[saveStatus,setSaveStatus]=useState("");
   const[lbTab,setLbTab]=useState("standings");      // leaderboard tab
+  // PG-TEAMSCORECARD-2026-10-28 — vs-par / strokes mode, SHARED with Individuals (same localStorage key, so one tap changes both)
+  const [scoreMode, setScoreMode] = useState(()=>{ try{ return localStorage.getItem("pg-individual-score-mode")==="strokes" ? "strokes" : "vspar"; }catch(e){ return "vspar"; } });
+  const showStrokes = scoreMode==="strokes";
+  const setMode = (m)=>{ setScoreMode(m); try{ localStorage.setItem("pg-individual-score-mode", m); }catch(e){} };
+  useEffect(()=>{ try{ const m=localStorage.getItem("pg-individual-score-mode"); if(m==="strokes"||m==="vspar") setScoreMode(m); }catch(e){} },[lbTab]);
   const[showSettings,setShowSettings]=useState(false); // director settings overlay
   const[ctpConfirm,setCtpConfirm]=useState(false);     // mid-round CTP enable confirmation
   const saveTimer=useRef(null);
@@ -2055,36 +2061,54 @@ export default function TeamTournament({onBack, user, onDelete}){
           )}
 
           {lbTab==="scorecard"&&(
-            <div style={{overflowX:"auto"}}>
-              <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>Hole by Hole · vs Par</div>
-              <table style={{width:"100%",borderCollapse:"collapse",fontSize:11,minWidth:500}}>
-                <thead>
-                  <tr style={{borderBottom:"1px solid "+C.border}}>
-                    <th style={{textAlign:"left",padding:"4px 6px",color:C.muted}}>Team</th>
-                    {course.holes.filter(h=>h.side==="front").map(h=><th key={h.hole} style={{padding:"3px",textAlign:"center",color:C.muted,fontWeight:500}}>{h.hole}</th>)}
-                    <th style={{padding:"3px 5px",textAlign:"center",color:C.green,fontWeight:700}}>F</th>
-                    {course.holes.filter(h=>h.side==="back").map(h=><th key={h.hole} style={{padding:"3px",textAlign:"center",color:C.muted,fontWeight:500}}>{h.hole}</th>)}
-                    <th style={{padding:"3px 5px",textAlign:"center",color:C.green,fontWeight:700}}>B</th>
-                    <th style={{padding:"3px 5px",textAlign:"center",color:C.gold,fontWeight:700}}>T</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {board.map((team,ri)=>{
-                    const fH=course.holes.filter(h=>h.side==="front");
-                    const bH=course.holes.filter(h=>h.side==="back");
-                    return(
-                      <tr key={team.id||ri} style={{borderTop:"1px solid "+C.dim}}>
-                        <td style={{padding:"4px 6px",fontWeight:700,color:team.color,whiteSpace:"nowrap"}}>{team.name}</td>
-                        {fH.map(h=>{const hd=team.sc.byHole[h.hole];return<td key={h.hole} style={{padding:"4px 3px",textAlign:"center",fontWeight:600,color:hd?relColor(hd.diff):C.dim}}>{hd?relLabel(hd.diff):"--"}</td>;})}
-                        <td style={{padding:"4px",textAlign:"center",fontWeight:800,color:team.sc.front?relColor(team.sc.frontDiff):C.muted}}>{team.sc.front?relLabel(team.sc.frontDiff):"--"}</td>
-                        {bH.map(h=>{const hd=team.sc.byHole[h.hole];return<td key={h.hole} style={{padding:"4px 3px",textAlign:"center",fontWeight:600,color:hd?relColor(hd.diff):C.dim}}>{hd?relLabel(hd.diff):"--"}</td>;})}
-                        <td style={{padding:"4px",textAlign:"center",fontWeight:800,color:team.sc.back?relColor(team.sc.backDiff):C.muted}}>{team.sc.back?relLabel(team.sc.backDiff):"--"}</td>
-                        <td style={{padding:"4px",textAlign:"center",fontWeight:800,color:team.sc.total?relColor(team.sc.totalDiff):C.muted}}>{team.sc.total?relLabel(team.sc.totalDiff):"--"}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+            <div>
+              <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>Hole by Hole · {showStrokes?"Strokes":"Vs Par"}</div>
+              <div style={{display:"flex",gap:0,marginBottom:12,border:"1px solid "+C.border,borderRadius:10,overflow:"hidden"}}>
+                {[["vspar","Vs Par"],["strokes","Strokes"]].map(([id,lbl])=>(
+                  <button key={id} onClick={()=>setMode(id)} style={{flex:1,padding:"9px",fontSize:12,fontWeight:scoreMode===id?700:500,background:scoreMode===id?C.green:"transparent",color:scoreMode===id?"#0a1a0f":C.muted,border:"none",cursor:"pointer"}}>{lbl}</button>
+                ))}
+              </div>
+              {board.map((team,ri)=>{
+                const fH=course.holes.filter(h=>h.side==="front");
+                const bH=course.holes.filter(h=>h.side==="back");
+                return(
+                  <div key={team.id||ri} style={{background:C.card,border:"1px solid "+C.border,borderRadius:12,padding:"10px 12px",marginBottom:10}}>
+                    <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
+                      <div style={{width:10,height:10,borderRadius:"50%",background:team.color,flexShrink:0}}/>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontWeight:800,fontSize:15,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{team.name}</div>
+                        <div style={{fontSize:11,color:C.muted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:2}}>{(team.players||[]).filter(Boolean).join(" / ")||"No players"}</div>
+                      </div>
+                      <div style={{textAlign:"right",flexShrink:0}}>
+                        <div style={{fontSize:20,fontWeight:800,color:team.sc.total===0?C.muted:relColor(team.sc.totalDiff)}}>{team.sc.total===0?"--":(showStrokes?team.sc.total:relLabel(team.sc.totalDiff))}</div>
+                        <div style={{fontSize:9,color:C.dim}}>total</div>
+                      </div>
+                    </div>
+                    <div style={{display:"flex",alignItems:"center",gap:2,marginBottom:3}}>
+                      <div style={{width:20,fontSize:8,color:C.muted,flexShrink:0,textAlign:"right",paddingRight:3}}>F</div>
+                      {fH.map(h=>{const hd=team.sc.byHole[h.hole];return(
+                        <div key={h.hole} style={{flex:1,height:22,borderRadius:3,background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.08)",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                          <span style={{fontSize:9,fontWeight:700,color:hd?relColor(hd.diff):C.dim}}>{hd?(showStrokes?hd.raw:relLabel(hd.diff)):""}</span>
+                        </div>
+                      );})}
+                      <div style={{width:26,height:22,borderRadius:3,background:"rgba(123,180,80,0.08)",border:"1px solid rgba(123,180,80,0.2)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                        <span style={{fontSize:9,fontWeight:800,color:team.sc.front?relColor(team.sc.frontDiff):C.dim}}>{team.sc.front?(showStrokes?team.sc.front:relLabel(team.sc.frontDiff)):""}</span>
+                      </div>
+                    </div>
+                    <div style={{display:"flex",alignItems:"center",gap:2}}>
+                      <div style={{width:20,fontSize:8,color:C.muted,flexShrink:0,textAlign:"right",paddingRight:3}}>B</div>
+                      {bH.map(h=>{const hd=team.sc.byHole[h.hole];return(
+                        <div key={h.hole} style={{flex:1,height:22,borderRadius:3,background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.08)",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                          <span style={{fontSize:9,fontWeight:700,color:hd?relColor(hd.diff):C.dim}}>{hd?(showStrokes?hd.raw:relLabel(hd.diff)):""}</span>
+                        </div>
+                      );})}
+                      <div style={{width:26,height:22,borderRadius:3,background:"rgba(123,180,80,0.08)",border:"1px solid rgba(123,180,80,0.2)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                        <span style={{fontSize:9,fontWeight:800,color:team.sc.back?relColor(team.sc.backDiff):C.dim}}>{team.sc.back?(showStrokes?team.sc.back:relLabel(team.sc.backDiff)):""}</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
               {Object.keys(holeNotes).filter(hn=>String(holeNotes[hn]||"").trim()!=="").length>0&&(
                 <div style={{background:C.card,border:"1px solid "+C.border,borderRadius:12,padding:"14px 16px",marginTop:14}}>
                   <div style={{fontWeight:700,fontSize:14,marginBottom:8}}>📋 Hole notes</div>
