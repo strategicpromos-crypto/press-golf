@@ -1,3 +1,4 @@
+// STROKES-TOGGLE-2026-10-28
 import React, { useState, useEffect, useRef } from "react";
 import { sb } from "./supabase.js";
 import { COURSES, courseHasHdcp } from "./golf.js";
@@ -65,6 +66,10 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
   const [showSummary,       setShowSummary]       = useState(false);
   const [showCaptainSettings, setShowCaptainSettings] = useState(false);
   const [bTab,         setBTab]         = useState("standings");
+  // PG-STROKES-TOGGLE-2026-10-28 — vs-par / strokes toggle on Individuals (default vs-par, remembered per device)
+  const [scoreMode, setScoreMode] = useState(()=>{ try{ return localStorage.getItem("pg-individual-score-mode")==="strokes" ? "strokes" : "vspar"; }catch(e){ return "vspar"; } });
+  const showStrokes = scoreMode==="strokes";
+  const setMode = (m)=>{ setScoreMode(m); try{ localStorage.setItem("pg-individual-score-mode", m); }catch(e){} };
   // ── Captain side bets — captains run their own bets (Oct 25, 2026) ──────
   // This is the one exception to "captains change nothing": bets only.
   // Setup / hole pars / rules stay director-only.
@@ -688,18 +693,27 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
                         if(s!==undefined&&s!==null){
                           const diff=parseInt(s)-effPar;
                           total+=diff;holesPlayed++;
-                          byHole[h.hole]={diff,side:h.side};
+                          byHole[h.hole]={diff,raw:parseInt(s),par:effPar,side:h.side};
                         }
                       }
                       if(holesPlayed>0)players.push({name,teamName:t.name||`Team ${ti+1}`,teamColor:t.color,total,holesPlayed,byHole,ti,pi,isMe:ti===teamIdx});
                     }
                   });
                   players.sort((a,b)=>a.total!==b.total?a.total-b.total:b.holesPlayed-a.holesPlayed);
-                  return players.slice(0,30).map((p,i)=>{
+                  return (<>
+                    <div style={{display:"flex",gap:0,marginBottom:12,border:"1px solid "+C.border,borderRadius:10,overflow:"hidden"}}>
+                      {[["vspar","Vs Par"],["strokes","Strokes"]].map(([id,lbl])=>(
+                        <button key={id} onClick={()=>setMode(id)} style={{flex:1,padding:"9px",fontSize:12,fontWeight:scoreMode===id?700:500,background:scoreMode===id?C.green:"transparent",color:scoreMode===id?"#0a1a0f":C.muted,border:"none",cursor:"pointer"}}>{lbl}</button>
+                      ))}
+                    </div>
+                  {players.slice(0,30).map((p,i)=>{
                     const frontDiff=frontHoles.reduce((s,h)=>p.byHole[h.hole]!==undefined?s+p.byHole[h.hole].diff:s,0);
                     const backDiff=backHoles.reduce((s,h)=>p.byHole[h.hole]!==undefined?s+p.byHole[h.hole].diff:s,0);
                     const hasFront=frontHoles.some(h=>p.byHole[h.hole]!==undefined);
                     const hasBack=backHoles.some(h=>p.byHole[h.hole]!==undefined);
+                    const frontGross=frontHoles.reduce((s,h)=>p.byHole[h.hole]!==undefined?s+p.byHole[h.hole].raw:s,0);
+                    const backGross=backHoles.reduce((s,h)=>p.byHole[h.hole]!==undefined?s+p.byHole[h.hole].raw:s,0);
+                    const grossTotal=frontGross+backGross;
                     return(
                       <div key={`${p.ti}-${p.pi}`} style={{background:p.isMe?"rgba(123,180,80,0.06)":i===0?"rgba(232,184,75,0.06)":C.card,border:`1px solid ${p.isMe?C.green+"44":i===0?C.gold+"44":C.border}`,borderRadius:12,padding:"10px 12px",marginBottom:10}}>
                         <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
@@ -712,25 +726,26 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
                             </div>
                           </div>
                           <div style={{textAlign:"right",flexShrink:0}}>
-                            <div style={{fontSize:18,fontWeight:800,color:relColor(p.total)}}>{relLabel(p.total)}</div>
+                            <div style={{fontSize:18,fontWeight:800,color:relColor(p.total)}}>{showStrokes?grossTotal:relLabel(p.total)}</div>
                             <div style={{fontSize:9,color:C.dim}}>thru {p.holesPlayed}</div>
                           </div>
                         </div>
                         <div style={{overflowX:"auto"}}>
                           <div style={{display:"flex",alignItems:"center",gap:2,marginBottom:3,minWidth:280}}>
                             <div style={{width:18,fontSize:7,color:C.muted,flexShrink:0,textAlign:"right",paddingRight:2}}>F</div>
-                            {frontHoles.map(h=>{const d=p.byHole[h.hole];return(<div key={h.hole} style={{flex:1,height:20,borderRadius:3,background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.08)",display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:8,fontWeight:700,color:d!==undefined?cellColor(d.diff):C.dim}}>{d!==undefined?relLabel(d.diff):""}</span></div>);})}
-                            <div style={{width:24,height:20,borderRadius:3,background:"rgba(123,180,80,0.08)",border:"1px solid rgba(123,180,80,0.2)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><span style={{fontSize:8,fontWeight:800,color:hasFront?relColor(frontDiff):C.dim}}>{hasFront?relLabel(frontDiff):""}</span></div>
+                            {frontHoles.map(h=>{const d=p.byHole[h.hole];return(<div key={h.hole} style={{flex:1,height:20,borderRadius:3,background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.08)",display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:8,fontWeight:700,color:d!==undefined?cellColor(d.diff):C.dim}}>{d!==undefined?(showStrokes?d.raw:relLabel(d.diff)):""}</span></div>);})}
+                            <div style={{width:24,height:20,borderRadius:3,background:"rgba(123,180,80,0.08)",border:"1px solid rgba(123,180,80,0.2)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><span style={{fontSize:8,fontWeight:800,color:hasFront?relColor(frontDiff):C.dim}}>{hasFront?(showStrokes?frontGross:relLabel(frontDiff)):""}</span></div>
                           </div>
                           <div style={{display:"flex",alignItems:"center",gap:2,minWidth:280}}>
                             <div style={{width:18,fontSize:7,color:C.muted,flexShrink:0,textAlign:"right",paddingRight:2}}>B</div>
-                            {backHoles.map(h=>{const d=p.byHole[h.hole];return(<div key={h.hole} style={{flex:1,height:20,borderRadius:3,background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.08)",display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:8,fontWeight:700,color:d!==undefined?cellColor(d.diff):C.dim}}>{d!==undefined?relLabel(d.diff):""}</span></div>);})}
-                            <div style={{width:24,height:20,borderRadius:3,background:"rgba(123,180,80,0.08)",border:"1px solid rgba(123,180,80,0.2)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><span style={{fontSize:8,fontWeight:800,color:hasBack?relColor(backDiff):C.dim}}>{hasBack?relLabel(backDiff):""}</span></div>
+                            {backHoles.map(h=>{const d=p.byHole[h.hole];return(<div key={h.hole} style={{flex:1,height:20,borderRadius:3,background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.08)",display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:8,fontWeight:700,color:d!==undefined?cellColor(d.diff):C.dim}}>{d!==undefined?(showStrokes?d.raw:relLabel(d.diff)):""}</span></div>);})}
+                            <div style={{width:24,height:20,borderRadius:3,background:"rgba(123,180,80,0.08)",border:"1px solid rgba(123,180,80,0.2)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><span style={{fontSize:8,fontWeight:800,color:hasBack?relColor(backDiff):C.dim}}>{hasBack?(showStrokes?backGross:relLabel(backDiff)):""}</span></div>
                           </div>
                         </div>
                       </div>
                     );
-                  });
+                  })}
+                  </>);
                 })()}
                 {bTab==="skins"&&<SkinsTab teams={tourney.teams||[]} course={course} holePars={tourney.hole_pars||{}} skinsEnabled={tourney.skins_enabled===true} bigBoyEnabled={tourney.big_boy_enabled===true} teammatesTie={tourney.teammates_tie===true}/>}
                 {bTab==="ctp"&&(
