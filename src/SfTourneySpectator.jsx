@@ -1,3 +1,4 @@
+// CAPTAIN-DARKTABS-2026-10-28 (SfTourneySpectator — fixes white second tab row)
 // SFMATCH-2026-10-28 (SfTourneySpectator — includes tab stack, stacked team-points scorecard)
 // ── STABLEFORD CLONE of TourneySpectator.jsx ─────────────────────────────
 // Same spectator shell (live subscription, tabs) with Stableford scoring.
@@ -102,19 +103,19 @@ export default function SfTourneySpectator({ tourney: initialTourney, onBack }) 
         </div>
       </div>
 
-      {/* Tabs — PG-SFMATCH-2026-10-28: stacked, captain-style segmented rows, same as Outing */}
+      {/* Tabs — PG-SFMATCH-2026-10-28 + PG-CAPTAIN-DARKTABS-2026-10-28: stacked, captain-style segmented rows, same as Outing */}
       <div style={{ padding:"0 16px 4px", display:"flex", flexDirection:"column", gap:8 }}>
-        <div style={{ display:"flex", gap:0, border:`1px solid ${C.border}`, borderRadius:10, overflow:"hidden" }}>
+        <div style={{ display:"flex", gap:0, border:`1px solid ${C.border}`, borderRadius:10, overflow:"hidden", background:"#121e14" }}>
           {[["board","🏆 Standings"],["scorecard","📋 Scorecard"],["individual","⭐ Individuals"]]
             .map(([id,lbl])=>(
-            <button key={id} onClick={()=>setTab(id)} style={{ flex:1, padding:"11px", fontSize:12, fontWeight:tab===id?700:500, background:tab===id?C.green:"transparent", color:tab===id?"#0a1a0f":C.muted, border:"none", cursor:"pointer" }}>{lbl}</button>
+            <button key={id} onClick={()=>setTab(id)} style={{ flex:1, padding:"11px", fontSize:12, fontWeight:tab===id?700:500, background:tab===id?C.green:"#121e14", color:tab===id?"#0a1a0f":C.muted, border:"none", cursor:"pointer" }}>{lbl}</button>
           ))}
         </div>
-        <div style={{ display:"flex", gap:0, border:`1px solid ${C.border}`, borderRadius:10, overflow:"hidden" }}>
+        <div style={{ display:"flex", gap:0, border:`1px solid ${C.border}`, borderRadius:10, overflow:"hidden", background:"#121e14" }}>
           {[["skins","💰 Skins"],["bets","💵 Bets"],["rules","📋 Rules"],
             ...(tourney.ctp_enabled&&(tourney.ctp_holes||[]).length>0?[["ctp","📍 CTP"]]:[])]
             .map(([id,lbl])=>(
-            <button key={id} onClick={()=>setTab(id)} style={{ flex:1, padding:"11px", fontSize:12, fontWeight:tab===id?(id==="ctp"?C.gold:C.green):"transparent", color:tab===id?"#0a1a0f":C.muted, border:"none", cursor:"pointer" }}>{lbl}</button>
+            <button key={id} onClick={()=>setTab(id)} style={{ flex:1, padding:"11px", fontSize:12, fontWeight:tab===id?700:500, background:tab===id?(id==="ctp"?C.gold:C.green):"#121e14", color:tab===id?"#0a1a0f":C.muted, border:"none", cursor:"pointer" }}>{lbl}</button>
           ))}
         </div>
       </div>
