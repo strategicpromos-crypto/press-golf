@@ -1,3 +1,4 @@
+// BUDDYPICKER-2026-10-28 (LiveRound — Selected card + Search button + tap list, no dropdown)
 import { useState, useEffect, useRef } from "react";
 import { sb } from "./supabase.js";
 import { COURSES, getStrokeHoles, calcAutoPressNassau, courseHasHdcp } from "./golf.js";
@@ -314,6 +315,9 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
   const [step,        setStep]        = useState("setup");
   const [courseId,    setCourseId]    = useState("south-toledo");
   const [showCourseSearch, setShowCourseSearch] = useState(false);
+  // PG-BUDDYPICKER-2026-10-28 — scroll the search panel into view when it opens
+  const searchPanelRef = useRef(null);
+  useEffect(()=>{ if(showCourseSearch&&searchPanelRef.current){ searchPanelRef.current.scrollIntoView({behavior:"smooth",block:"start"}); } },[showCourseSearch]);
   const [opponents,   setOpponents]   = useState([]);
   const [scores,      setScores]      = useState({});
   const [currentHole, setCurrentHole] = useState(1);
@@ -858,17 +862,39 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
           <div style={{fontSize:11,color:C.muted,marginTop:6}}>Shows on your opponents' scorecards</div>
         </div>
 
-        {/* Course picker */}
+        {/* Course picker — no native dropdown: Android's select opens scrolled to the
+            selected course, so "Search for a course…" sat above the viewport and took a
+            scroll to reach. Selected course is a card on top, Search sits right under
+            it, and saved courses are a plain tap list below. Tapping the already-selected
+            course does nothing. Same pattern as Tournament Setup. */}
         <div style={{marginBottom:16}}>
           <Lbl>Select Course</Lbl>
-          <select value={courseId} onChange={e=>{ if(e.target.value==="__search__"){ setShowCourseSearch(true); } else { setCourseId(e.target.value); } }} style={selStyle}>
-            <option value="__search__">🔍 Search for a course…</option>
-            {Object.entries(COURSES).map(([id,c])=>(
-              <option key={id} value={id}>{c.name} - {c.city}</option>
-            ))}
-          </select>
-          {COURSES[courseId]?.note && <div style={{fontSize:11,color:C.gold,marginTop:6}}>{COURSES[courseId].note}</div>}
-          {showCourseSearch && <CourseSearch C={C} onClose={()=>setShowCourseSearch(false)} onPick={id=>{ setCourseId(id); setShowCourseSearch(false); }} onCourseDeleted={id=>{ if(id===courseId){ const rest=Object.keys(COURSES); if(rest.length) setCourseId(rest[0]); } }} />}
+          <div style={{background:C.card,border:"1px solid "+C.green,borderRadius:10,padding:"14px 16px",marginBottom:10}}>
+            <div style={{fontSize:11,color:C.muted,letterSpacing:1.5,textTransform:"uppercase",marginBottom:2}}>Selected</div>
+            <div style={{fontSize:17,fontWeight:800}}>{COURSES[courseId]?COURSES[courseId].name+" — Par "+COURSES[courseId].par:"Choose a course below"}</div>
+            {COURSES[courseId]?.city ? <div style={{fontSize:12,color:C.muted,marginTop:2}}>{COURSES[courseId].city}</div> : null}
+          </div>
+          {COURSES[courseId]?.note && <div style={{fontSize:11,color:C.gold,marginBottom:10}}>{COURSES[courseId].note}</div>}
+          <button onClick={()=>setShowCourseSearch(true)}
+            style={{width:"100%",padding:"14px",background:C.green,color:"#0a1a0f",border:"none",borderRadius:10,fontWeight:800,fontSize:15,cursor:"pointer",marginBottom:12}}>
+            🔍 Search courses
+          </button>
+          <div style={{fontSize:11,color:C.muted,letterSpacing:1.5,textTransform:"uppercase",marginBottom:6}}>Saved courses</div>
+          <div style={{display:"flex",flexDirection:"column",gap:8}}>
+            {Object.entries(COURSES).map(([id,c])=>{
+              const selected=id===courseId;
+              return(
+                <button key={id} onClick={()=>{ if(id!==courseId) setCourseId(id); }}
+                  style={{textAlign:"left",padding:"12px 14px",background:selected?"rgba(123,180,80,0.15)":C.surface,border:"1px solid "+(selected?C.green:C.border),borderRadius:10,color:C.text,cursor:"pointer"}}>
+                  <div style={{fontWeight:selected?800:600,fontSize:15}}>{selected?"✓ ":""}{c.name} — Par {c.par}</div>
+                  {c.city ? <div style={{fontSize:12,color:C.muted}}>{c.city}</div> : null}
+                </button>
+              );
+            })}
+          </div>
+          <div ref={searchPanelRef}>
+            {showCourseSearch && <CourseSearch C={C} onClose={()=>setShowCourseSearch(false)} onPick={id=>{ setCourseId(id); setShowCourseSearch(false); }} onCourseDeleted={id=>{ if(id===courseId){ const rest=Object.keys(COURSES); if(rest.length) setCourseId(rest[0]); } }} />}
+          </div>
         </div>
 
         <div style={{fontSize:11,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>
