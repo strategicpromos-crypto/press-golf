@@ -1,3 +1,4 @@
+// BANKMOVE-2026-10-28 (App.jsx — original bank strip moved below active rounds, Add Player below it)
 // BANKCARD-2026-10-28 (App.jsx — prominent Season Bank card below active rounds)
 // TOURNAMENTS-PLURAL-2026-10-28 (App.jsx only)
 import React, { useState, useEffect, useCallback } from "react";
@@ -1655,9 +1656,6 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
           </div>
         </button>
 
-        <div style={{display:"flex",background:"rgba(0,0,0,0.35)",border:`1px solid ${C.border}`,borderRadius:14,overflow:"hidden",maxWidth:360,margin:"0 auto"}}>
-          {[{l:"Rounds",v:sRound},{l:"Side Bets",v:sBet},{l:"Season Bank",v:sBank}].map((item,i,arr)=>(<div key={i} style={{flex:1,textAlign:"center",padding:"13px 4px",borderRight:i<arr.length-1?`1px solid ${C.border}`:"none"}}><Money value={item.v} size={15}/><div style={{fontSize:8,color:C.muted,letterSpacing:1.5,textTransform:"uppercase",marginTop:3}}>{item.l}</div></div>))}
-        </div>
       </div>
 
       <div style={{padding:"0 16px"}}>
@@ -1763,17 +1761,13 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
           </div>
         )}
 
-        {/* PG-BANKCARD-2026-10-28 — prominent Season Bank card, below the active-round
-            banners and above Your Opponents. Bank + Add Player live together here, so a
-            new director for a small game sees money tracking immediately. */}
-        <div style={{background:`linear-gradient(135deg,rgba(123,180,80,0.18),rgba(123,180,80,0.06))`,border:`1px solid ${C.green}66`,borderRadius:14,padding:"14px 16px",marginBottom:14,display:"flex",justifyContent:"space-between",alignItems:"center",gap:12}}>
-          <div style={{flex:1,minWidth:0}}>
-            <div style={{fontSize:11,letterSpacing:2,color:C.muted,textTransform:"uppercase",marginBottom:2}}>💰 Season Bank</div>
-            <div><Money value={sBank} size={28}/></div>
-            <div style={{fontSize:12,color:C.muted,marginTop:3}}>Rounds <Money value={sRound} size={12}/> · Side Bets <Money value={sBet} size={12}/></div>
-          </div>
-          <button onClick={()=>setSheet("addPlayer")} style={{background:C.green,border:"none",color:"#0a1a0f",padding:"11px 18px",borderRadius:20,fontSize:13,fontWeight:700,cursor:"pointer",flexShrink:0}}>+ Add Player</button>
+        {/* PG-BANKMOVE-2026-10-28 — the ORIGINAL Rounds/Side Bets/Season Bank strip,
+            moved down below the active-round banners (it used to sit at the top, so
+            bank showed twice). + Add Player sits below it, not beside it. */}
+        <div style={{display:"flex",background:"rgba(0,0,0,0.35)",border:`1px solid ${C.border}`,borderRadius:14,overflow:"hidden",marginBottom:10}}>
+          {[{l:"Rounds",v:sRound},{l:"Side Bets",v:sBet},{l:"Season Bank",v:sBank}].map((item,i,arr)=>(<div key={i} style={{flex:1,textAlign:"center",padding:"13px 4px",borderRight:i<arr.length-1?`1px solid ${C.border}`:"none"}}><Money value={item.v} size={15}/><div style={{fontSize:8,color:C.muted,letterSpacing:1.5,textTransform:"uppercase",marginTop:3}}>{item.l}</div></div>))}
         </div>
+        <button onClick={()=>setSheet("addPlayer")} style={{width:"100%",background:C.green,border:"none",color:"#0a1a0f",padding:"12px",borderRadius:12,fontSize:14,fontWeight:800,cursor:"pointer",marginBottom:14}}>+ Add Player</button>
 
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
           <div style={{fontSize:11,letterSpacing:2,color:C.muted,textTransform:"uppercase"}}>
