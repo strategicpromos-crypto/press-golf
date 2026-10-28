@@ -1,3 +1,4 @@
+// SFMATCH-2026-10-28 (SfTeamTournament — includes header stack, tab stack, stacked team-points scorecard)
 // ── STABLEFORD CLONE of TeamTournament.jsx ─────────────────────────────
 // Same Outing shell (setup, scoring, CTP, links, settings) with Stableford
 // scoring throughout. Best Ball lives in TeamTournament.jsx, untouched.
@@ -1451,17 +1452,20 @@ export default function SfTeamTournament({onBack, user, onDelete, resumeId}){
               )}
               {saveStatus&&<div style={{fontSize:10,color:saveStatus==="saving"?C.gold:C.green,marginTop:2}}>{saveStatus==="saving"?"Saving...":"Saved"}</div>}
             </div>
-            <div style={{display:"flex",flexDirection:"column",gap:6,alignItems:"flex-end"}}>
-              <button onClick={()=>setScreen("home")}
-                style={{background:"rgba(123,180,80,0.15)",border:"1px solid "+C.green,color:C.green,fontSize:11,cursor:"pointer",padding:"5px 10px",borderRadius:12,fontWeight:700}}>🏠 Home</button>
+            {/* PG-SFMATCH-2026-10-28: header stack, same as Outing — Home+Rules side by side, then Leaderboard, Settings, Day/Dark mode last */}
+            <div style={{display:"flex",flexDirection:"column",gap:6,width:136,flexShrink:0}}>
+              <div style={{display:"flex",gap:6}}>
+                <button onClick={()=>setScreen("home")}
+                  style={{flex:1,background:"rgba(123,180,80,0.15)",border:"1px solid "+C.green,color:C.green,fontSize:12,cursor:"pointer",padding:"9px 2px",borderRadius:12,fontWeight:700,whiteSpace:"nowrap",textAlign:"center"}}>🏠 Home</button>
+                <button onClick={()=>{setLbTab("rules");setScreen("leaderboard");}}
+                  style={{flex:1,background:"rgba(123,180,80,0.15)",border:"1px solid "+C.green,color:C.green,fontSize:12,cursor:"pointer",padding:"9px 2px",borderRadius:12,fontWeight:700,whiteSpace:"nowrap",textAlign:"center"}}>📋 Rules</button>
+              </div>
               <button onClick={()=>{setLbTab("standings");setScreen("leaderboard");}}
-                style={{background:"rgba(232,184,75,0.15)",border:"1px solid "+C.gold,color:C.gold,fontSize:11,cursor:"pointer",padding:"5px 10px",borderRadius:12,fontWeight:700}}>📊 Leaderboard</button>
-              <button onClick={()=>{setLbTab("rules");setScreen("leaderboard");}}
-                style={{background:"rgba(123,180,80,0.15)",border:"1px solid "+C.green,color:C.green,fontSize:11,cursor:"pointer",padding:"5px 10px",borderRadius:12,fontWeight:700}}>📋 Rules</button>
+                style={{background:"rgba(232,184,75,0.15)",border:"1px solid "+C.gold,color:C.gold,fontSize:12,cursor:"pointer",padding:"9px 4px",borderRadius:12,fontWeight:700,whiteSpace:"nowrap",textAlign:"center"}}>📊 Leaderboard</button>
               <button onClick={()=>setShowSettings(true)}
-                style={{background:"rgba(123,180,80,0.15)",border:"1px solid "+C.green,color:C.green,fontSize:13,cursor:"pointer",padding:"8px 14px",borderRadius:12,fontWeight:700}}>⚙️ Settings</button>
-              <button onClick={toggleDayMode} title={dayMode?"Switch to dark mode":"Day mode — easier to read in sunlight"}
-                style={{background:dayMode?"rgba(35,100,45,0.10)":"rgba(232,184,75,0.10)",border:"1px solid "+(dayMode?C.green:C.gold),color:dayMode?C.green:C.gold,fontSize:13,cursor:"pointer",padding:"8px 12px",borderRadius:12,fontWeight:700}}>{dayMode?"🌙":"☀️"}</button>
+                style={{background:"rgba(123,180,80,0.15)",border:"1px solid "+C.green,color:C.green,fontSize:12,cursor:"pointer",padding:"9px 4px",borderRadius:12,fontWeight:700,whiteSpace:"nowrap",textAlign:"center"}}>⚙️ Settings</button>
+              <button onClick={toggleDayMode} title={dayMode?"Switch to dark mode":"Switch to day mode — easier to read in sunlight"}
+                style={{background:"rgba(232,184,75,0.10)",border:"1px solid "+C.gold,color:C.gold,fontSize:12,cursor:"pointer",padding:"9px 4px",borderRadius:12,fontWeight:700,whiteSpace:"nowrap",textAlign:"center"}}>{dayMode?"🌙 Dark mode":"☀️ Day mode"}</button>
             </div>
           </div>
           <div style={{display:"flex",gap:2}}>
@@ -2089,12 +2093,20 @@ export default function SfTeamTournament({onBack, user, onDelete, resumeId}){
           </div>
         </div>
 
-        {/* Tabs */}
-        <div style={{display:"flex",borderBottom:"1px solid "+C.border,background:"rgba(0,0,0,0.2)",overflowX:"auto"}}>
-          {[["standings","Standings"],["scorecard","Scorecard"],["individual","Individuals"],["skins","Skins"],["bets","💵 Bets"],["rules","📋 Rules"],...(ctpEnabled?[["ctp","CTP"]]:[])]
-            .map(([id,lbl])=>(
-            <button key={id} onClick={()=>setLbTab(id)} style={{flex:1,padding:"10px 2px",fontSize:11,fontWeight:lbTab===id?700:500,background:"transparent",color:lbTab===id?(id==="ctp"?C.gold:C.green):C.muted,border:"none",borderBottom:lbTab===id?"2px solid "+(id==="ctp"?C.gold:C.green):"2px solid transparent",cursor:"pointer",whiteSpace:"nowrap",flexShrink:0}}>{lbl}</button>
-          ))}
+        {/* Tabs — PG-SFMATCH-2026-10-28: stacked, captain-style segmented rows, same as Outing */}
+        <div style={{padding:"0 16px 4px",display:"flex",flexDirection:"column",gap:8}}>
+          <div style={{display:"flex",gap:0,border:"1px solid "+C.border,borderRadius:10,overflow:"hidden"}}>
+            {[["standings","Standings"],["scorecard","Scorecard"],["individual","Individuals"]]
+              .map(([id,lbl])=>(
+              <button key={id} onClick={()=>setLbTab(id)} style={{flex:1,padding:"11px",fontSize:12,fontWeight:lbTab===id?700:500,background:lbTab===id?C.green:"transparent",color:lbTab===id?"#0a1a0f":C.muted,border:"none",cursor:"pointer"}}>{lbl}</button>
+            ))}
+          </div>
+          <div style={{display:"flex",gap:0,border:"1px solid "+C.border,borderRadius:10,overflow:"hidden"}}>
+            {[["skins","Skins"],["bets","💵 Bets"],["rules","📋 Rules"],...(ctpEnabled?[["ctp","CTP"]]:[])]
+              .map(([id,lbl])=>(
+              <button key={id} onClick={()=>setLbTab(id)} style={{flex:1,padding:"11px",fontSize:12,fontWeight:lbTab===id?700:500,background:lbTab===id?(id==="ctp"?C.gold:C.green):"transparent",color:lbTab===id?"#0a1a0f":C.muted,border:"none",cursor:"pointer"}}>{lbl}</button>
+            ))}
+          </div>
         </div>
 
         <div style={{padding:"16px"}}>
@@ -2129,36 +2141,52 @@ export default function SfTeamTournament({onBack, user, onDelete, resumeId}){
           )}
 
                     {lbTab==="scorecard"&&(
-            <div style={{overflowX:"auto"}}>
+            <div>
               <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>Hole by Hole · Stableford points</div>
-              <table style={{width:"100%",borderCollapse:"collapse",fontSize:11,minWidth:500}}>
-                <thead>
-                  <tr style={{borderBottom:"1px solid "+C.border}}>
-                    <th style={{textAlign:"left",padding:"4px 6px",color:C.muted}}>Player</th>
-                    {course.holes.filter(h=>h.side==="front").map(h=><th key={h.hole} style={{padding:"3px",textAlign:"center",color:C.muted,fontWeight:500}}>{h.hole}</th>)}
-                    <th style={{padding:"3px 5px",textAlign:"center",color:C.green,fontWeight:700}}>F</th>
-                    {course.holes.filter(h=>h.side==="back").map(h=><th key={h.hole} style={{padding:"3px",textAlign:"center",color:C.muted,fontWeight:500}}>{h.hole}</th>)}
-                    <th style={{padding:"3px 5px",textAlign:"center",color:C.green,fontWeight:700}}>B</th>
-                    <th style={{padding:"3px 5px",textAlign:"center",color:C.gold,fontWeight:700}}>T</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {sfIndividualPoints(teams,course.holes,holePars,sfCfgLB).map((p,ri)=>{
-                    const fH=course.holes.filter(h=>h.side==="front");
-                    const bH=course.holes.filter(h=>h.side==="back");
-                    return(
-                      <tr key={p.teamIdx+"-"+p.pi} style={{borderTop:"1px solid "+C.dim}}>
-                        <td style={{padding:"4px 6px",fontWeight:700,color:p.teamColor,whiteSpace:"nowrap"}}>{p.name}</td>
-                        {fH.map(h=><td key={h.hole} style={{padding:"4px 3px",textAlign:"center",fontWeight:600,color:p.byHole[h.hole]!==undefined?C.text:C.dim}}>{p.byHole[h.hole]!==undefined?p.byHole[h.hole]:"--"}</td>)}
-                        <td style={{padding:"4px",textAlign:"center",fontWeight:800,color:C.green}}>{p.front}</td>
-                        {bH.map(h=><td key={h.hole} style={{padding:"4px 3px",textAlign:"center",fontWeight:600,color:p.byHole[h.hole]!==undefined?C.text:C.dim}}>{p.byHole[h.hole]!==undefined?p.byHole[h.hole]:"--"}</td>)}
-                        <td style={{padding:"4px",textAlign:"center",fontWeight:800,color:C.green}}>{p.back}</td>
-                        <td style={{padding:"4px",textAlign:"center",fontWeight:800,color:C.gold}}>{p.total}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+              {sfIsField(teams)?(
+                <SfIndividualList teams={teams} course={course} holePars={holePars} sfCfg={sfCfgLB} C={C}/>
+              ):board.map((team,ri)=>{
+                const fH=course.holes.filter(h=>h.side==="front");
+                const bH=course.holes.filter(h=>h.side==="back");
+                const scored=(h)=>Object.values(team.scores||{}).some(ps=>ps?.[h.hole]!==undefined&&ps?.[h.hole]!==null);
+                return(
+                  <div key={team.id||ri} style={{background:C.card,border:"1px solid "+C.border,borderRadius:12,padding:"10px 12px",marginBottom:10}}>
+                    <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
+                      <div style={{width:10,height:10,borderRadius:"50%",background:team.color,flexShrink:0}}/>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontWeight:800,fontSize:15,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{team.name}</div>
+                        <div style={{fontSize:11,color:C.muted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:2}}>{(team.players||[]).filter(Boolean).join(" / ")||"No players"}</div>
+                      </div>
+                      <div style={{textAlign:"right",flexShrink:0}}>
+                        <div style={{fontSize:20,fontWeight:800,color:C.green}}>{team.sf.total} pts</div>
+                        <div style={{fontSize:9,color:C.dim}}>total</div>
+                      </div>
+                    </div>
+                    <div style={{display:"flex",alignItems:"center",gap:2,marginBottom:3}}>
+                      <div style={{width:20,fontSize:8,color:C.muted,flexShrink:0,textAlign:"right",paddingRight:3}}>F</div>
+                      {fH.map(h=>(
+                        <div key={h.hole} style={{flex:1,height:22,borderRadius:3,background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.08)",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                          <span style={{fontSize:9,fontWeight:700,color:scored(h)?C.text:C.dim}}>{scored(h)?team.sf.byHole[h.hole]:""}</span>
+                        </div>
+                      ))}
+                      <div style={{width:26,height:22,borderRadius:3,background:"rgba(123,180,80,0.08)",border:"1px solid rgba(123,180,80,0.2)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                        <span style={{fontSize:9,fontWeight:800,color:C.green}}>{team.sf.front}</span>
+                      </div>
+                    </div>
+                    <div style={{display:"flex",alignItems:"center",gap:2}}>
+                      <div style={{width:20,fontSize:8,color:C.muted,flexShrink:0,textAlign:"right",paddingRight:3}}>B</div>
+                      {bH.map(h=>(
+                        <div key={h.hole} style={{flex:1,height:22,borderRadius:3,background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.08)",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                          <span style={{fontSize:9,fontWeight:700,color:scored(h)?C.text:C.dim}}>{scored(h)?team.sf.byHole[h.hole]:""}</span>
+                        </div>
+                      ))}
+                      <div style={{width:26,height:22,borderRadius:3,background:"rgba(123,180,80,0.08)",border:"1px solid rgba(123,180,80,0.2)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                        <span style={{fontSize:9,fontWeight:800,color:C.green}}>{team.sf.back}</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
               {Object.keys(holeNotes).filter(hn=>String(holeNotes[hn]||"").trim()!=="").length>0&&(
                 <div style={{background:C.card,border:"1px solid "+C.border,borderRadius:12,padding:"14px 16px",marginTop:14}}>
                   <div style={{fontWeight:700,fontSize:14,marginBottom:8}}>📋 Hole notes</div>
