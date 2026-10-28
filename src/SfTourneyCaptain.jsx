@@ -1,3 +1,4 @@
+// CAPTAIN-DARKTABS-2026-10-28 (SfTourneyCaptain — fixes white second tab row)
 // SFMATCH-2026-10-28 (SfTourneyCaptain — includes header stack, tab stack, Edit Roster, Tournament Settings title)
 // ── STABLEFORD CLONE of TourneyCaptain.jsx ─────────────────────────────
 // Same captain shell (writer lock, own-team-only writes, CTP prompt, bets)
@@ -625,7 +626,7 @@ export default function SfTourneyCaptain({ tourney: initialTourney, teamIdx, onB
 
       {/* Tournament summary overlay */}
       {showSummary&&(
-        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.92)", zIndex:500, overflowY:"auto", fontFamily:"Georgia,serif" }}>
+        <div style={{ position:"fixed", inset:0, background:"#080f0a" /* PG-CAPTAIN-DARKTABS-2026-10-28: opaque, so no light screen behind can show through */, zIndex:500, overflowY:"auto", fontFamily:"Georgia,serif" }}>
           <div style={{ padding:"50px 16px 40px" }}>
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
               <div style={{ fontSize:20, fontWeight:800, color:C.text }}>🏆 {tourney.name}</div>
@@ -637,16 +638,16 @@ export default function SfTourneyCaptain({ tourney: initialTourney, teamIdx, onB
               const medals=["1st","2nd","3rd"];
               return(<>
                 <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:16}}>
-                  <div style={{display:"flex",gap:0,border:"1px solid "+C.border,borderRadius:10,overflow:"hidden"}}>
+                  <div style={{display:"flex",gap:0,border:"1px solid "+C.border,borderRadius:10,overflow:"hidden",background:"#121e14"}}>
                     {[["standings","Standings"],["individual","Individuals"],["skins","Skins"]]
                       .map(([id,lbl])=>(
-                      <button key={id} onClick={()=>setBTab(id)} style={{flex:1,padding:"11px",fontSize:12,fontWeight:bTab===id?700:500,background:bTab===id?C.green:"transparent",color:bTab===id?"#0a1a0f":C.muted,border:"none",cursor:"pointer"}}>{lbl}</button>
+                      <button key={id} onClick={()=>setBTab(id)} style={{flex:1,padding:"11px",fontSize:12,fontWeight:bTab===id?700:500,background:bTab===id?C.green:"#121e14",color:bTab===id?"#0a1a0f":C.muted,border:"none",cursor:"pointer"}}>{lbl}</button>
                     ))}
                   </div>
-                  <div style={{display:"flex",gap:0,border:"1px solid "+C.border,borderRadius:10,overflow:"hidden"}}>
+                  <div style={{display:"flex",gap:0,border:"1px solid "+C.border,borderRadius:10,overflow:"hidden",background:"#121e14"}}>
                     {[["bets","💵 Bets"],["rules","📋 Rules"],...(ctpEnabled?[["ctp","CTP"]]:[])]
                       .map(([id,lbl])=>(
-                      <button key={id} onClick={()=>setBTab(id)} style={{flex:1,padding:"11px",fontSize:12,fontWeight:bTab===id?(id==="ctp"?C.gold:C.green):"transparent",color:bTab===id?"#0a1a0f":C.muted,border:"none",cursor:"pointer"}}>{lbl}</button>
+                      <button key={id} onClick={()=>setBTab(id)} style={{flex:1,padding:"11px",fontSize:12,fontWeight:bTab===id?700:500,background:bTab===id?(id==="ctp"?C.gold:C.green):"#121e14",color:bTab===id?"#0a1a0f":C.muted,border:"none",cursor:"pointer"}}>{lbl}</button>
                     ))}
                   </div>
                 </div>
