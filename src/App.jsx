@@ -1,3 +1,4 @@
+// TOURNAMENTS-PLURAL-2026-10-28 (App.jsx only)
 import React, { useState, useEffect, useCallback } from "react";
 import { sb } from "./supabase.js";
 import { loadStripe } from "https://esm.sh/@stripe/stripe-js@2";
@@ -996,6 +997,8 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
   const [opponentRound, setOpponentRound] = useState(null);
   const [liveSession,   setLiveSession]   = useState(null); // rounds where user is a linked opponent
   const [activeTourney, setActiveTourney]=useState(null); // active team tournament
+  // PG-TOURNAMENTS-PLURAL-2026-10-28 — how many Outing tournaments are in progress (banner goes plural when >1)
+  const [activeTourneyCount, setActiveTourneyCount]=useState(0);
   const [activeSfTourney, setActiveSfTourney]=useState(null); // active Stableford game, for the blue home banner (Step 2)
   const [sfResumeId, setSfResumeId]=useState(null); // id the home banner Resume hands to the clone
   const [pid,setPid]=useState(null);
@@ -1061,16 +1064,15 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
 
     // Fetch active team tournament — include recent setup ones that may have scores
     // (guards against status corruption bug where leaderboard visit reset status to "setup")
-    const{data:atData}=await sb.from("team_tournaments")
+    const{data:atList}=await sb.from("team_tournaments")
       .select("id,name,course_id,current_hole,teams,director_code,status")
       .eq("owner_id",user.id)
       .in("status",["active","setup"])
-      .order("updated_at",{ascending:false})
-      .limit(1)
-      .maybeSingle();
-    // Only show in banner if it has scores OR is already active
-    const hasScores=(atData?.teams||[]).some(t=>Object.keys(t?.scores||{}).length>0);
-    setActiveTourney((atData?.status==="active"||hasScores)?atData:null);
+      .order("updated_at",{ascending:false});
+    // Only count/show a banner if it has scores OR is already active — and count ALL of them, not just the latest
+    const inProgress=(atList||[]).filter(at=>at.status==="active"||(at.teams||[]).some(tm=>Object.keys(tm?.scores||{}).length>0));
+    setActiveTourneyCount(inProgress.length);
+    setActiveTourney(inProgress[0]||null);
     setLoading(false);
   },[user.id]);
 
@@ -1729,13 +1731,19 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
           <div style={{background:`linear-gradient(135deg,rgba(232,184,75,0.15),rgba(232,184,75,0.05))`,border:`1px solid ${C.gold}44`,borderRadius:14,padding:"14px 16px",marginBottom:14,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
             {/* No join code here anymore (Oct 25, 2026): the Join screen was removed Oct 12 and sharing is link-based, so the code had nothing to join with — and it was the line running off the edge. */}
             <div style={{flex:1,minWidth:0,marginRight:12}}>
-              <div style={{fontWeight:700,fontSize:14,color:C.gold,marginBottom:2}}>🏆 Tournament In Progress</div>
-              <div style={{fontSize:12,color:C.muted}}>{activeTourney.name} · Hole {activeTourney.current_hole}</div>
-              {/* Teams line was C.dim (#1e2f20) at size 11 on a near-black background — effectively invisible. Same readable muted tone/size as the name line above. */}
-              <div style={{fontSize:12,color:C.muted,marginTop:1}}>{(activeTourney.teams||[]).length} teams</div>
+              <div style={{fontWeight:700,fontSize:14,color:C.gold,marginBottom:2}}>🏆 {activeTourneyCount>1?"Tournaments In Progress":"Tournament In Progress"}</div>
+              {activeTourneyCount>1?(
+                <div style={{fontSize:12,color:C.muted}}>{activeTourneyCount} tournaments in progress</div>
+              ):(
+                <>
+                  <div style={{fontSize:12,color:C.muted}}>{activeTourney.name} · Hole {activeTourney.current_hole}</div>
+                  {/* Teams line was C.dim (#1e2f20) at size 11 on a near-black background — effectively invisible. Same readable muted tone/size as the name line above. */}
+                  <div style={{fontSize:12,color:C.muted,marginTop:1}}>{(activeTourney.teams||[]).length} teams</div>
+                </>
+              )}
             </div>
             <button onClick={()=>setView("tournament")} style={{background:C.gold,border:"none",color:"#0a1a0f",padding:"10px 16px",borderRadius:12,fontSize:13,fontWeight:800,cursor:"pointer",flexShrink:0}}>
-              Resume →
+              {activeTourneyCount>1?"View all →":"Resume →"}
             </button>
           </div>
         )}
