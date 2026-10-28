@@ -1,3 +1,4 @@
+// DIRECTOR-2026-10-28 (App.jsx — Director marketing copy, no Stripe/gating change)
 // BANKMOVE-2026-10-28 (App.jsx — original bank strip moved below active rounds, Add Player below it)
 // BANKCARD-2026-10-28 (App.jsx — prominent Season Bank card below active rounds)
 // TOURNAMENTS-PLURAL-2026-10-28 (App.jsx only)
@@ -180,18 +181,20 @@ function PaymentHandlesCard({player, sb, t2, setPlayers}){
 
 // ── PRO PAYWALL SCREEN ────────────────────────────────────────────────────────
 function ProInfo({onBack, isPro, onUpgrade}) {
+  // PG-DIRECTOR-2026-10-28 — Director marketing copy. Copy only: no Stripe, no
+  // gating, no payments change. Beta stays exactly as it is.
   const features = [
-    { icon:"👥", title:"Unlimited Players", desc:"Free tier is limited to 2 players. Pro gives you unlimited opponents to track." },
-    { icon:"🏆", title:"Team Tournaments — Unlimited Teams", desc:"Free tier allows up to 2 teams of 4. Pro unlocks unlimited teams (up to 20), all team sizes, and full captain/spectator sharing with PIN codes." },
-    { icon:"⛳", title:"Live Round Tracker", desc:"Track scores hole by hole with automatic bet calculations for Nassau, Match Play, Skins, and Auto Press." },
-    { icon:"🤜", title:"Nassau Auto Press", desc:"Set 1, 2, or 3 down as your press trigger. New bets start automatically. Manual 'Pissed Press' anytime." },
+    { icon:"🏆", title:"Run Tournaments", desc:"Outing Best Ball and one-day Stableford, unlimited teams and all team sizes. Director setup, mid-round settings, and teams you can add, delete, or adjust after a round is created." },
+    { icon:"📱", title:"Captains Tap a Link — Nothing to Download", desc:"The director texts a link. Captains score, spectators watch live. No app, no login, no signup for anyone but the director." },
+    { icon:"📊", title:"Live Leaderboard", desc:"Standings, scorecards, individuals, skins, side bets, and closest-to-the-pin, updated as scores come in." },
+    { icon:"💰", title:"Money, Tracked", desc:"Season bank, rounds, side bets, skins, Nassau, and match play — settled with one tap to Venmo, Cash App, or Zelle with the amount pre-filled." },
+    { icon:"⛳", title:"Courses & Conditions", desc:"Saved course library plus search, hole-par adjustments for today's conditions, and director rules and per-hole notes." },
+    { icon:"👥", title:"Unlimited Players", desc:"Free is limited to 2 players. Director is unlimited — track your whole crew, season after season." },
     { icon:"🔗", title:"Player Linking & Invites", desc:"Link accounts with your golf buddies. They see their side of every bet, round, and settlement in real time." },
     { icon:"🔔", title:"Notifications", desc:"Get notified when rounds are posted, settlements are requested, strokes are adjusted, or disputes come in." },
     { icon:"✅", title:"Mutual Cancel & Disputes", desc:"Linked players can request to cancel a round or dispute an amount. Both sides must agree before changes are made." },
     { icon:"⭐", title:"Stroke Approval", desc:"When accounts are linked, stroke adjustments require approval from both players." },
-    { icon:"💳", title:"Venmo / Cash App / Zelle", desc:"One tap to open your payment app with the amount pre-filled. Settle up without leaving Press." },
-    { icon:"📊", title:"Export History", desc:"View and export your full round history, side bets, and settlements." },
-    { icon:"🔄", title:"Season Reset", desc:"Archive your season and start fresh while keeping your history." },
+    { icon:"📊", title:"Export History & Season Reset", desc:"View and export your full round history, side bets, and settlements. Archive your season and start fresh while keeping your history." },
   ];
 
   return (
@@ -200,20 +203,21 @@ function ProInfo({onBack, isPro, onUpgrade}) {
         <button onClick={onBack} style={{background:"rgba(123,180,80,0.15)",border:`1px solid ${C.green}`,color:C.green,fontSize:14,cursor:"pointer",padding:"8px 16px",borderRadius:20,display:"flex",alignItems:"center",gap:6,fontWeight:700,marginBottom:20}}>‹ Back</button>
         <div style={{textAlign:"center"}}>
           <div style={{fontSize:40,marginBottom:8}}>⭐</div>
-          <div style={{fontSize:28,fontWeight:800,color:C.gold,marginBottom:4}}>Press Pro</div>
-          <div style={{fontSize:14,color:C.muted,marginBottom:4}}>$1.99 / month</div>
+          <div style={{fontSize:28,fontWeight:800,color:C.gold,marginBottom:4}}>Press Director</div>
+          <div style={{fontSize:14,color:C.muted,marginBottom:4}}>$99 / year · or $49 for a single event</div>
+          <div style={{fontSize:13,color:C.text,marginBottom:10}}>One director pays. Captains and spectators are always free.</div>
           {isPro
-            ? <div style={{background:"rgba(123,180,80,0.15)",border:`1px solid ${C.green}`,color:C.green,padding:"6px 20px",borderRadius:20,fontSize:13,fontWeight:700,display:"inline-block"}}>✅ You're a Pro member</div>
+            ? <div style={{background:"rgba(123,180,80,0.15)",border:`1px solid ${C.green}`,color:C.green,padding:"6px 20px",borderRadius:20,fontSize:13,fontWeight:700,display:"inline-block"}}>✅ You're a Director</div>
             : (PAYMENTS_ENABLED
-              ? <button onClick={onUpgrade} style={{background:`linear-gradient(135deg,${C.gold},#b8860b)`,border:"none",color:"#0a1a0f",padding:"12px 28px",borderRadius:20,fontSize:14,fontWeight:800,cursor:"pointer"}}>⭐ Upgrade to Pro</button>
-              : <div style={{fontSize:13,color:C.muted}}>Pro isn't on sale yet — beta access only.</div>)
+              ? <button onClick={onUpgrade} style={{background:`linear-gradient(135deg,${C.gold},#b8860b)`,border:"none",color:"#0a1a0f",padding:"12px 28px",borderRadius:20,fontSize:14,fontWeight:800,cursor:"pointer"}}>⭐ Become a Director — $99/yr</button>
+              : <div style={{fontSize:13,color:C.muted}}>Director isn't on sale yet — beta access only.</div>)
           }
         </div>
       </div>
 
       <div style={{padding:"0 20px"}}>
         <div style={{fontSize:11,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:16,textAlign:"center"}}>
-          Everything included with Pro
+          Everything included with Director
         </div>
 
         {features.map((f,i) => (
@@ -229,7 +233,7 @@ function ProInfo({onBack, isPro, onUpgrade}) {
         {!isPro && PAYMENTS_ENABLED && (
           <div style={{marginTop:20}}>
             <button onClick={onUpgrade} style={{width:"100%",padding:"16px",background:`linear-gradient(135deg,${C.gold},#b8860b)`,border:"none",color:"#0a1a0f",borderRadius:12,fontSize:15,fontWeight:800,cursor:"pointer"}}>
-              ⭐ Upgrade to Press Pro — $1.99/mo
+              ⭐ Become a Director — $99/yr
             </button>
             <div style={{fontSize:11,color:C.muted,textAlign:"center",marginTop:8}}>Cancel anytime. No commitment.</div>
           </div>
@@ -246,14 +250,14 @@ function ProPaywall({onBack,onUpgrade,saving}){
 
       <div style={{textAlign:"center",marginBottom:32}}>
         <div style={{display:"inline-flex",alignItems:"center",justifyContent:"center",width:72,height:72,background:`linear-gradient(135deg,${C.gold},#b8860b)`,borderRadius:20,marginBottom:14,boxShadow:`0 4px 24px ${C.gold}44`,fontSize:36}}>⛳</div>
-        <div style={{fontSize:32,fontWeight:800,letterSpacing:-1,color:"#f0f7ec"}}>Press Pro</div>
-        <div style={{fontSize:14,color:C.muted,marginTop:6}}>Upgrade to track unlimited players</div>
+        <div style={{fontSize:32,fontWeight:800,letterSpacing:-1,color:"#f0f7ec"}}>Press Director</div>
+        <div style={{fontSize:14,color:C.muted,marginTop:6}}>Run unlimited tournaments — captains always free</div>
       </div>
 
       {/* Price card */}
       <div style={{background:`linear-gradient(135deg,rgba(232,184,75,0.12),rgba(123,180,80,0.08))`,border:`1px solid ${C.gold}44`,borderRadius:16,padding:"24px",marginBottom:24,textAlign:"center"}}>
-        <div style={{fontSize:48,fontWeight:800,color:C.gold,letterSpacing:-2}}>$1.99</div>
-        <div style={{fontSize:14,color:C.muted,marginTop:4}}>per month · cancel anytime</div>
+        <div style={{fontSize:48,fontWeight:800,color:C.gold,letterSpacing:-2}}>$99</div>
+        <div style={{fontSize:14,color:C.muted,marginTop:4}}>per year · or $49 for a single event · cancel anytime</div>
       </div>
 
       {/* Feature comparison */}
@@ -262,7 +266,7 @@ function ProPaywall({onBack,onUpgrade,saving}){
         <div style={{display:"flex",borderBottom:`1px solid ${C.border}`}}>
           <div style={{flex:2,padding:"12px 16px",fontSize:11,color:C.muted,letterSpacing:1,textTransform:"uppercase"}}>Feature</div>
           <div style={{flex:1,padding:"12px 8px",textAlign:"center",fontSize:11,color:C.muted,letterSpacing:1,textTransform:"uppercase",borderLeft:`1px solid ${C.border}`}}>Free</div>
-          <div style={{flex:1,padding:"12px 8px",textAlign:"center",fontSize:11,color:C.gold,letterSpacing:1,textTransform:"uppercase",fontWeight:700,borderLeft:`1px solid ${C.border}`}}>Pro</div>
+          <div style={{flex:1,padding:"12px 8px",textAlign:"center",fontSize:11,color:C.gold,letterSpacing:1,textTransform:"uppercase",fontWeight:700,borderLeft:`1px solid ${C.border}`}}>Director</div>
         </div>
         {[
           {feature:"Players",free:"2 max",pro:"Unlimited"},
@@ -286,7 +290,7 @@ function ProPaywall({onBack,onUpgrade,saving}){
       </div>
 
       <BigBtn onClick={onUpgrade} disabled={saving} color={C.gold} textColor="#0a1a0f" style={{marginBottom:10,fontSize:16,padding:"18px"}}>
-        {saving?"Redirecting to Stripe...":"⛳ Upgrade to Press Pro — $1.99/mo"}
+        {saving?"Redirecting to Stripe...":"⛳ Become a Director — $99/yr"}
       </BigBtn>
       <div style={{fontSize:11,color:C.muted,textAlign:"center",marginBottom:20}}>
         Secure payment via Stripe · Cancel anytime · No hidden fees
@@ -309,7 +313,7 @@ function PrivacyPolicy({onBack}){
       {[
         {title:"1. What We Collect",body:"Press collects your email address, display name, and golf data you enter (rounds, bets, settlements). We do not collect your location, contacts, or financial account information."},
         {title:"2. How We Use Your Data",body:"Your data is used solely to provide the Press service. We do not sell, rent, or share your personal data with third parties for marketing purposes."},
-        {title:"3. Subscriptions & Billing",body:"Press Pro is $1.99/month billed through Stripe. You can cancel anytime from your account settings. Refunds are handled on a case-by-case basis by contacting strategicpromos@gmail.com."},
+        {title:"3. Subscriptions & Billing",body:"Press Director is $99/year, or $49 for a single event, billed through Stripe when it goes on sale. You can cancel anytime from your account settings. Refunds are handled on a case-by-case basis by contacting strategicpromos@gmail.com."},
         {title:"4. Data Storage & Security",body:"Your data is stored securely using Supabase. All data is encrypted in transit using HTTPS. Each user can only access their own data."},
         {title:"5. Text Messages & Invites",body:"Press opens your phone's native texting app with a pre-written message. Press does not send text messages on your behalf and does not store phone numbers."},
         {title:"6. Golf Betting Disclaimer",body:"Press is a record-keeping tool only. It does not process, hold, or transfer money. Users are solely responsible for ensuring their use complies with all applicable local, state, and federal laws regarding wagering."},
@@ -1148,7 +1152,7 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
   function requirePro(action){
     if(isPro){action();return;}
     if(PAYMENTS_ENABLED){onUpgrade();return;}
-    t2("Press Pro isn't on sale yet — beta access only.",true);
+    t2("Director isn't on sale yet — beta access only.",true);
   }
 
   function goProfile(id){setPid(id);setPtab("overview");setView("profile");}
@@ -1162,7 +1166,7 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
     if(!isPro&&players.length>=FREE_PLAYER_LIMIT){
       setSheet(null);
       if(PAYMENTS_ENABLED){onUpgrade();}
-      else{t2("Free limit reached — Pro isn't on sale yet.",true);}
+      else{t2("Free limit reached — Director isn't on sale yet.",true);}
       return;
     }
     const st=nDir==="even"?0:nDir==="received"?-Math.abs(Number(nStr)):Math.abs(Number(nStr));
@@ -1610,23 +1614,25 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
         <div style={{fontSize:10,color:C.green,letterSpacing:4,textTransform:"uppercase",marginTop:5,marginBottom:4}}>Put Me In Your Phone</div>
         <div style={{fontSize:11,color:C.muted,marginBottom:6,display:"flex",alignItems:"center",justifyContent:"center",gap:10,flexWrap:"wrap"}}>
           <span>{user.user_metadata?.display_name||user.email}</span>
-          {isPro&&<span style={{background:`rgba(232,184,75,0.15)`,color:C.gold,fontSize:10,padding:"2px 8px",borderRadius:10,fontWeight:700}}>⭐ Pro</span>}
+          {isPro&&<span style={{background:`rgba(232,184,75,0.15)`,color:C.gold,fontSize:10,padding:"2px 8px",borderRadius:10,fontWeight:700}}>⭐ Director</span>}
           <button onClick={onSignOut} style={{background:"none",border:"none",color:C.dim,fontSize:11,cursor:"pointer"}}>Sign out</button>
           <button onClick={()=>{setShowNotifs(true);markNotifsRead();}} style={{background:"none",border:"none",color:C.muted,fontSize:11,cursor:"pointer",display:"flex",alignItems:"center"}}>🔔<NotifBadge count={unreadNotifs+pendingActions}/></button>
         </div>
-        {!isPro&&PAYMENTS_ENABLED&&(
+        {!isPro&&(
           <div style={{display:"flex",gap:8,justifyContent:"center",marginBottom:12,flexWrap:"wrap"}}>
-            <button onClick={onUpgrade} style={{background:`linear-gradient(135deg,${C.gold},#b8860b)`,border:"none",color:"#0a1a0f",padding:"8px 20px",borderRadius:20,fontSize:12,fontWeight:700,cursor:"pointer"}}>
-              ⭐ Upgrade to Pro — $1.99/mo
-            </button>
+            {PAYMENTS_ENABLED&&(
+              <button onClick={onUpgrade} style={{background:`linear-gradient(135deg,${C.gold},#b8860b)`,border:"none",color:"#0a1a0f",padding:"8px 20px",borderRadius:20,fontSize:12,fontWeight:700,cursor:"pointer"}}>
+                ⭐ Become a Director — $99/yr
+              </button>
+            )}
             <button onClick={onShowProInfo} style={{background:"transparent",border:`1px solid ${C.gold}`,color:C.gold,padding:"8px 16px",borderRadius:20,fontSize:12,fontWeight:600,cursor:"pointer"}}>
-              What's included?
+              View Director Features
             </button>
           </div>
         )}
         {isPro&&(
           <button onClick={onShowProInfo} style={{background:"transparent",border:`1px solid ${C.gold}44`,color:C.gold,padding:"6px 16px",borderRadius:20,fontSize:11,fontWeight:600,cursor:"pointer",marginBottom:12}}>
-            ⭐ View Pro Features
+            ⭐ View Director Features
           </button>
         )}
         {/* ── BUDDY GAME ── */}
@@ -1816,9 +1822,9 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
           <div style={{background:`linear-gradient(135deg,rgba(232,184,75,0.1),rgba(123,180,80,0.05))`,border:`1px solid ${C.gold}44`,borderRadius:14,padding:"20px",textAlign:"center",marginTop:8}}>
             <div style={{fontSize:20,marginBottom:6}}>⭐</div>
             <div style={{fontWeight:700,fontSize:15,marginBottom:6,color:C.gold}}>Unlock Unlimited Players</div>
-            <div style={{fontSize:12,color:C.muted,marginBottom:14}}>You've reached the free limit of {FREE_PLAYER_LIMIT} players. Upgrade to add more and unlock all Pro features.</div>
+            <div style={{fontSize:12,color:C.muted,marginBottom:14}}>You've reached the free limit of {FREE_PLAYER_LIMIT} players. Upgrade to add more and unlock all Director features.</div>
             <button onClick={onUpgrade} style={{background:`linear-gradient(135deg,${C.gold},#b8860b)`,border:"none",color:"#0a1a0f",padding:"12px 24px",borderRadius:20,fontSize:13,fontWeight:700,cursor:"pointer"}}>
-              Upgrade to Pro — $1.99/mo
+              Become a Director — $99/yr
             </button>
           </div>
         )}
@@ -1830,9 +1836,9 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
           {!isPro&&players.length>=FREE_PLAYER_LIMIT?(
             <div style={{textAlign:"center",padding:"20px 0"}}>
               <div style={{fontSize:32,marginBottom:10}}>⭐</div>
-              <div style={{fontWeight:700,fontSize:16,marginBottom:8,color:C.gold}}>Pro Required</div>
+              <div style={{fontWeight:700,fontSize:16,marginBottom:8,color:C.gold}}>Director Required</div>
               <div style={{fontSize:13,color:C.muted,marginBottom:20}}>Upgrade to add unlimited players.</div>
-              {PAYMENTS_ENABLED&&<BigBtn onClick={()=>{setSheet(null);onUpgrade();}} color={C.gold} textColor="#0a1a0f">Upgrade to Pro</BigBtn>}
+              {PAYMENTS_ENABLED&&<BigBtn onClick={()=>{setSheet(null);onUpgrade();}} color={C.gold} textColor="#0a1a0f">Become a Director</BigBtn>}
               <GhostBtn onClick={()=>setSheet(null)} style={{marginTop:10}}>Cancel</GhostBtn>
             </div>
           ):(
@@ -1931,10 +1937,10 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
               <div style={{background:"rgba(123,180,80,0.07)",border:`1px solid ${C.green}33`,borderRadius:10,padding:"12px 14px",marginBottom:12,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                 <div>
                   <div style={{fontWeight:600,fontSize:13,marginBottom:1}}>Invite {player?.name}</div>
-                  <div style={{fontSize:11,color:C.muted}}>{isPro?"Link to share this ledger":"Pro feature — upgrade to invite"}</div>
+                  <div style={{fontSize:11,color:C.muted}}>{isPro?"Link to share this ledger":"Director feature — upgrade to invite"}</div>
                 </div>
                 <button onClick={generateInvite} disabled={saving} style={{background:isPro?C.green:C.gold,border:"none",color:"#0a1a0f",padding:"7px 14px",borderRadius:16,fontSize:12,fontWeight:700,cursor:"pointer",flexShrink:0}}>
-                  {isPro?(saving?"...":"Invite 🔗"):"⭐ Pro"}
+                  {isPro?(saving?"...":"Invite 🔗"):"⭐ Director"}
                 </button>
               </div>
             )}
@@ -2122,9 +2128,9 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
           <div>
             {!isPro&&PAYMENTS_ENABLED&&(
               <div style={{background:`linear-gradient(135deg,rgba(232,184,75,0.1),rgba(123,180,80,0.05))`,border:`1px solid ${C.gold}44`,borderRadius:12,padding:"16px",marginBottom:10,textAlign:"center"}}>
-                <div style={{fontWeight:700,fontSize:15,color:C.gold,marginBottom:4}}>⭐ Press Pro</div>
+                <div style={{fontWeight:700,fontSize:15,color:C.gold,marginBottom:4}}>⭐ Press Director</div>
                 <div style={{fontSize:12,color:C.muted,marginBottom:12}}>Unlock invites, notifications, disputes and more.</div>
-                <button onClick={onUpgrade} style={{background:`linear-gradient(135deg,${C.gold},#b8860b)`,border:"none",color:"#0a1a0f",padding:"10px 20px",borderRadius:20,fontSize:13,fontWeight:700,cursor:"pointer"}}>Upgrade — $1.99/mo</button>
+                <button onClick={onUpgrade} style={{background:`linear-gradient(135deg,${C.gold},#b8860b)`,border:"none",color:"#0a1a0f",padding:"10px 20px",borderRadius:20,fontSize:13,fontWeight:700,cursor:"pointer"}}>Become a Director — $99/yr</button>
               </div>
             )}
             {/* LINK STATUS */}
@@ -2510,7 +2516,7 @@ function LinkStatusPanel({ player, user, isPro, saving, onGenerateInvite, onUnli
         </div>
       ) : (
         <div style={{background:`rgba(232,184,75,0.08)`,border:`1px solid ${C.gold}33`,borderRadius:8,padding:"10px 12px",fontSize:12,color:C.muted,textAlign:"center"}}>
-          ⭐ Pro feature — upgrade to invite players
+          ⭐ Director feature — upgrade to invite players
         </div>
       )}
     </div>
