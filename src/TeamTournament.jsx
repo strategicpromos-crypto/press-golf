@@ -1,3 +1,4 @@
+// STROKES-TOGGLE-2026-10-28
 import React, { useState, useEffect, useRef } from "react";
 import { COURSES, courseHasHdcp } from "./golf.js";
 import { isLibraryCourse } from "./courseStore.js";
@@ -50,7 +51,7 @@ function calcIndividualLeaderboard(teams, holeData, holePars){
           const diff = safeInt(s) - effPar;
           total += diff;
           holesPlayed++;
-          byHole[h.hole] = { diff, side: h.side };
+          byHole[h.hole] = { diff, raw: safeInt(s), par: effPar, side: h.side };
         }
       }
       players.push({ name, teamName, teamColor: team.color||TEAM_COLORS[teamIdx%TEAM_COLORS.length], total, holesPlayed, byHole, teamIdx, pi });
@@ -65,6 +66,10 @@ function calcIndividualLeaderboard(teams, holeData, holePars){
 // Individual scorecard — top 30, full hole-by-hole vs-par
 // Theme passed as a prop so it follows day mode.
 function Top10Tab({ teams, course, holePars, C }){
+  // PG-STROKES-TOGGLE-2026-10-28 — vs-par / strokes toggle (default vs-par, remembered per device)
+  const [scoreMode, setScoreMode] = useState(()=>{ try{ return localStorage.getItem("pg-individual-score-mode")==="strokes" ? "strokes" : "vspar"; }catch(e){ return "vspar"; } });
+  const showStrokes = scoreMode==="strokes";
+  const setMode = (m)=>{ setScoreMode(m); try{ localStorage.setItem("pg-individual-score-mode", m); }catch(e){} };
   const relColor=(d)=>{if(d===null||d===undefined)return C.muted;if(d<0)return C.green;if(d>0)return C.red;return C.muted;};
   const players = calcIndividualLeaderboard(teams, course.holes, holePars);
   const medals = ["1st","2nd","3rd"];
@@ -91,11 +96,19 @@ function Top10Tab({ teams, course, holePars, C }){
   return(
     <div>
       <div style={{fontSize:11,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:12,textAlign:"center"}}>Individual Scorecard · Top 30</div>
+      <div style={{display:"flex",gap:0,marginBottom:12,border:"1px solid "+C.border,borderRadius:10,overflow:"hidden"}}>
+        {[["vspar","Vs Par"],["strokes","Strokes"]].map(([id,lbl])=>(
+          <button key={id} onClick={()=>setMode(id)} style={{flex:1,padding:"9px",fontSize:12,fontWeight:scoreMode===id?700:500,background:scoreMode===id?C.green:"transparent",color:scoreMode===id?"#0a1a0f":C.muted,border:"none",cursor:"pointer"}}>{lbl}</button>
+        ))}
+      </div>
       {players.map((p,i)=>{
         const frontDiff = frontHoles.reduce((s,h)=> p.byHole[h.hole]!==undefined ? s+p.byHole[h.hole].diff : s, 0);
         const backDiff  = backHoles.reduce((s,h)=>  p.byHole[h.hole]!==undefined ? s+p.byHole[h.hole].diff : s, 0);
         const hasFront  = frontHoles.some(h=>p.byHole[h.hole]!==undefined);
         const hasBack   = backHoles.some(h=>p.byHole[h.hole]!==undefined);
+        const frontGross = frontHoles.reduce((s,h)=> p.byHole[h.hole]!==undefined ? s+p.byHole[h.hole].raw : s, 0);
+        const backGross  = backHoles.reduce((s,h)=> p.byHole[h.hole]!==undefined ? s+p.byHole[h.hole].raw : s, 0);
+        const grossTotal = frontGross + backGross;
         return(
           <div key={`${p.teamIdx}-${p.pi}`} style={{background:i===0?"rgba(232,184,75,0.06)":C.card,border:`1px solid ${i===0?C.gold+"44":C.border}`,borderRadius:12,padding:"10px 12px",marginBottom:10}}>
             {/* Header row — rank, name, team, total */}
@@ -111,7 +124,7 @@ function Top10Tab({ teams, course, holePars, C }){
                 </div>
               </div>
               <div style={{textAlign:"right",flexShrink:0}}>
-                <div style={{fontSize:20,fontWeight:800,color:relColor(p.total)}}>{relLabel(p.total)}</div>
+                <div style={{fontSize:20,fontWeight:800,color:relColor(p.total)}}>{showStrokes?grossTotal:relLabel(p.total)}</div>
                 <div style={{fontSize:9,color:C.dim}}>thru {p.holesPlayed}</div>
               </div>
             </div>
@@ -126,13 +139,13 @@ function Top10Tab({ teams, course, holePars, C }){
                   return(
                     <div key={h.hole} style={{flex:1,height:22,borderRadius:3,background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.08)",display:"flex",alignItems:"center",justifyContent:"center"}}>
                       <span style={{fontSize:9,fontWeight:700,color:d!==undefined?cellColor(d.diff):C.dim}}>
-                        {d!==undefined?relLabel(d.diff):""}
+                        {d!==undefined?(showStrokes?d.raw:relLabel(d.diff)):""}
                       </span>
                     </div>
                   );
                 })}
                 <div style={{width:26,height:22,borderRadius:3,background:"rgba(123,180,80,0.08)",border:"1px solid rgba(123,180,80,0.2)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                  <span style={{fontSize:9,fontWeight:800,color:hasFront?relColor(frontDiff):C.dim}}>{hasFront?relLabel(frontDiff):""}</span>
+                  <span style={{fontSize:9,fontWeight:800,color:hasFront?relColor(frontDiff):C.dim}}>{hasFront?(showStrokes?frontGross:relLabel(frontDiff)):""}</span>
                 </div>
               </div>
               {/* Back 9 */}
@@ -143,13 +156,13 @@ function Top10Tab({ teams, course, holePars, C }){
                   return(
                     <div key={h.hole} style={{flex:1,height:22,borderRadius:3,background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.08)",display:"flex",alignItems:"center",justifyContent:"center"}}>
                       <span style={{fontSize:9,fontWeight:700,color:d!==undefined?cellColor(d.diff):C.dim}}>
-                        {d!==undefined?relLabel(d.diff):""}
+                        {d!==undefined?(showStrokes?d.raw:relLabel(d.diff)):""}
                       </span>
                     </div>
                   );
                 })}
                 <div style={{width:26,height:22,borderRadius:3,background:"rgba(123,180,80,0.08)",border:"1px solid rgba(123,180,80,0.2)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                  <span style={{fontSize:9,fontWeight:800,color:hasBack?relColor(backDiff):C.dim}}>{hasBack?relLabel(backDiff):""}</span>
+                  <span style={{fontSize:9,fontWeight:800,color:hasBack?relColor(backDiff):C.dim}}>{hasBack?(showStrokes?backGross:relLabel(backDiff)):""}</span>
                 </div>
               </div>
             </div>
