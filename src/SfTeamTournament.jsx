@@ -1,3 +1,4 @@
+// DELETEFIX-2026-10-28 (SfTeamTournament — delete no longer resurrects last team)
 // SFTEAMS-2026-10-28 (SfTeamTournament — Add/Delete Team in Settings, Player+HDCP rows, no overflow)
 // SFMATCH-2026-10-28 (SfTeamTournament — includes header stack, tab stack, stacked team-points scorecard)
 // ── STABLEFORD CLONE of TeamTournament.jsx ─────────────────────────────
@@ -373,6 +374,8 @@ export default function SfTeamTournament({onBack, user, onDelete, resumeId}){
               const incoming=payload.new.teams;
               setTeams(prev=>{
                 const wasSynced=JSON.parse(lastSyncedTeams.current||"[]");
+                // PG-DELETEFIX-2026-10-28 — director has an unsaved add/delete: keep his list, don't resurrect.
+                if(prev.length!==wasSynced.length && snap(prev)!==snap(wasSynced)) return prev;
                 const n=Math.max(incoming.length,prev.length);
                 return Array.from({length:n},(_,i)=>{
                   const l=prev[i];
@@ -454,7 +457,9 @@ export default function SfTeamTournament({onBack, user, onDelete, resumeId}){
         if(readErr) throw readErr;
         const dbTeams=current?.teams||[];
         const wasSynced=JSON.parse(lastSyncedTeams.current||"[]");
-        const n=Math.max(dbTeams.length,teams.length);
+        // PG-DELETEFIX-2026-10-28 — a shorter/longer local list is a deliberate add/delete:
+        // merge only over the director's list, never re-append DB slots the director removed.
+        const n=(teams.length!==wasSynced.length)?teams.length:Math.max(dbTeams.length,teams.length);
         const mergedTeams=Array.from({length:n},(_,i)=>{
           const local=teams[i], db=dbTeams[i];
           if(db===undefined) return local;      // brand-new local slot
@@ -2067,10 +2072,15 @@ export default function SfTeamTournament({onBack, user, onDelete, resumeId}){
               {/* Add Team — team mode only; new team starts empty with HDCP 12s, editable in its own card above */}
               {!sfIsField(teams)&&(
                 <button onClick={()=>{
-                  setTeams(prev=>[...prev,{
-                    id:prev.length,name:"Team "+(prev.length+1),color:TEAM_COLORS[prev.length%TEAM_COLORS.length],
-                    size:2,players:["",""],hdcp:[12,12],strokesPerSide:0,scores:{}
-                  }]);
+                  setTeams(prev=>{
+                    const nextId=Math.max(-1,...prev.map(tm=>tm.id??-1))+1;
+                    let nextNum=prev.length+1;
+                    while(prev.some(tm=>tm.name==="Team "+nextNum)) nextNum++;
+                    return[...prev,{
+                      id:nextId,name:"Team "+nextNum,color:TEAM_COLORS[prev.length%TEAM_COLORS.length],
+                      size:2,players:["",""],hdcp:[12,12],strokesPerSide:0,scores:{}
+                    }];
+                  });
                   setNumTeams(prev=>prev+1);
                   setDeleteTeamIdx(null);
                 }} style={{width:"100%",padding:"14px",marginBottom:12,background:"transparent",color:C.green,border:"1px solid "+C.green+"66",borderRadius:12,fontSize:14,fontWeight:800,cursor:"pointer"}}>
