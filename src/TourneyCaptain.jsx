@@ -1,3 +1,4 @@
+// CAPTAINHEADER-2026-10-28 (includes CAPTAINMATCH + STROKES-TOGGLE)
 // CAPTAINMATCH-2026-10-28 (includes STROKES-TOGGLE)
 // STROKES-TOGGLE-2026-10-28
 import React, { useState, useEffect, useRef } from "react";
@@ -504,11 +505,16 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
               <div style={{fontSize:12,background:"rgba(123,180,80,0.12)",border:"1px solid rgba(123,180,80,0.4)",borderRadius:10,padding:"6px 10px",marginTop:6}}>📋 {tourney.hole_notes[currentHole]}</div>
             )}
           </div>
-          <div style={{display:"flex",gap:8,alignItems:"center"}}>
-            <button onClick={toggleDayMode} title={dayMode?"Switch to dark mode":"Switch to day mode — easier to read in sunlight"}
-              style={{ background:"rgba(232,184,75,0.10)", border:`1px solid ${C.gold}`, color:C.gold, fontSize:12, cursor:"pointer", padding:"12px 10px", borderRadius:12, fontWeight:700, whiteSpace:"nowrap" }}>{dayMode?"🌙 Dark":"☀️ Day"}</button>
+          {/* PG-CAPTAINHEADER-2026-10-28: right stack matching director — Leaderboard, Rules, Settings, Day mode; no Home for captains */}
+          <div style={{display:"flex",flexDirection:"column",gap:6,width:136}}>
+            <button onClick={()=>{setBTab("standings");setShowSummary(true);}}
+              style={{ background:"rgba(232,184,75,0.15)", border:`1px solid ${C.gold}`, color:C.gold, fontSize:12, cursor:"pointer", padding:"9px 4px", borderRadius:12, fontWeight:700, whiteSpace:"nowrap", textAlign:"center" }}>📊 Leaderboard</button>
+            <button onClick={()=>{setBTab("rules");setShowSummary(true);}}
+              style={{ background:"rgba(123,180,80,0.15)", border:`1px solid ${C.green}`, color:C.green, fontSize:12, cursor:"pointer", padding:"9px 4px", borderRadius:12, fontWeight:700, whiteSpace:"nowrap", textAlign:"center" }}>📋 Rules</button>
             <button onClick={()=>setShowCaptainSettings(true)}
-              style={{ background:"rgba(123,180,80,0.15)", border:`1px solid ${C.green}`, color:C.green, fontSize:15, cursor:"pointer", padding:"12px 20px", borderRadius:12, fontWeight:700 }}>⚙️ Scoring</button>
+              style={{ background:"rgba(123,180,80,0.15)", border:`1px solid ${C.green}`, color:C.green, fontSize:12, cursor:"pointer", padding:"9px 4px", borderRadius:12, fontWeight:700, whiteSpace:"nowrap", textAlign:"center" }}>⚙️ Settings</button>
+            <button onClick={toggleDayMode} title={dayMode?"Switch to dark mode":"Switch to day mode — easier to read in sunlight"}
+              style={{ background:"rgba(232,184,75,0.10)", border:`1px solid ${C.gold}`, color:C.gold, fontSize:12, cursor:"pointer", padding:"9px 4px", borderRadius:12, fontWeight:700, whiteSpace:"nowrap", textAlign:"center" }}>{dayMode?"🌙 Dark mode":"☀️ Day mode"}</button>
           </div>
         </div>
         {/* Progress bar */}
@@ -997,18 +1003,6 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
         })()}
 
         {/* Next hole */}
-        <button onClick={()=>setShowSummary(true)} style={{
-          width:"100%",padding:"14px",background:"rgba(232,184,75,0.12)",
-          color:C.gold,border:"1px solid "+C.gold+"44",borderRadius:12,
-          fontSize:15,fontWeight:700,cursor:"pointer",marginBottom:10
-        }}>📊 Leaderboard</button>
-
-        <button onClick={()=>{setBTab("rules");setShowSummary(true);}} style={{
-          width:"100%",padding:"14px",background:"rgba(123,180,80,0.12)",
-          color:C.green,border:"1px solid "+C.green+"44",borderRadius:12,
-          fontSize:15,fontWeight:700,cursor:"pointer",marginBottom:10
-        }}>📋 Rules</button>
-
         <button onClick={async()=>{
           // Hard flush before advancing — guaranteed write, no debounce
           if(saveTimer.current) clearTimeout(saveTimer.current);
@@ -1141,7 +1135,7 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
         <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.92)",zIndex:600,overflowY:"auto",fontFamily:"Georgia,serif" }}>
           <div style={{ padding:"50px 20px 60px",maxWidth:480,margin:"0 auto" }}>
             <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6 }}>
-              <div style={{ fontSize:20,fontWeight:800 }}>⚙️ Scoring Settings</div>
+              <div style={{ fontSize:20,fontWeight:800 }}>⚙️ Tournament Settings</div>
               <button onClick={()=>setShowCaptainSettings(false)} style={{ background:C.dim,border:"none",color:C.muted,width:34,height:34,borderRadius:"50%",fontSize:16,cursor:"pointer" }}>✕</button>
             </div>
             <div style={{ fontSize:12,color:C.muted,marginBottom:20 }}>Changes save automatically and update the leaderboard in real time.</div>
