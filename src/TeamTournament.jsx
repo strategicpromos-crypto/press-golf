@@ -1,3 +1,4 @@
+// OUTINGTEAMS-2026-10-28 (TeamTournament — Add/Delete Team in Settings, full-width Player rows, no overflow)
 // TEAMSCORECARD-2026-10-28 (includes HEADERSTACK + TABSTACK + STROKES-TOGGLE)
 // HEADERSTACK-2026-10-28 (includes TABSTACK + STROKES-TOGGLE)
 // TABSTACK-2026-10-28 (includes STROKES-TOGGLE-2026-10-28)
@@ -306,6 +307,8 @@ export default function TeamTournament({onBack, user, onDelete}){
   const setMode = (m)=>{ setScoreMode(m); try{ localStorage.setItem("pg-individual-score-mode", m); }catch(e){} };
   useEffect(()=>{ try{ const m=localStorage.getItem("pg-individual-score-mode"); if(m==="strokes"||m==="vspar") setScoreMode(m); }catch(e){} },[lbTab]);
   const[showSettings,setShowSettings]=useState(false); // director settings overlay
+  // PG-OUTINGTEAMS-2026-10-28 — two-tap delete confirmation for a Settings team card (null = none armed)
+  const[deleteTeamIdx,setDeleteTeamIdx]=useState(null);
   const[ctpConfirm,setCtpConfirm]=useState(false);     // mid-round CTP enable confirmation
   const saveTimer=useRef(null);
   const subRef=useRef(null);
@@ -1904,7 +1907,7 @@ export default function TeamTournament({onBack, user, onDelete}){
                     <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
                       <div style={{width:12,height:12,borderRadius:"50%",background:team.color,flexShrink:0}}/>
                       <input value={team.name||""} onChange={e=>updateTeam(i,{name:e.target.value})}
-                        style={{flex:1,padding:"9px 12px",background:C.surface,border:"1px solid "+C.border,borderRadius:8,color:C.text,fontSize:14,fontWeight:700,outline:"none"}}/>
+                        style={{flex:1,minWidth:0,boxSizing:"border-box",padding:"9px 12px",background:C.surface,border:"1px solid "+C.border,borderRadius:8,color:C.text,fontSize:14,fontWeight:700,outline:"none"}}/>
                     </div>
 
                     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
@@ -1936,15 +1939,15 @@ export default function TeamTournament({onBack, user, onDelete}){
                       </div>
                     </div>
 
-                    {/* Player names */}
+                    {/* Player names — one full-width row per player, so nothing runs off the card */}
                     <div style={{fontSize:11,color:C.muted,marginBottom:6,fontWeight:600}}>Player Names</div>
-                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,marginBottom:10}}>
+                    <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:10}}>
                       {Array.from({length:size},(_,j)=>(
                         <input key={j}
                           value={team.players?.[j]||""}
                           onChange={e=>{const p=[...(team.players||Array(size).fill(""))];p[j]=e.target.value;updateTeam(i,{players:p});}}
                           placeholder={"Player "+(j+1)}
-                          style={{padding:"9px 10px",background:C.bg,border:"1px solid "+C.border,borderRadius:8,color:C.text,fontSize:13,outline:"none"}}/>
+                          style={{width:"100%",boxSizing:"border-box",padding:"9px 10px",background:C.bg,border:"1px solid "+C.border,borderRadius:8,color:C.text,fontSize:13,outline:"none"}}/>
                       ))}
                     </div>
 
@@ -1957,9 +1960,36 @@ export default function TeamTournament({onBack, user, onDelete}){
                         📱 Resend Captain Link
                       </button>
                     )}
+                    {/* Delete team — two taps, never the last team */}
+                    {teams.length>1&&(
+                      <button onClick={()=>{
+                        if(deleteTeamIdx===i){
+                          setTeams(prev=>prev.filter((_,idx)=>idx!==i));
+                          setNumTeams(prev=>Math.max(1,prev-1));
+                          setActiveTeam(0);
+                          setDeleteTeamIdx(null);
+                        } else {
+                          setDeleteTeamIdx(i);
+                        }
+                      }} style={{width:"100%",padding:"10px",marginTop:8,background:deleteTeamIdx===i?C.red:"transparent",color:deleteTeamIdx===i?"#fff":C.red,border:"1px solid "+C.red+"66",borderRadius:8,fontSize:12,fontWeight:700,cursor:"pointer"}}>
+                        {deleteTeamIdx===i?"⚠️ Tap again to delete — scores lost, later teams' links shift":"🗑 Delete Team"}
+                      </button>
+                    )}
                   </div>
                 );
               })}
+
+              {/* Add Team — new team starts empty, editable in its own card above */}
+              <button onClick={()=>{
+                setTeams(prev=>[...prev,{
+                  id:prev.length,name:"Team "+(prev.length+1),color:TEAM_COLORS[prev.length%TEAM_COLORS.length],
+                  size:2,players:["",""],strokesPerSide:0,scores:{},pin:String(Math.floor(1000+Math.random()*9000))
+                }]);
+                setNumTeams(prev=>prev+1);
+                setDeleteTeamIdx(null);
+              }} style={{width:"100%",padding:"14px",marginBottom:12,background:"transparent",color:C.green,border:"1px solid "+C.green+"66",borderRadius:12,fontSize:14,fontWeight:800,cursor:"pointer"}}>
+                + Add Team
+              </button>
 
               {/* Spectator link */}
               {tourneyId&&(
