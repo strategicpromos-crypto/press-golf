@@ -1615,7 +1615,7 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
         <div style={{fontSize:11,color:C.muted,marginBottom:6,display:"flex",alignItems:"center",justifyContent:"center",gap:10,flexWrap:"wrap"}}>
           <span>{user.user_metadata?.display_name||user.email}</span>
           {isPro&&<span style={{background:`rgba(232,184,75,0.15)`,color:C.gold,fontSize:10,padding:"2px 8px",borderRadius:10,fontWeight:700}}>⭐ Director</span>}
-          <button onClick={onSignOut} style={{background:"none",border:"none",color:C.dim,fontSize:11,cursor:"pointer"}}>Sign out</button>
+          {/* PG-SIGNOUT-2026-10-28: Sign out moved to the home footer — it no longer sits in the header where a stray tap could hit it. */}
           <button onClick={()=>{setShowNotifs(true);markNotifsRead();}} style={{background:"none",border:"none",color:C.muted,fontSize:11,cursor:"pointer",display:"flex",alignItems:"center"}}>🔔<NotifBadge count={unreadNotifs+pendingActions}/></button>
         </div>
         {!isPro&&(
@@ -1887,8 +1887,11 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
         </div>
       </Sheet>
 
-      <div style={{textAlign:"center",padding:"16px 0 6px",fontSize:11,color:C.dim}}>
-        <button onClick={onPrivacy} style={{background:"none",border:"none",color:C.dim,fontSize:11,cursor:"pointer",textDecoration:"underline"}}>Privacy Policy & Terms</button>
+      <div style={{textAlign:"center",padding:"24px 0 6px",fontSize:11,color:C.muted}}>
+        <button onClick={onPrivacy} style={{background:"none",border:"none",color:C.muted,fontSize:11,cursor:"pointer",textDecoration:"underline"}}>Privacy Policy & Terms</button>
+        <div style={{marginTop:14}}>
+          <button onClick={()=>{if(window.confirm("Sign out? You will need your password to sign back in. Tap Cancel if you do not know it."))onSignOut();}} style={{background:"transparent",border:`1px solid ${C.border}`,color:C.muted,padding:"8px 20px",borderRadius:20,fontSize:12,fontWeight:600,cursor:"pointer"}}>Sign out</button>
+        </div>
       </div>
       <Toast msg={toast.msg} error={toast.error}/>
     </div>
