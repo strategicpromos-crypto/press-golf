@@ -1,3 +1,4 @@
+// CAPTAINMATCH-2026-10-28 (includes STROKES-TOGGLE)
 // STROKES-TOGGLE-2026-10-28
 import React, { useState, useEffect, useRef } from "react";
 import { sb } from "./supabase.js";
@@ -504,10 +505,10 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
             )}
           </div>
           <div style={{display:"flex",gap:8,alignItems:"center"}}>
-            <button onClick={toggleDayMode} title={dayMode?"Switch to dark mode":"Day mode — easier to read in sunlight"}
-              style={{ background:dayMode?"rgba(35,100,45,0.10)":"rgba(232,184,75,0.10)", border:`1px solid ${dayMode?C.green:C.gold}`, color:dayMode?C.green:C.gold, fontSize:18, cursor:"pointer", padding:"10px 14px", borderRadius:12, fontWeight:700 }}>{dayMode?"🌙":"☀️"}</button>
+            <button onClick={toggleDayMode} title={dayMode?"Switch to dark mode":"Switch to day mode — easier to read in sunlight"}
+              style={{ background:"rgba(232,184,75,0.10)", border:`1px solid ${C.gold}`, color:C.gold, fontSize:12, cursor:"pointer", padding:"12px 10px", borderRadius:12, fontWeight:700, whiteSpace:"nowrap" }}>{dayMode?"🌙 Dark":"☀️ Day"}</button>
             <button onClick={()=>setShowCaptainSettings(true)}
-              style={{ background:"rgba(123,180,80,0.15)", border:`1px solid ${C.green}`, color:C.green, fontSize:15, cursor:"pointer", padding:"12px 20px", borderRadius:12, fontWeight:700 }}>⚙️ Settings</button>
+              style={{ background:"rgba(123,180,80,0.15)", border:`1px solid ${C.green}`, color:C.green, fontSize:15, cursor:"pointer", padding:"12px 20px", borderRadius:12, fontWeight:700 }}>⚙️ Scoring</button>
           </div>
         </div>
         {/* Progress bar */}
@@ -637,11 +638,20 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
             {(()=>{
               const medals=["1st","2nd","3rd"];
               return(<>
-                <div style={{display:"flex",gap:0,marginBottom:16,border:"1px solid "+C.border,borderRadius:10,overflow:"hidden"}}>
-                  {[["standings","Standings"],["top10","Individuals"],["skins","Skins"],["bets","💵 Bets"],["rules","📋 Rules"],...(ctpEnabled?[["ctp","CTP"]]:[])]
-                    .map(([id,lbl])=>(
-                    <button key={id} onClick={()=>setBTab(id)} style={{flex:1,padding:"11px",fontSize:12,fontWeight:bTab===id?700:500,background:bTab===id?(id==="ctp"?C.gold:C.green):"transparent",color:bTab===id?"#0a1a0f":C.muted,border:"none",cursor:"pointer"}}>{lbl}</button>
-                  ))}
+                {/* PG-CAPTAINMATCH-2026-10-28: stacked board tabs, same segmented style as director, no sideways cut-off */}
+                <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:16}}>
+                  <div style={{display:"flex",gap:0,border:"1px solid "+C.border,borderRadius:10,overflow:"hidden"}}>
+                    {[["standings","Standings"],["top10","Individuals"],["skins","Skins"]]
+                      .map(([id,lbl])=>(
+                      <button key={id} onClick={()=>setBTab(id)} style={{flex:1,padding:"11px",fontSize:12,fontWeight:bTab===id?700:500,background:bTab===id?C.green:"transparent",color:bTab===id?"#0a1a0f":C.muted,border:"none",cursor:"pointer"}}>{lbl}</button>
+                    ))}
+                  </div>
+                  <div style={{display:"flex",gap:0,border:"1px solid "+C.border,borderRadius:10,overflow:"hidden"}}>
+                    {[["bets","💵 Bets"],["rules","📋 Rules"],...(ctpEnabled?[["ctp","CTP"]]:[])]
+                      .map(([id,lbl])=>(
+                      <button key={id} onClick={()=>setBTab(id)} style={{flex:1,padding:"11px",fontSize:12,fontWeight:bTab===id?700:500,background:bTab===id?(id==="ctp"?C.gold:C.green):"transparent",color:bTab===id?"#0a1a0f":C.muted,border:"none",cursor:"pointer"}}>{lbl}</button>
+                    ))}
+                  </div>
                 </div>
 
                 {bTab==="standings"&&(<>
@@ -871,20 +881,18 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
             <div style={{ width:12, height:12, borderRadius:"50%", background:team.color }}/>
             <div style={{ fontWeight:800, fontSize:16 }}>{team.name}</div>
           </div>
-          <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-            <div style={{ display:"flex", gap:14 }}>
-              {[["F",sc.frontDiff,sc.front],["B",sc.backDiff,sc.back],["T",sc.totalDiff,sc.total]].map(([l,d,raw])=>(
-                <div key={l} style={{ textAlign:"center" }}>
-                  <div style={{ fontSize:9, color:C.muted }}>{l}</div>
-                  <div style={{ fontSize:14, fontWeight:800, color:raw===0?C.muted:relColor(d) }}>{raw===0?"--":relLabel(d)}</div>
-                </div>
-              ))}
-            </div>
-            <button onClick={()=>setTab("roster")} style={{ background:"rgba(123,180,80,0.12)", border:`1px solid ${C.green}33`, color:C.green, fontSize:11, fontWeight:700, padding:"6px 10px", borderRadius:8, cursor:"pointer" }}>
-              👥 Roster
-            </button>
+          <div style={{ display:"flex", alignItems:"center", gap:14 }}>
+            {[["F",sc.frontDiff,sc.front],["B",sc.backDiff,sc.back],["T",sc.totalDiff,sc.total]].map(([l,d,raw])=>(
+              <div key={l} style={{ textAlign:"center" }}>
+                <div style={{ fontSize:9, color:C.muted }}>{l}</div>
+                <div style={{ fontSize:14, fontWeight:800, color:raw===0?C.muted:relColor(d) }}>{raw===0?"--":relLabel(d)}</div>
+              </div>
+            ))}
           </div>
         </div>
+        <button onClick={()=>setTab("roster")} style={{ width:"100%", background:"rgba(123,180,80,0.12)", border:`1px solid ${C.green}33`, color:C.green, fontSize:12, fontWeight:700, padding:"10px", borderRadius:10, cursor:"pointer", marginTop:10 }}>
+          👥 Edit Roster — team name & players
+        </button>
       </div>
 
       <div style={{ padding:"14px 16px" }}>
@@ -1133,7 +1141,7 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
         <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.92)",zIndex:600,overflowY:"auto",fontFamily:"Georgia,serif" }}>
           <div style={{ padding:"50px 20px 60px",maxWidth:480,margin:"0 auto" }}>
             <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6 }}>
-              <div style={{ fontSize:20,fontWeight:800 }}>⚙️ Team Settings</div>
+              <div style={{ fontSize:20,fontWeight:800 }}>⚙️ Scoring Settings</div>
               <button onClick={()=>setShowCaptainSettings(false)} style={{ background:C.dim,border:"none",color:C.muted,width:34,height:34,borderRadius:"50%",fontSize:16,cursor:"pointer" }}>✕</button>
             </div>
             <div style={{ fontSize:12,color:C.muted,marginBottom:20 }}>Changes save automatically and update the leaderboard in real time.</div>
