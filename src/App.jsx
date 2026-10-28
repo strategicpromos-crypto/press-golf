@@ -1,3 +1,4 @@
+// BANKCARD-2026-10-28 (App.jsx — prominent Season Bank card below active rounds)
 // TOURNAMENTS-PLURAL-2026-10-28 (App.jsx only)
 import React, { useState, useEffect, useCallback } from "react";
 import { sb } from "./supabase.js";
@@ -1762,11 +1763,22 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
           </div>
         )}
 
+        {/* PG-BANKCARD-2026-10-28 — prominent Season Bank card, below the active-round
+            banners and above Your Opponents. Bank + Add Player live together here, so a
+            new director for a small game sees money tracking immediately. */}
+        <div style={{background:`linear-gradient(135deg,rgba(123,180,80,0.18),rgba(123,180,80,0.06))`,border:`1px solid ${C.green}66`,borderRadius:14,padding:"14px 16px",marginBottom:14,display:"flex",justifyContent:"space-between",alignItems:"center",gap:12}}>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontSize:11,letterSpacing:2,color:C.muted,textTransform:"uppercase",marginBottom:2}}>💰 Season Bank</div>
+            <div><Money value={sBank} size={28}/></div>
+            <div style={{fontSize:12,color:C.muted,marginTop:3}}>Rounds <Money value={sRound} size={12}/> · Side Bets <Money value={sBet} size={12}/></div>
+          </div>
+          <button onClick={()=>setSheet("addPlayer")} style={{background:C.green,border:"none",color:"#0a1a0f",padding:"11px 18px",borderRadius:20,fontSize:13,fontWeight:700,cursor:"pointer",flexShrink:0}}>+ Add Player</button>
+        </div>
+
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
           <div style={{fontSize:11,letterSpacing:2,color:C.muted,textTransform:"uppercase"}}>
             Your Opponents {!isPro&&<span style={{color:C.gold}}>({players.length}/{FREE_PLAYER_LIMIT} free)</span>}
           </div>
-          <button onClick={()=>setSheet("addPlayer")} style={{background:C.green,border:"none",color:"#0a1a0f",padding:"9px 18px",borderRadius:20,fontSize:13,fontWeight:700,cursor:"pointer"}}>+ Add Player</button>
         </div>
 
         {pendingActions>0&&(
