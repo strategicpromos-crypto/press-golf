@@ -1,3 +1,4 @@
+// PG-NETSKINS-2026-10-29
 // CAPTAIN-DARKTABS-2026-10-28 (SfTourneySpectator — fixes white second tab row)
 // SFMATCH-2026-10-28 (SfTourneySpectator — includes tab stack, stacked team-points scorecard)
 // ── STABLEFORD CLONE of TourneySpectator.jsx ─────────────────────────────
@@ -213,7 +214,7 @@ export default function SfTourneySpectator({ tourney: initialTourney, onBack }) 
           </div>
         )}
         {tab==="individual"&&<SfIndividualList teams={tourney.teams||[]} course={course} holePars={tourney.hole_pars||{}} sfCfg={sfCfg} C={C}/>}
-        {tab==="skins"&&<SfSkinsTab teams={tourney.teams||[]} course={course} holePars={tourney.hole_pars||{}} skinsEnabled={tourney.skins_enabled===true} bigBoyEnabled={tourney.big_boy_enabled===true} teammatesTie={tourney.teammates_tie===true} valueFn={sfCfg.skinsBasis==="points"?((team,pi,h)=>sfHolePoints(team.scores?.[pi]?.[h.hole],team.hdcp?.[pi]??12,h,course.holes,tourney.hole_pars?.[h.hole]??h.par,sfCfg.points,sfCfg.counting)):null} highWins={sfCfg.skinsBasis==="points"} pointsMode={sfCfg.skinsBasis==="points"}/>} 
+        {tab==="skins"&&<SfSkinsTab teams={tourney.teams||[]} course={course} holePars={tourney.hole_pars||{}} skinsEnabled={tourney.skins_enabled===true} bigBoyEnabled={tourney.big_boy_enabled===true} netEnabled={tourney.net_skins_enabled===true} teammatesTie={tourney.teammates_tie===true} valueFn={sfCfg.skinsBasis==="points"?((team,pi,h)=>sfHolePoints(team.scores?.[pi]?.[h.hole],team.hdcp?.[pi]??12,h,course.holes,tourney.hole_pars?.[h.hole]??h.par,sfCfg.points,sfCfg.counting)):null} highWins={sfCfg.skinsBasis==="points"} pointsMode={sfCfg.skinsBasis==="points"}/>} 
 
         {tab==="bets"&&<SideBetsTab bets={tourney.side_bets||[]} teams={tourney.teams||[]} course={course} courseId={tourney.course_id||"south-toledo"} C={C}/>}
 
