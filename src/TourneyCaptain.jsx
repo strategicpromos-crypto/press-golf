@@ -1,3 +1,4 @@
+// PG-NETSKINS-2026-10-29
 // CAPTAIN-DARKTABS-2026-10-28 (TourneyCaptain — dark captain tab rows)
 // CAPTAINHEADER-2026-10-28 (includes CAPTAINMATCH + STROKES-TOGGLE)
 // CAPTAINMATCH-2026-10-28 (includes STROKES-TOGGLE)
@@ -764,7 +765,7 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
                   })}
                   </>);
                 })()}
-                {bTab==="skins"&&<SkinsTab teams={tourney.teams||[]} course={course} holePars={tourney.hole_pars||{}} skinsEnabled={tourney.skins_enabled===true} bigBoyEnabled={tourney.big_boy_enabled===true} teammatesTie={tourney.teammates_tie===true}/>}
+                {bTab==="skins"&&<SkinsTab teams={tourney.teams||[]} course={course} holePars={tourney.hole_pars||{}} skinsEnabled={tourney.skins_enabled===true} bigBoyEnabled={tourney.big_boy_enabled===true} netEnabled={tourney.net_skins_enabled===true} teammatesTie={tourney.teammates_tie===true}/>}
                 {bTab==="ctp"&&(
                   <div>
                     <div style={{fontSize:11,color:C.gold,letterSpacing:1.5,textTransform:"uppercase",marginBottom:12,fontWeight:600}}>Closest to the Pin</div>
