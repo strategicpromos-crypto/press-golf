@@ -1,3 +1,4 @@
+// PG-NETSKINS-2026-10-29
 import React, { useState, useEffect, useRef } from "react";
 import { sb } from "./supabase.js";
 import { COURSES } from "./golf.js";
@@ -226,7 +227,7 @@ export default function TourneySpectator({ tourney: initialTourney, onBack }) {
             </div>
           );
         })()}
-        {tab==="skins"&&<SkinsTab teams={tourney.teams||[]} course={course} holePars={tourney.hole_pars||{}} skinsEnabled={tourney.skins_enabled===true} bigBoyEnabled={tourney.big_boy_enabled===true} teammatesTie={tourney.teammates_tie===true}/>}
+        {tab==="skins"&&<SkinsTab teams={tourney.teams||[]} course={course} holePars={tourney.hole_pars||{}} skinsEnabled={tourney.skins_enabled===true} bigBoyEnabled={tourney.big_boy_enabled===true} netEnabled={tourney.net_skins_enabled===true} teammatesTie={tourney.teammates_tie===true}/>}
 
         {tab==="bets"&&<SideBetsTab bets={tourney.side_bets||[]} teams={tourney.teams||[]} course={course} courseId={tourney.course_id||"south-toledo"} C={C}/>}
 
