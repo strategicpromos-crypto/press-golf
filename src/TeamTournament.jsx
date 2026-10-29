@@ -1,3 +1,4 @@
+// PG-NETSKINS-2026-10-29
 // DELETEFIX-2026-10-28 (TeamTournament — delete no longer resurrects last team)
 // OUTINGTEAMS-2026-10-28 (TeamTournament — Add/Delete Team in Settings, full-width Player rows, no overflow)
 // TEAMSCORECARD-2026-10-28 (includes HEADERSTACK + TABSTACK + STROKES-TOGGLE)
@@ -9,7 +10,7 @@ import { COURSES, courseHasHdcp } from "./golf.js";
 import { isLibraryCourse } from "./courseStore.js";
 import CourseSearch, { CourseDeletePanel } from "./CourseSearch.jsx";
 import { sb } from "./supabase.js";
-import { calcSkins, SkinsTab } from "./skins.jsx";
+import { calcSkins, SkinsTab, missingNetHdcp } from "./skins.jsx";
 import { SideBetsTab } from "./sideBets.jsx";
 import { RulesTab } from "./RulesTab.jsx";
 
@@ -257,6 +258,7 @@ export default function TeamTournament({onBack, user, onDelete}){
   const[ballsByPar,setBallsByPar]=useState({3:2,4:2,5:2}); // balls counted per hole by par
   const[skinsEnabled,setSkinsEnabled]=useState(false);
   const[bigBoyEnabled,setBigBoyEnabled]=useState(false);
+  const[netSkinsEnabled,setNetSkinsEnabled]=useState(false); // PG-NETSKINS-2026-10-29: parallel net pot, gross untouched
   const[teammatesTie,setTeammatesTie]=useState(false); // false=teammates don't cancel skin, true=stricter
   const[ctpEnabled,setCtpEnabled]=useState(false);
   const[ctpHoles,setCtpHoles]=useState([]);          // hole numbers designated as CTP
@@ -337,14 +339,14 @@ export default function TeamTournament({onBack, user, onDelete}){
     teams:s?.teams||[], course_id:s?.course_id, birdie_bonus:s?.birdie_bonus,
     ball_count_by_par:s?.ball_count_by_par, hole_pars:s?.hole_pars,
     director_rules:s?.director_rules||"", hole_notes:s?.hole_notes||{},
-    skins_enabled:s?.skins_enabled, big_boy_enabled:s?.big_boy_enabled,
+    skins_enabled:s?.skins_enabled, big_boy_enabled:s?.big_boy_enabled, net_skins_enabled:s?.net_skins_enabled,
     teammates_tie:s?.teammates_tie, ctp_enabled:s?.ctp_enabled,
     ctp_holes:s?.ctp_holes, ctp_leaders:s?.ctp_leaders||{}, side_bets:s?.side_bets||[], current_hole:s?.current_hole,
   });
   const localSnap=()=>stateSnap({
     teams, course_id:courseId, birdie_bonus:birdieBonus, ball_count_by_par:ballsByPar,
     hole_pars:holePars, director_rules:directorRules, hole_notes:holeNotes,
-    skins_enabled:skinsEnabled, big_boy_enabled:bigBoyEnabled,
+    skins_enabled:skinsEnabled, big_boy_enabled:bigBoyEnabled, net_skins_enabled:netSkinsEnabled,
     teammates_tie:teammatesTie, ctp_enabled:ctpEnabled, ctp_holes:ctpHoles,
     ctp_leaders:ctpLeaders, side_bets:sideBets, current_hole:currentHole,
   });
@@ -474,7 +476,7 @@ export default function TeamTournament({onBack, user, onDelete}){
           director_rules:directorRules,
           hole_notes:holeNotes,
           skins_enabled:skinsEnabled,
-          big_boy_enabled:bigBoyEnabled,
+          big_boy_enabled:bigBoyEnabled, net_skins_enabled:netSkinsEnabled,
           teammates_tie:teammatesTie,
           ctp_enabled:ctpEnabled,
           ctp_holes:ctpHoles,
@@ -490,7 +492,7 @@ export default function TeamTournament({onBack, user, onDelete}){
         lastSavedSnap.current=stateSnap({
           teams:mergedTeams, course_id:courseId, birdie_bonus:birdieBonus,
           ball_count_by_par:ballsByPar, hole_pars:holePars, director_rules:directorRules, hole_notes:holeNotes, skins_enabled:skinsEnabled,
-          big_boy_enabled:bigBoyEnabled, teammates_tie:teammatesTie, ctp_enabled:ctpEnabled,
+          big_boy_enabled:bigBoyEnabled, net_skins_enabled:netSkinsEnabled, teammates_tie:teammatesTie, ctp_enabled:ctpEnabled,
           ctp_holes:ctpHoles, ctp_leaders:ctpToWrite, side_bets:sideBets, current_hole:currentHole,
         });
         lastSyncedSideBets.current=snap(sideBets);
@@ -510,7 +512,7 @@ export default function TeamTournament({onBack, user, onDelete}){
     };
     saveTimer.current=setTimeout(doSave,800);
     return()=>clearTimeout(saveTimer.current);
-  },[teams,currentHole,courseId,birdieBonus,holePars,ballsByPar,skinsEnabled,bigBoyEnabled,teammatesTie,ctpEnabled,ctpHoles,ctpLeaders,sideBets,tourneyId]);
+  },[teams,currentHole,courseId,birdieBonus,holePars,ballsByPar,skinsEnabled,bigBoyEnabled,netSkinsEnabled,teammatesTie,ctpEnabled,ctpHoles,ctpLeaders,sideBets,tourneyId]);
 
   // ── Create new tournament in DB ────────────────────────────────────────────
   async function createTourney(builtTeams){
@@ -542,7 +544,7 @@ export default function TeamTournament({onBack, user, onDelete}){
       director_rules:directorRules,
       hole_notes:holeNotes,
       skins_enabled:skinsEnabled,
-      big_boy_enabled:bigBoyEnabled,
+      big_boy_enabled:bigBoyEnabled, net_skins_enabled:netSkinsEnabled,
       teammates_tie:teammatesTie,
       ctp_enabled:ctpEnabled,
       ctp_holes:ctpHoles,
@@ -582,6 +584,7 @@ export default function TeamTournament({onBack, user, onDelete}){
       setNoteText((data.hole_notes||{})[1]||"");
       setSkinsEnabled(data.skins_enabled===true);
       setBigBoyEnabled(data.big_boy_enabled===true);
+      setNetSkinsEnabled(data.net_skins_enabled===true);
       setTeammatesTie(data.teammates_tie===true);
       setCtpEnabled(data.ctp_enabled===true);
       setCtpHoles(data.ctp_holes||[]);
@@ -617,6 +620,7 @@ export default function TeamTournament({onBack, user, onDelete}){
             if(s.hole_notes) setHoleNotes(s.hole_notes);
             if(typeof s.skins_enabled==="boolean") setSkinsEnabled(s.skins_enabled);
             if(typeof s.big_boy_enabled==="boolean") setBigBoyEnabled(s.big_boy_enabled);
+            if(typeof s.net_skins_enabled==="boolean") setNetSkinsEnabled(s.net_skins_enabled);
             if(typeof s.teammates_tie==="boolean") setTeammatesTie(s.teammates_tie);
             if(typeof s.ctp_enabled==="boolean") setCtpEnabled(s.ctp_enabled);
             if(s.ctp_holes) setCtpHoles(s.ctp_holes);
@@ -1088,7 +1092,7 @@ export default function TeamTournament({onBack, user, onDelete}){
                 <div style={{fontWeight:700,fontSize:15}}>💰 Skins Game</div>
                 <div style={{fontSize:11,color:C.muted,marginTop:3}}>{skinsEnabled?"Tracking skins - live tab in leaderboard":"Off for this tournament"}</div>
               </div>
-              <button onClick={()=>{setSkinsEnabled(b=>!b);if(skinsEnabled)setBigBoyEnabled(false);}} style={{width:52,height:28,borderRadius:14,border:"none",cursor:"pointer",background:skinsEnabled?C.green:"#333",position:"relative",transition:"background 0.2s",flexShrink:0}}>
+              <button onClick={()=>{setSkinsEnabled(b=>!b);if(skinsEnabled){setBigBoyEnabled(false);setNetSkinsEnabled(false);}}} style={{width:52,height:28,borderRadius:14,border:"none",cursor:"pointer",background:skinsEnabled?C.green:"#333",position:"relative",transition:"background 0.2s",flexShrink:0}}>
                 <div style={{position:"absolute",top:4,left:skinsEnabled?26:4,width:20,height:20,borderRadius:"50%",background:"#fff",transition:"left 0.2s"}}/>
               </button>
             </div>
@@ -1112,6 +1116,74 @@ export default function TeamTournament({onBack, user, onDelete}){
 
           {/* Teammate tie rule — only shows when skins on */}
           {skinsEnabled&&(
+            <div style={{background:"rgba(123,180,80,0.06)",border:"1px solid rgba(123,180,80,0.25)",borderRadius:12,padding:"14px 16px",marginBottom:16,marginLeft:8}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <div>
+                  <div style={{fontWeight:700,fontSize:14,color:C.text}}>Net Skins</div>
+                  <div style={{fontSize:11,color:C.muted,marginTop:3}}>{netSkinsEnabled?"Parallel game - lowest net score wins (gross minus strokes on the hole)":"Off"}</div>
+                </div>
+                <button onClick={async()=>{const v=!netSkinsEnabled;setNetSkinsEnabled(v);if(tourneyId)await sb.from("team_tournaments").update({net_skins_enabled:v,updated_at:new Date().toISOString()}).eq("id",tourneyId);}} style={{width:52,height:28,borderRadius:14,border:"none",cursor:"pointer",background:netSkinsEnabled?C.green:"#333",position:"relative",transition:"background 0.2s",flexShrink:0}}>
+                  <div style={{position:"absolute",top:4,left:netSkinsEnabled?26:4,width:20,height:20,borderRadius:"50%",background:"#fff",transition:"left 0.2s"}}/>
+                </button>
+              </div>
+              {netSkinsEnabled&&(()=>{const ni=missingNetHdcp(teams,course);if(ni.missing.length>0)return(<div style={{fontSize:12,color:"#ff8a8a",fontWeight:700,marginTop:8,lineHeight:1.5}}>⚠️ HDCP needed for Net Skins: {ni.missing.join(", ")} — enter HDCPs for these players below (Teams), or Net stays on hold.</div>);if(ni.courseHdcpMissing)return(<div style={{fontSize:12,color:"#ff8a8a",fontWeight:700,marginTop:8,lineHeight:1.5}}>⚠️ Course handicaps missing — net skins can't be calculated until course handicaps are added.</div>);return(<div style={{fontSize:11,color:C.green,marginTop:8}}>✓ All HDCPs entered — Net skins are live. 0 = scratch, blank = missing.</div>);})()}
+            </div>
+          )}
+{skinsEnabled&&(
+            <div style={{background:"rgba(123,180,80,0.06)",border:"1px solid rgba(123,180,80,0.25)",borderRadius:12,padding:"14px 16px",marginBottom:16,marginLeft:8}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
+                <div>
+                  <div style={{fontWeight:700,fontSize:14,color:C.text}}>Who's in Gross Skins?</div>
+                  <div style={{fontSize:11,color:C.muted,marginTop:3}}>Everyone starts in. Tap a player to take them out — out players can't win or tie a Gross skin.</div>
+                </div>
+                <button onClick={()=>setTeams(prev=>prev.map(t=>({...t,grossIn:Array(t.size||1).fill(true)})))} style={{padding:"9px 12px",borderRadius:10,fontSize:12,fontWeight:800,cursor:"pointer",background:C.green,color:"#0a1a0f",border:"none",flexShrink:0}}>Select All</button>
+              </div>
+              <div style={{marginTop:12}}>
+                {teams.map((team,ti)=>(
+                  <div key={ti} style={{marginBottom:8}}>
+                    <div style={{fontSize:11,color:C.muted,marginBottom:4}}>{team.name||("Team "+(ti+1))}</div>
+                    <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                      {Array.from({length:team.size||1},(_,pi)=>{
+                        const nm=(team.players?.[pi]||"").trim()||("Player "+(pi+1));
+                        const on=team.grossIn?.[pi]!==false;
+                        return(<button key={pi} onClick={()=>{const arr=[...(team.grossIn||Array(team.size||1).fill(true))];arr[pi]=!on;updateTeam(ti,{grossIn:arr});}}
+                          style={{padding:"9px 12px",borderRadius:10,fontSize:12,fontWeight:800,cursor:"pointer",background:on?C.green:"rgba(255,255,255,0.06)",color:on?"#0a1a0f":C.muted,border:"1.5px solid "+(on?C.green:"rgba(255,255,255,0.2)")}}>{on?"✓ ":""}{nm}</button>);
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div style={{fontSize:10,color:C.muted,marginTop:4}}>Saves automatically · leaderboard updates live</div>
+            </div>
+          )}
+          {skinsEnabled&&netSkinsEnabled&&(
+            <div style={{background:"rgba(123,180,80,0.06)",border:"1px solid rgba(123,180,80,0.25)",borderRadius:12,padding:"14px 16px",marginBottom:16,marginLeft:8}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
+                <div>
+                  <div style={{fontWeight:700,fontSize:14,color:C.text}}>Who's in Net Skins?</div>
+                  <div style={{fontSize:11,color:C.muted,marginTop:3}}>Everyone starts in. Tap a player to take them out — out players can't win or tie a Net skin.</div>
+                </div>
+                <button onClick={()=>setTeams(prev=>prev.map(t=>({...t,netIn:Array(t.size||1).fill(true)})))} style={{padding:"9px 12px",borderRadius:10,fontSize:12,fontWeight:800,cursor:"pointer",background:C.green,color:"#0a1a0f",border:"none",flexShrink:0}}>Select All</button>
+              </div>
+              <div style={{marginTop:12}}>
+                {teams.map((team,ti)=>(
+                  <div key={ti} style={{marginBottom:8}}>
+                    <div style={{fontSize:11,color:C.muted,marginBottom:4}}>{team.name||("Team "+(ti+1))}</div>
+                    <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                      {Array.from({length:team.size||1},(_,pi)=>{
+                        const nm=(team.players?.[pi]||"").trim()||("Player "+(pi+1));
+                        const on=team.netIn?.[pi]!==false;
+                        return(<button key={pi} onClick={()=>{const arr=[...(team.netIn||Array(team.size||1).fill(true))];arr[pi]=!on;updateTeam(ti,{netIn:arr});}}
+                          style={{padding:"9px 12px",borderRadius:10,fontSize:12,fontWeight:800,cursor:"pointer",background:on?C.green:"rgba(255,255,255,0.06)",color:on?"#0a1a0f":C.muted,border:"1.5px solid "+(on?C.green:"rgba(255,255,255,0.2)")}}>{on?"✓ ":""}{nm}</button>);
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div style={{fontSize:10,color:C.muted,marginTop:4}}>Saves automatically · leaderboard updates live</div>
+            </div>
+          )}
+{skinsEnabled&&(
             <div style={{background:"rgba(224,80,80,0.06)",border:"1px solid rgba(224,80,80,0.2)",borderRadius:12,padding:"14px 16px",marginBottom:16,marginLeft:8}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                 <div>
@@ -1240,6 +1312,11 @@ export default function TeamTournament({onBack, user, onDelete}){
                   <div key={j} style={{display:"flex",alignItems:"center",gap:8}}>
                     <input value={team.players[j]||""} onChange={e=>{const p=[...team.players];p[j]=e.target.value;updateTeam(i,{players:p});}}
                       placeholder={"Player "+(j+1)} style={{flex:1,padding:"10px",background:C.surface,border:"1px solid "+C.border,borderRadius:8,color:C.text,fontSize:13,outline:"none"}}/>
+                    {netSkinsEnabled&&(
+                      <input type="number" min="0" max="54" placeholder="HDCP" value={team.hdcp?.[j]??""}
+                        onChange={e=>{const h=[...(team.hdcp||Array(team.size).fill(null))];h[j]=e.target.value===""?null:Math.max(0,Math.min(54,parseInt(e.target.value)||0));updateTeam(i,{hdcp:h});}}
+                        style={{width:64,flexShrink:0,padding:"10px 8px",background:C.surface,border:"1px solid "+C.border,borderRadius:8,color:C.text,fontSize:13,outline:"none",textAlign:"center"}}/>
+                    )}
                     {bigBoyEnabled&&(
                       <button onClick={()=>{const bb=[...(team.bigBoy||Array(team.size).fill(false))];bb[j]=!bb[j];updateTeam(i,{bigBoy:bb});}}
                         style={{flexShrink:0,padding:"10px 14px",borderRadius:10,fontSize:12,fontWeight:800,cursor:"pointer",letterSpacing:0.5,
@@ -1331,7 +1408,7 @@ export default function TeamTournament({onBack, user, onDelete}){
                 await sb.from("team_tournaments").update({
                   teams,course_id:courseId,birdie_bonus:birdieBonus,
                   ball_count_by_par:ballsByPar,hole_pars:holePars,director_rules:directorRules,hole_notes:holeNotes,
-                  skins_enabled:skinsEnabled,big_boy_enabled:bigBoyEnabled,
+                  skins_enabled:skinsEnabled,big_boy_enabled:bigBoyEnabled, net_skins_enabled:netSkinsEnabled,
                   ctp_enabled:ctpEnabled,ctp_holes:ctpHoles,ctp_leaders:ctpLeaders,
                   status:"active",current_hole:1,updated_at:new Date().toISOString()
                 }).eq("id",tourneyId);
@@ -1744,7 +1821,7 @@ export default function TeamTournament({onBack, user, onDelete}){
                     <div style={{fontWeight:700,fontSize:14}}>💰 Skins Game</div>
                     <div style={{fontSize:11,color:C.muted,marginTop:2}}>{skinsEnabled?"Live skins tab in leaderboard":"Off"}</div>
                   </div>
-                  <button onClick={async()=>{const v=!skinsEnabled;setSkinsEnabled(v);if(!v)setBigBoyEnabled(false);await sb.from("team_tournaments").update({skins_enabled:v,big_boy_enabled:v?bigBoyEnabled:false,updated_at:new Date().toISOString()}).eq("id",tourneyId);}} style={{width:52,height:28,borderRadius:14,border:"none",cursor:"pointer",background:skinsEnabled?C.green:"#333",position:"relative",flexShrink:0,transition:"background 0.2s"}}>
+                  <button onClick={async()=>{const v=!skinsEnabled;setSkinsEnabled(v);if(!v){setBigBoyEnabled(false);setNetSkinsEnabled(false);}await sb.from("team_tournaments").update({skins_enabled:v,big_boy_enabled:v?bigBoyEnabled:false,net_skins_enabled:v?netSkinsEnabled:false,updated_at:new Date().toISOString()}).eq("id",tourneyId);}} style={{width:52,height:28,borderRadius:14,border:"none",cursor:"pointer",background:skinsEnabled?C.green:"#333",position:"relative",flexShrink:0,transition:"background 0.2s"}}>
                     <div style={{position:"absolute",top:4,left:skinsEnabled?26:4,width:20,height:20,borderRadius:"50%",background:"#fff",transition:"left 0.2s"}}/>
                   </button>
                 </div>
@@ -1763,6 +1840,7 @@ export default function TeamTournament({onBack, user, onDelete}){
                   {bigBoyEnabled&&(
                     <div style={{marginTop:12,borderTop:"1px solid rgba(232,184,75,0.2)",paddingTop:12}}>
                       <div style={{fontSize:11,color:C.gold,letterSpacing:1,textTransform:"uppercase",fontWeight:700,marginBottom:8}}>Who's in? Tap to mark</div>
+                      <button onClick={()=>setTeams(prev=>prev.map(t=>({...t,bigBoy:Array(t.size||1).fill(true)})))} style={{padding:"9px 12px",borderRadius:10,fontSize:12,fontWeight:800,cursor:"pointer",background:C.gold,color:"#0a1a0f",border:"none",marginBottom:8}}>Select All — then tap off who's out</button>
                       {teams.map((team,ti)=>(
                         <div key={ti} style={{marginBottom:8}}>
                           <div style={{fontSize:11,color:C.muted,marginBottom:4}}>{team.name||("Team "+(ti+1))}</div>
@@ -1789,6 +1867,74 @@ export default function TeamTournament({onBack, user, onDelete}){
                 </div>
               )}
               {skinsEnabled&&(
+            <div style={{background:"rgba(123,180,80,0.06)",border:"1px solid rgba(123,180,80,0.25)",borderRadius:12,padding:"14px 16px",marginBottom:16,marginLeft:8}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <div>
+                  <div style={{fontWeight:700,fontSize:14,color:C.text}}>Net Skins</div>
+                  <div style={{fontSize:11,color:C.muted,marginTop:3}}>{netSkinsEnabled?"Parallel game - lowest net score wins (gross minus strokes on the hole)":"Off"}</div>
+                </div>
+                <button onClick={async()=>{const v=!netSkinsEnabled;setNetSkinsEnabled(v);if(tourneyId)await sb.from("team_tournaments").update({net_skins_enabled:v,updated_at:new Date().toISOString()}).eq("id",tourneyId);}} style={{width:52,height:28,borderRadius:14,border:"none",cursor:"pointer",background:netSkinsEnabled?C.green:"#333",position:"relative",transition:"background 0.2s",flexShrink:0}}>
+                  <div style={{position:"absolute",top:4,left:netSkinsEnabled?26:4,width:20,height:20,borderRadius:"50%",background:"#fff",transition:"left 0.2s"}}/>
+                </button>
+              </div>
+              {netSkinsEnabled&&(()=>{const ni=missingNetHdcp(teams,course);if(ni.missing.length>0)return(<div style={{fontSize:12,color:"#ff8a8a",fontWeight:700,marginTop:8,lineHeight:1.5}}>⚠️ HDCP needed for Net Skins: {ni.missing.join(", ")} — enter HDCPs for these players below (Teams), or Net stays on hold.</div>);if(ni.courseHdcpMissing)return(<div style={{fontSize:12,color:"#ff8a8a",fontWeight:700,marginTop:8,lineHeight:1.5}}>⚠️ Course handicaps missing — net skins can't be calculated until course handicaps are added.</div>);return(<div style={{fontSize:11,color:C.green,marginTop:8}}>✓ All HDCPs entered — Net skins are live. 0 = scratch, blank = missing.</div>);})()}
+            </div>
+          )}
+{skinsEnabled&&(
+            <div style={{background:"rgba(123,180,80,0.06)",border:"1px solid rgba(123,180,80,0.25)",borderRadius:12,padding:"14px 16px",marginBottom:16,marginLeft:8}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
+                <div>
+                  <div style={{fontWeight:700,fontSize:14,color:C.text}}>Who's in Gross Skins?</div>
+                  <div style={{fontSize:11,color:C.muted,marginTop:3}}>Everyone starts in. Tap a player to take them out — out players can't win or tie a Gross skin.</div>
+                </div>
+                <button onClick={()=>setTeams(prev=>prev.map(t=>({...t,grossIn:Array(t.size||1).fill(true)})))} style={{padding:"9px 12px",borderRadius:10,fontSize:12,fontWeight:800,cursor:"pointer",background:C.green,color:"#0a1a0f",border:"none",flexShrink:0}}>Select All</button>
+              </div>
+              <div style={{marginTop:12}}>
+                {teams.map((team,ti)=>(
+                  <div key={ti} style={{marginBottom:8}}>
+                    <div style={{fontSize:11,color:C.muted,marginBottom:4}}>{team.name||("Team "+(ti+1))}</div>
+                    <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                      {Array.from({length:team.size||1},(_,pi)=>{
+                        const nm=(team.players?.[pi]||"").trim()||("Player "+(pi+1));
+                        const on=team.grossIn?.[pi]!==false;
+                        return(<button key={pi} onClick={()=>{const arr=[...(team.grossIn||Array(team.size||1).fill(true))];arr[pi]=!on;updateTeam(ti,{grossIn:arr});}}
+                          style={{padding:"9px 12px",borderRadius:10,fontSize:12,fontWeight:800,cursor:"pointer",background:on?C.green:"rgba(255,255,255,0.06)",color:on?"#0a1a0f":C.muted,border:"1.5px solid "+(on?C.green:"rgba(255,255,255,0.2)")}}>{on?"✓ ":""}{nm}</button>);
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div style={{fontSize:10,color:C.muted,marginTop:4}}>Saves automatically · leaderboard updates live</div>
+            </div>
+          )}
+          {skinsEnabled&&netSkinsEnabled&&(
+            <div style={{background:"rgba(123,180,80,0.06)",border:"1px solid rgba(123,180,80,0.25)",borderRadius:12,padding:"14px 16px",marginBottom:16,marginLeft:8}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
+                <div>
+                  <div style={{fontWeight:700,fontSize:14,color:C.text}}>Who's in Net Skins?</div>
+                  <div style={{fontSize:11,color:C.muted,marginTop:3}}>Everyone starts in. Tap a player to take them out — out players can't win or tie a Net skin.</div>
+                </div>
+                <button onClick={()=>setTeams(prev=>prev.map(t=>({...t,netIn:Array(t.size||1).fill(true)})))} style={{padding:"9px 12px",borderRadius:10,fontSize:12,fontWeight:800,cursor:"pointer",background:C.green,color:"#0a1a0f",border:"none",flexShrink:0}}>Select All</button>
+              </div>
+              <div style={{marginTop:12}}>
+                {teams.map((team,ti)=>(
+                  <div key={ti} style={{marginBottom:8}}>
+                    <div style={{fontSize:11,color:C.muted,marginBottom:4}}>{team.name||("Team "+(ti+1))}</div>
+                    <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                      {Array.from({length:team.size||1},(_,pi)=>{
+                        const nm=(team.players?.[pi]||"").trim()||("Player "+(pi+1));
+                        const on=team.netIn?.[pi]!==false;
+                        return(<button key={pi} onClick={()=>{const arr=[...(team.netIn||Array(team.size||1).fill(true))];arr[pi]=!on;updateTeam(ti,{netIn:arr});}}
+                          style={{padding:"9px 12px",borderRadius:10,fontSize:12,fontWeight:800,cursor:"pointer",background:on?C.green:"rgba(255,255,255,0.06)",color:on?"#0a1a0f":C.muted,border:"1.5px solid "+(on?C.green:"rgba(255,255,255,0.2)")}}>{on?"✓ ":""}{nm}</button>);
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div style={{fontSize:10,color:C.muted,marginTop:4}}>Saves automatically · leaderboard updates live</div>
+            </div>
+          )}
+{skinsEnabled&&(
                 <div style={{background:"rgba(224,80,80,0.06)",border:"1px solid rgba(224,80,80,0.2)",borderRadius:12,padding:"14px 16px",marginBottom:20,marginLeft:8}}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                     <div>
@@ -1945,14 +2091,28 @@ export default function TeamTournament({onBack, user, onDelete}){
                     </div>
 
                     {/* Player names — one full-width row per player, so nothing runs off the card */}
-                    <div style={{fontSize:11,color:C.muted,marginBottom:6,fontWeight:600}}>Player Names</div>
+                    <div style={{fontSize:11,color:C.muted,marginBottom:6,fontWeight:600}}>{netSkinsEnabled?"Player Names & HDCP (0 = scratch, blank = missing)":"Player Names"}</div>
                     <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:10}}>
                       {Array.from({length:size},(_,j)=>(
-                        <input key={j}
-                          value={team.players?.[j]||""}
-                          onChange={e=>{const p=[...(team.players||Array(size).fill(""))];p[j]=e.target.value;updateTeam(i,{players:p});}}
-                          placeholder={"Player "+(j+1)}
-                          style={{width:"100%",boxSizing:"border-box",padding:"9px 10px",background:C.bg,border:"1px solid "+C.border,borderRadius:8,color:C.text,fontSize:13,outline:"none"}}/>
+                        netSkinsEnabled?(
+                          <div key={j} style={{display:"flex",gap:8}}>
+                            <input
+                              value={team.players?.[j]||""}
+                              onChange={e=>{const p=[...(team.players||Array(size).fill(""))];p[j]=e.target.value;updateTeam(i,{players:p});}}
+                              placeholder={"Player "+(j+1)}
+                              style={{flex:1,minWidth:0,boxSizing:"border-box",padding:"9px 10px",background:C.bg,border:"1px solid "+C.border,borderRadius:8,color:C.text,fontSize:13,outline:"none"}}/>
+                            <input type="number" min="0" max="54" placeholder="HDCP"
+                              value={team.hdcp?.[j]??""}
+                              onChange={e=>{const h=[...(team.hdcp||Array(size).fill(null))];h[j]=e.target.value===""?null:Math.max(0,Math.min(54,parseInt(e.target.value)||0));updateTeam(i,{hdcp:h});}}
+                              style={{width:64,flexShrink:0,boxSizing:"border-box",padding:"9px 8px",background:C.bg,border:"1px solid "+((team.players?.[j]||"").trim()&&(team.hdcp?.[j]===null||team.hdcp?.[j]===undefined)?C.red:C.border),borderRadius:8,color:C.text,fontSize:13,outline:"none",textAlign:"center"}}/>
+                          </div>
+                        ):(
+                          <input key={j}
+                            value={team.players?.[j]||""}
+                            onChange={e=>{const p=[...(team.players||Array(size).fill(""))];p[j]=e.target.value;updateTeam(i,{players:p});}}
+                            placeholder={"Player "+(j+1)}
+                            style={{width:"100%",boxSizing:"border-box",padding:"9px 10px",background:C.bg,border:"1px solid "+C.border,borderRadius:8,color:C.text,fontSize:13,outline:"none"}}/>
+                        )
                       ))}
                     </div>
 
@@ -2162,7 +2322,7 @@ export default function TeamTournament({onBack, user, onDelete}){
 
           {lbTab==="top10"&&<Top10Tab teams={teams} course={course} holePars={holePars} C={C}/>}
 
-          {lbTab==="skins"&&<SkinsTab teams={teams} course={course} holePars={holePars} skinsEnabled={skinsEnabled} bigBoyEnabled={bigBoyEnabled} teammatesTie={teammatesTie}/>}
+          {lbTab==="skins"&&<SkinsTab teams={teams} course={course} holePars={holePars} skinsEnabled={skinsEnabled} bigBoyEnabled={bigBoyEnabled} netEnabled={netSkinsEnabled} teammatesTie={teammatesTie}/>}
 
           {lbTab==="bets"&&(
             <div>
