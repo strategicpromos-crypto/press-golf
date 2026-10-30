@@ -213,7 +213,25 @@ function calcTeamScore(teamScores,teamSize,holeData,birdieBonus,ballsByPar,holeP
     total+=raw;
   }
   const totalPar=frontPar+backPar;
-  return{byHole,front,frontDiff:front-frontPar,back,backDiff:back-backPar,total,totalDiff:total-totalPar,frontPar,backPar,totalPar};
+  const pods=[[1,6],[7,12],[13,18]].map(([lo,hi])=>{let raw=0,diff=0,scored=0;for(const h of holeData){if(h.hole<lo||h.hole>hi)continue;const hd=byHole[h.hole];if(!hd||!hd.scored)continue;raw+=hd.raw;diff+=hd.diff;scored++;}return{lo,hi,raw,diff,scored,complete:scored===6};});
+  return{byHole,front,frontDiff:front-frontPar,back,backDiff:back-backPar,total,totalDiff:total-totalPar,frontPar,backPar,totalPar,pods,podDiffs:pods.map(p=>p.diff)};
+}
+
+// PG-PODS-2026-10-30: pod winners are TEAM scores only (never individual scores).
+// A pod winner is the lowest score-to-par among teams that finished that pod;
+// if no team finished it yet, the lowest scored team is shown as leading.
+function podWinners(board,idx){
+  const all=(board||[]).map(t=>({name:t.name||("Team "+(t.i!==undefined?t.i+1:"?")),diff:t.sc.pods[idx].diff,raw:t.sc.pods[idx].raw,complete:t.sc.pods[idx].complete}));
+  const complete=all.filter(p=>p.complete);
+  const pool=complete.length?complete:all.filter(p=>p.raw>0);
+  if(!pool.length)return null;
+  const min=Math.min(...pool.map(p=>p.diff));
+  return{names:pool.filter(p=>p.diff===min).map(p=>p.name),diff:min,complete:complete.length>0};
+}
+function podWinnerText(w){
+  if(!w)return "—";
+  const d=w.diff===0?"E":w.diff>0?("+"+w.diff):String(w.diff);
+  return w.names.join(" / ")+" ("+d+(w.complete?"":", leading")+ ")";
 }
 
 
@@ -259,6 +277,7 @@ export default function TeamTournament({onBack, user, onDelete}){
   const[skinsEnabled,setSkinsEnabled]=useState(false);
   const[bigBoyEnabled,setBigBoyEnabled]=useState(false);
   const[netSkinsEnabled,setNetSkinsEnabled]=useState(false); // PG-NETSKINS-2026-10-29: parallel net pot, gross untouched
+  const[podsEnabled,setPodsEnabled]=useState(false); // PG-PODS-2026-10-30: 6-hole pod winners, team scores only, no money yet
   const[teammatesTie,setTeammatesTie]=useState(false); // false=teammates don't cancel skin, true=stricter
   const[ctpEnabled,setCtpEnabled]=useState(false);
   const[ctpHoles,setCtpHoles]=useState([]);          // hole numbers designated as CTP
@@ -339,14 +358,14 @@ export default function TeamTournament({onBack, user, onDelete}){
     teams:s?.teams||[], course_id:s?.course_id, birdie_bonus:s?.birdie_bonus,
     ball_count_by_par:s?.ball_count_by_par, hole_pars:s?.hole_pars,
     director_rules:s?.director_rules||"", hole_notes:s?.hole_notes||{},
-    skins_enabled:s?.skins_enabled, big_boy_enabled:s?.big_boy_enabled, net_skins_enabled:s?.net_skins_enabled,
+    skins_enabled:s?.skins_enabled, big_boy_enabled:s?.big_boy_enabled, net_skins_enabled:s?.net_skins_enabled, pods_enabled:s?.pods_enabled,
     teammates_tie:s?.teammates_tie, ctp_enabled:s?.ctp_enabled,
     ctp_holes:s?.ctp_holes, ctp_leaders:s?.ctp_leaders||{}, side_bets:s?.side_bets||[], current_hole:s?.current_hole,
   });
   const localSnap=()=>stateSnap({
     teams, course_id:courseId, birdie_bonus:birdieBonus, ball_count_by_par:ballsByPar,
     hole_pars:holePars, director_rules:directorRules, hole_notes:holeNotes,
-    skins_enabled:skinsEnabled, big_boy_enabled:bigBoyEnabled, net_skins_enabled:netSkinsEnabled,
+    skins_enabled:skinsEnabled, big_boy_enabled:bigBoyEnabled, net_skins_enabled:netSkinsEnabled, pods_enabled:podsEnabled,
     teammates_tie:teammatesTie, ctp_enabled:ctpEnabled, ctp_holes:ctpHoles,
     ctp_leaders:ctpLeaders, side_bets:sideBets, current_hole:currentHole,
   });
@@ -476,7 +495,7 @@ export default function TeamTournament({onBack, user, onDelete}){
           director_rules:directorRules,
           hole_notes:holeNotes,
           skins_enabled:skinsEnabled,
-          big_boy_enabled:bigBoyEnabled, net_skins_enabled:netSkinsEnabled,
+          big_boy_enabled:bigBoyEnabled, net_skins_enabled:netSkinsEnabled, pods_enabled:podsEnabled,
           teammates_tie:teammatesTie,
           ctp_enabled:ctpEnabled,
           ctp_holes:ctpHoles,
@@ -492,7 +511,7 @@ export default function TeamTournament({onBack, user, onDelete}){
         lastSavedSnap.current=stateSnap({
           teams:mergedTeams, course_id:courseId, birdie_bonus:birdieBonus,
           ball_count_by_par:ballsByPar, hole_pars:holePars, director_rules:directorRules, hole_notes:holeNotes, skins_enabled:skinsEnabled,
-          big_boy_enabled:bigBoyEnabled, net_skins_enabled:netSkinsEnabled, teammates_tie:teammatesTie, ctp_enabled:ctpEnabled,
+          big_boy_enabled:bigBoyEnabled, net_skins_enabled:netSkinsEnabled, pods_enabled:podsEnabled, teammates_tie:teammatesTie, ctp_enabled:ctpEnabled,
           ctp_holes:ctpHoles, ctp_leaders:ctpToWrite, side_bets:sideBets, current_hole:currentHole,
         });
         lastSyncedSideBets.current=snap(sideBets);
@@ -512,7 +531,7 @@ export default function TeamTournament({onBack, user, onDelete}){
     };
     saveTimer.current=setTimeout(doSave,800);
     return()=>clearTimeout(saveTimer.current);
-  },[teams,currentHole,courseId,birdieBonus,holePars,ballsByPar,skinsEnabled,bigBoyEnabled,netSkinsEnabled,teammatesTie,ctpEnabled,ctpHoles,ctpLeaders,sideBets,tourneyId]);
+  },[teams,currentHole,courseId,birdieBonus,holePars,ballsByPar,skinsEnabled,bigBoyEnabled,netSkinsEnabled,podsEnabled,teammatesTie,ctpEnabled,ctpHoles,ctpLeaders,sideBets,tourneyId]);
 
   // ── Create new tournament in DB ────────────────────────────────────────────
   async function createTourney(builtTeams){
@@ -544,7 +563,7 @@ export default function TeamTournament({onBack, user, onDelete}){
       director_rules:directorRules,
       hole_notes:holeNotes,
       skins_enabled:skinsEnabled,
-      big_boy_enabled:bigBoyEnabled, net_skins_enabled:netSkinsEnabled,
+      big_boy_enabled:bigBoyEnabled, net_skins_enabled:netSkinsEnabled, pods_enabled:podsEnabled,
       teammates_tie:teammatesTie,
       ctp_enabled:ctpEnabled,
       ctp_holes:ctpHoles,
@@ -585,6 +604,7 @@ export default function TeamTournament({onBack, user, onDelete}){
       setSkinsEnabled(data.skins_enabled===true);
       setBigBoyEnabled(data.big_boy_enabled===true);
       setNetSkinsEnabled(data.net_skins_enabled===true);
+      setPodsEnabled(data.pods_enabled===true);
       setTeammatesTie(data.teammates_tie===true);
       setCtpEnabled(data.ctp_enabled===true);
       setCtpHoles(data.ctp_holes||[]);
@@ -621,6 +641,7 @@ export default function TeamTournament({onBack, user, onDelete}){
             if(typeof s.skins_enabled==="boolean") setSkinsEnabled(s.skins_enabled);
             if(typeof s.big_boy_enabled==="boolean") setBigBoyEnabled(s.big_boy_enabled);
             if(typeof s.net_skins_enabled==="boolean") setNetSkinsEnabled(s.net_skins_enabled);
+            if(typeof s.pods_enabled==="boolean") setPodsEnabled(s.pods_enabled);
             if(typeof s.teammates_tie==="boolean") setTeammatesTie(s.teammates_tie);
             if(typeof s.ctp_enabled==="boolean") setCtpEnabled(s.ctp_enabled);
             if(s.ctp_holes) setCtpHoles(s.ctp_holes);
@@ -1098,6 +1119,19 @@ export default function TeamTournament({onBack, user, onDelete}){
             </div>
           </div>
 
+          {/* PG-PODS-2026-10-30: 6-hole pods — team scores only, score-to-par, no money yet */}
+          <div style={{background:C.card,border:"1px solid "+C.border,borderRadius:12,padding:"14px 16px",marginBottom:16}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <div>
+                <div style={{fontWeight:700,fontSize:15}}>🏆 6-Hole Pods</div>
+                <div style={{fontSize:11,color:C.muted,marginTop:3}}>{podsEnabled?"Pod winners on Standings: holes 1–6, 7–12, 13–18 + total, lowest score-to-par wins each pod":"Off for this tournament — Standings stay Front / Back / Total"}</div>
+              </div>
+              <button onClick={()=>setPodsEnabled(b=>!b)} style={{width:52,height:28,borderRadius:14,border:"none",cursor:"pointer",background:podsEnabled?C.green:"#333",position:"relative",transition:"background 0.2s",flexShrink:0}}>
+                <div style={{position:"absolute",top:4,left:podsEnabled?26:4,width:20,height:20,borderRadius:"50%",background:"#fff",transition:"left 0.2s"}}/>
+              </button>
+            </div>
+          </div>
+
           {/* Big Boy — only shows when skins on */}
           {skinsEnabled&&(
             <div style={{background:"rgba(232,184,75,0.06)",border:"1px solid rgba(232,184,75,0.25)",borderRadius:12,padding:"14px 16px",marginBottom:16,marginLeft:8}}>
@@ -1536,7 +1570,7 @@ export default function TeamTournament({onBack, user, onDelete}){
                 {team.strokesPerSide>0&&<div style={{fontSize:10,color:C.gold,background:"rgba(232,184,75,0.1)",padding:"2px 6px",borderRadius:6}}>+{team.strokesPerSide}/side</div>}
               </div>
               <div style={{display:"flex",gap:16}}>
-                {[["F9",sc.frontDiff,sc.front],["B9",sc.backDiff,sc.back],["Tot",sc.totalDiff,sc.total]].map(([lbl,diff,raw])=>(
+                {(podsEnabled?[["P1",sc.podDiffs[0],sc.pods[0].raw],["P2",sc.podDiffs[1],sc.pods[1].raw],["P3",sc.podDiffs[2],sc.pods[2].raw],["Tot",sc.totalDiff,sc.total]]:[["F9",sc.frontDiff,sc.front],["B9",sc.backDiff,sc.back],["Tot",sc.totalDiff,sc.total]]).map(([lbl,diff,raw])=>(
                   <div key={lbl} style={{textAlign:"center"}}>
                     <div style={{fontSize:10,color:C.muted}}>{lbl}</div>
                     <div style={{fontSize:15,fontWeight:800,color:raw===0?C.muted:relColor(diff)}}>{raw===0?"--":relLabel(diff)}</div>
@@ -1810,6 +1844,19 @@ export default function TeamTournament({onBack, user, onDelete}){
                   </div>
                   <button onClick={()=>setBirdieBonus(b=>!b)} style={{width:52,height:28,borderRadius:14,border:"none",cursor:"pointer",background:birdieBonus?C.green:"#333",position:"relative",flexShrink:0,transition:"background 0.2s"}}>
                     <div style={{position:"absolute",top:4,left:birdieBonus?26:4,width:20,height:20,borderRadius:"50%",background:"#fff",transition:"left 0.2s"}}/>
+                  </button>
+                </div>
+              </div>
+
+              {/* PG-PODS-2026-10-30 */}
+              <div style={{background:C.card,border:"1px solid "+C.border,borderRadius:12,padding:"14px 16px",marginBottom:12}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                  <div>
+                    <div style={{fontWeight:700,fontSize:14}}>🏆 6-Hole Pods</div>
+                    <div style={{fontSize:11,color:C.muted,marginTop:2}}>{podsEnabled?"Pod winners on Standings: 1–6, 7–12, 13–18 + total":"Off — Standings stay Front / Back / Total"}</div>
+                  </div>
+                  <button onClick={async()=>{const v=!podsEnabled;setPodsEnabled(v);if(tourneyId)await sb.from("team_tournaments").update({pods_enabled:v,updated_at:new Date().toISOString()}).eq("id",tourneyId);}} style={{width:52,height:28,borderRadius:14,border:"none",cursor:"pointer",background:podsEnabled?C.green:"#333",position:"relative",flexShrink:0,transition:"background 0.2s"}}>
+                    <div style={{position:"absolute",top:4,left:podsEnabled?26:4,width:20,height:20,borderRadius:"50%",background:"#fff",transition:"left 0.2s"}}/>
                   </button>
                 </div>
               </div>
@@ -2233,9 +2280,24 @@ export default function TeamTournament({onBack, user, onDelete}){
         <div style={{padding:"16px"}}>
           {lbTab==="standings"&&(
             <>
+              {podsEnabled&&(
+                <div style={{background:C.card,border:"1px solid "+C.gold+"44",borderRadius:14,padding:"14px",marginBottom:12}}>
+                  <div style={{fontSize:11,color:C.gold,letterSpacing:1.5,textTransform:"uppercase",marginBottom:8,fontWeight:600}}>🏆 Pod Winners · score-to-par · team scores only</div>
+                  {[["Pod 1 · holes 1–6",0],["Pod 2 · holes 7–12",1],["Pod 3 · holes 13–18",2]].map(([lbl,idx])=>(
+                    <div key={lbl} style={{display:"flex",justifyContent:"space-between",fontSize:13,padding:"4px 0"}}>
+                      <span style={{color:C.muted}}>{lbl}</span>
+                      <span style={{fontWeight:800}}>{podWinnerText(podWinners(board,idx))}</span>
+                    </div>
+                  ))}
+                  <div style={{display:"flex",justifyContent:"space-between",fontSize:13,padding:"4px 0",borderTop:"1px solid "+C.border,marginTop:4}}>
+                    <span style={{color:C.muted}}>Total · 18 holes</span>
+                    <span style={{fontWeight:800}}>{board.length&&board[0].sc.total>0?board[0].name:"—"}</span>
+                  </div>
+                </div>
+              )}
               <div style={{display:"flex",padding:"4px 14px",marginBottom:4}}>
                 <div style={{flex:1,fontSize:10,color:C.muted,letterSpacing:1.5,textTransform:"uppercase"}}>Team</div>
-                {["F9","B9","TOT"].map(l=><div key={l} style={{width:44,textAlign:"center",fontSize:10,color:C.muted,letterSpacing:1,textTransform:"uppercase"}}>{l}</div>)}
+                {(podsEnabled?["P1","P2","P3","TOT"]:["F9","B9","TOT"]).map(l=><div key={l} style={{width:44,textAlign:"center",fontSize:10,color:C.muted,letterSpacing:1,textTransform:"uppercase"}}>{l}</div>)}
               </div>
               {board.map((team,rank)=>(
                 <div key={team.id||rank} style={{background:rank===0?"rgba(232,184,75,0.08)":C.card,border:"1px solid "+(rank===0?C.gold+"44":C.border),borderRadius:14,padding:"14px",marginBottom:8}}>
@@ -2249,7 +2311,7 @@ export default function TeamTournament({onBack, user, onDelete}){
                       </div>
                       <div style={{fontSize:11,color:C.muted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:2}}>{(team.players||[]).filter(Boolean).join(" / ")||"No players"}</div>
                     </div>
-                    {[team.sc.frontDiff,team.sc.backDiff,team.sc.totalDiff].map((d,idx)=>(
+                    {(podsEnabled?[team.sc.podDiffs[0],team.sc.podDiffs[1],team.sc.podDiffs[2],team.sc.totalDiff]:[team.sc.frontDiff,team.sc.backDiff,team.sc.totalDiff]).map((d,idx)=>(
                       <div key={idx} style={{width:44,textAlign:"center",fontWeight:800,fontSize:16,color:team.sc.total===0?C.muted:relColor(d)}}>{team.sc.total===0?"--":relLabel(d)}</div>
                     ))}
                   </div>
