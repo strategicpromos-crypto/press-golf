@@ -81,12 +81,14 @@ function podWinnerText(w){
 }
 
 
-// PG-GROUPS-2026-10-30: foursome-first. Team carries foursome = its 4some index.
-// Old tournaments have no foursome field — fall back to consecutive pairs (1+2, 3+4).
-function foursomeTeams(list, idx){
-  const t=list[idx]; if(!t) return [idx];
-  if(typeof t.foursome==="number") return list.map((_,i)=>i).filter(i=>list[i].foursome===t.foursome);
-  const base=Math.floor(idx/2)*2; const out=[base]; if(list[base+1]) out.push(base+1); return out;
+
+// PG-GROUPCHECK-2026-10-30: score-together checkmark, nothing else.
+// Checked teams in a row share one scorecard. Unchecked teams are always on their own.
+function groupedTeams(list, idx){
+  const t=list[idx]; if(!t||!t.groupTogether) return [idx];
+  let start=idx; while(start>0&&list[start-1].groupTogether) start--;
+  let end=idx; while(end+1<list.length&&list[end+1].groupTogether) end++;
+  const out=[]; for(let i=start;i<=end;i++) out.push(i); return out;
 }
 
 export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBack }) {
@@ -151,8 +153,8 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
   const ctpLeaders  = tourney.ctp_leaders||{};
 
   const team      = (tourney.teams || [])[teamIdx];
-  const groupTeams  = foursomeTeams(tourney.teams||[], teamIdx); // PG-GROUPS-2026-10-30
-  const groupLocalKey = `press_writer_${initialTourney.id}_group_${(initialTourney.teams||[])[teamIdx]?.foursome ?? Math.floor(teamIdx/2)}`;
+  const groupTeams  = groupedTeams(tourney.teams||[], teamIdx); // PG-GROUPS-2026-10-30
+  const groupLocalKey = `press_writer_${initialTourney.id}_group_${groupedTeams(initialTourney.teams||[], teamIdx)[0]}`;
   const course    = COURSES[tourney.course_id || "south-toledo"];
   const holeData  = course?.holes[currentHole - 1];
   const isLastHole= currentHole === (course?.holes?.length || 18);
@@ -222,7 +224,7 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
   async function claimWriterToken(token){
     const{data:current}=await sb.from("team_tournaments").select("teams").eq("id",tourney.id).single();
     if(!current) return false;
-    const grp=foursomeTeams(current.teams||[], teamIdx); // PG-GROUPS-2026-10-30: claim the whole 4some, not just one team
+    const grp=groupedTeams(current.teams||[], teamIdx); // PG-GROUPS-2026-10-30: claim the whole 4some, not just one team
     const updatedTeams=(current.teams||[]).map((t,i)=>
       grp.includes(i) ? {...t, writer_token: token} : t
     );
@@ -257,7 +259,7 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
     if(readOnlyMode) return false;
     try{
       const{data}=await sb.from("team_tournaments").select("teams").eq("id",tourney.id).single();
-      const grp=foursomeTeams(data?.teams||[], teamIdx); // PG-GROUPS-2026-10-30
+      const grp=groupedTeams(data?.teams||[], teamIdx); // PG-GROUPS-2026-10-30
       const tokens=grp.map(i=>(data?.teams||[])[i]?.writer_token||null);
       const myClaim=localStorage.getItem(groupLocalKey)||localStorage.getItem(localKey);
       if(myClaim&&tokens.filter(Boolean).every(t=>t===myClaim)){ localStorage.setItem(groupLocalKey,myClaim); isWriter.current=true; return true; }
@@ -338,7 +340,7 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
       const dbTeams=current?.teams||teamsToSave;
       // Preserve the slot's writer_token — the captain's local team copy may
       // predate the claim, and saving scores must not erase the lock.
-      const grpFlush=foursomeTeams(teamsToSave, teamIdx); const safeTeams=dbTeams.map((t,i)=>grpFlush.includes(i)?{...teamsToSave[i], writer_token: t.writer_token || teamsToSave[i].writer_token} : t);
+      const grpFlush=groupedTeams(teamsToSave, teamIdx); const safeTeams=dbTeams.map((t,i)=>grpFlush.includes(i)?{...teamsToSave[i], writer_token: t.writer_token || teamsToSave[i].writer_token} : t);
       const{error}=await sb.from("team_tournaments").update({teams:safeTeams,updated_at:new Date().toISOString()}).eq("id",tourney.id);
       if(error) throw error; // never report "saved" when the write failed (e.g. RLS)
       pendingTeams.current=null;
@@ -1006,7 +1008,7 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
           );
         })()}
 
-        {/* PG-GROUPS-2026-10-30: foursome scorecard — every player in this 4some, on one hole screen */}
+        {/* PG-GROUPCHECK-2026-10-30: score-together card — checked teams in a row, on one hole screen */}
         {groupTeams.map(ti=>{
           const gteam=(tourney.teams||[])[ti]; if(!gteam) return null;
           const bbpG=tourney.ball_count_by_par||{3:2,4:2,5:2};
@@ -1019,7 +1021,7 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
                 <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10,marginTop:ti!==teamIdx?14:0}}>
                   <div style={{width:12,height:12,borderRadius:"50%",background:gteam.color,flexShrink:0}}/>
                   <div style={{fontWeight:800,fontSize:15}}>{gteam.name}</div>
-                  <div style={{fontSize:11,color:C.muted}}>⛳ Foursome {(gteam.foursome??Math.floor(ti/2))+1}</div>
+                  <div style={{fontSize:11,color:C.muted}}>⛳ Score together</div>
                 </div>
               )}
               {Array.from({length:gteam.size||4},(_,j)=>{
