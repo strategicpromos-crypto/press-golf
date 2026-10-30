@@ -706,14 +706,16 @@ export default function TeamTournament({onBack, user, onDelete}){
   }
 
 
-  // PG-GROUPCHECK-2026-10-30: score-together checkmark, nothing else.
-  // Checked teams in a row share one scorecard. Unchecked teams are always on their own —
-  // no automatic pairing, no matter what order the teams are in.
+  // PG-CARDGROUP-2026-10-30: scorecard number box, nothing else.
+  // Blank = this team scores alone. Same number = same scorecard. Different number = a different card.
+  function cardKey(t){
+    if(!t||t.card==null) return null;
+    const s=String(t.card).trim(); if(!s) return null;
+    if(/^\d+$/.test(s)) return String(parseInt(s,10)); return s;
+  }
   function groupedTeams(list, idx){
-    const t=list[idx]; if(!t||!t.groupTogether) return [idx];
-    let start=idx; while(start>0&&list[start-1].groupTogether) start--;
-    let end=idx; while(end+1<list.length&&list[end+1].groupTogether) end++;
-    const out=[]; for(let i=start;i<=end;i++) out.push(i); return out;
+    const k=cardKey(list[idx]); if(k===null) return [idx];
+    const out=[]; list.forEach((t,i)=>{ if(cardKey(t)===k) out.push(i); }); return out;
   }
   function updateTeam(idx,patch){setTeams(prev=>prev.map((t,i)=>i===idx?{...t,...patch}:t));}
 
@@ -1340,11 +1342,12 @@ export default function TeamTournament({onBack, user, onDelete}){
                 <input value={team.name} onChange={e=>updateTeam(i,{name:e.target.value})} placeholder={"Team "+(i+1)}
                   style={{flex:1,padding:"10px",background:C.surface,border:"1px solid "+C.border,borderRadius:8,color:C.text,fontSize:15,outline:"none",fontWeight:700}}/>
               </div>
-              <button onClick={()=>updateTeam(i,{groupTogether:!team.groupTogether})} style={{display:"flex",alignItems:"center",gap:10,width:"100%",padding:"10px 12px",marginBottom:12,background:team.groupTogether?"rgba(123,180,80,0.12)":"transparent",border:"1px solid "+(team.groupTogether?C.green:C.border),borderRadius:10,cursor:"pointer",textAlign:"left"}}>
-                <span style={{width:26,height:26,borderRadius:6,border:"2px solid "+(team.groupTogether?C.green:C.muted),background:team.groupTogether?C.green:"transparent",color:"#0a1a0f",fontWeight:800,fontSize:16,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{team.groupTogether?"✓":""}</span>
-                <span style={{fontSize:13,fontWeight:700,color:team.groupTogether?C.green:C.text}}>⛳ Score together</span>
-                <span style={{fontSize:11,color:C.muted}}>— check teams that share one scorecard</span>
-              </button>
+              <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
+                <span style={{fontSize:13,fontWeight:700,flexShrink:0}}>⛳ Scorecard</span>
+                <input value={team.card??""} onChange={e=>updateTeam(i,{card:e.target.value})} placeholder="Blank = own card"
+                  style={{width:110,flexShrink:0,padding:"10px 12px",background:C.surface,border:"1px solid "+C.border,borderRadius:8,color:C.text,fontSize:14,outline:"none",textAlign:"center"}}/>
+                <span style={{fontSize:11,color:C.muted}}>Same number = same card</span>
+              </div>
               <div style={{marginBottom:10}}>
                 <NumStepper label={team.size===1?"Players on team (Individual)":"Players on team"} value={team.size} min={1} max={6} onChange={size=>{
                   const players=Array.from({length:size},(_,j)=>team.players[j]||"");
@@ -1602,7 +1605,7 @@ export default function TeamTournament({onBack, user, onDelete}){
             </div>
           )}
 
-          {/* PG-GROUPCHECK-2026-10-30: score-together card — checked teams in a row, on one hole screen */}
+          {/* PG-CARDGROUP-2026-10-30: scorecard-number card — same number, one hole screen */}
           {groupedTeams(teams,activeTeam).map(ti=>{
             const gteam=teams[ti]; if(!gteam) return null;
             const gHoleScores=Array.from({length:gteam.size},(_,j)=>({j,s:getPlayerScore(gteam,j,currentHole)})).filter(x=>x.s!==null).sort((a,b)=>a.s-b.s);
@@ -1616,7 +1619,7 @@ export default function TeamTournament({onBack, user, onDelete}){
                     <div style={{width:12,height:12,borderRadius:"50%",background:gteam.color,flexShrink:0}}/>
                     <div style={{fontWeight:800,fontSize:15}}>{gteam.name}</div>
                     <div style={{fontSize:12,color:gSc.total===0?C.muted:relColor(gSc.totalDiff),fontWeight:800}}>{gSc.total===0?"--":relLabel(gSc.totalDiff)}</div>
-                    <div style={{fontSize:11,color:C.muted}}>⛳ Score together</div>
+                    <div style={{fontSize:11,color:C.muted}}>⛳ Scorecard {cardKey(gteam)??""}</div>
                   </div>
                 )}
                 {Array.from({length:gteam.size},(_,j)=>{
@@ -2138,12 +2141,12 @@ export default function TeamTournament({onBack, user, onDelete}){
                       <input value={team.name||""} onChange={e=>updateTeam(i,{name:e.target.value})}
                         style={{flex:1,minWidth:0,boxSizing:"border-box",padding:"9px 12px",background:C.surface,border:"1px solid "+C.border,borderRadius:8,color:C.text,fontSize:14,fontWeight:700,outline:"none"}}/>
                     </div>
-                    <button onClick={()=>updateTeam(i,{groupTogether:!team.groupTogether})} style={{display:"flex",alignItems:"center",gap:10,width:"100%",padding:"10px 12px",marginBottom:10,background:team.groupTogether?"rgba(123,180,80,0.12)":"transparent",border:"1px solid "+(team.groupTogether?C.green:C.border),borderRadius:10,cursor:"pointer",textAlign:"left"}}>
-                      <span style={{width:26,height:26,borderRadius:6,border:"2px solid "+(team.groupTogether?C.green:C.muted),background:team.groupTogether?C.green:"transparent",color:"#0a1a0f",fontWeight:800,fontSize:16,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{team.groupTogether?"✓":""}</span>
-                      <span style={{fontSize:13,fontWeight:700,color:team.groupTogether?C.green:C.text}}>⛳ Score together</span>
-                      <span style={{fontSize:11,color:C.muted}}>— check teams that share one scorecard</span>
-                    </button>
-
+                    <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
+                      <span style={{fontSize:13,fontWeight:700,flexShrink:0}}>⛳ Scorecard</span>
+                      <input value={team.card??""} onChange={e=>updateTeam(i,{card:e.target.value})} placeholder="Blank = own card"
+                        style={{width:110,flexShrink:0,padding:"10px 12px",background:C.surface,border:"1px solid "+C.border,borderRadius:8,color:C.text,fontSize:14,outline:"none",textAlign:"center"}}/>
+                      <span style={{fontSize:11,color:C.muted}}>Same number = same card</span>
+                    </div>
                     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
                       {/* Team size */}
                       <div style={{background:C.surface,borderRadius:10,padding:"10px 12px"}}>
