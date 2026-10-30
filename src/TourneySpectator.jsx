@@ -44,7 +44,25 @@ function calcTeamScore(teamScores,teamSize,holeData,birdieBonus,ballsByPar,holeP
     total+=raw;
   }
   const totalPar=frontPar+backPar;
-  return{byHole,front,frontDiff:front-frontPar,back,backDiff:back-backPar,total,totalDiff:total-totalPar};
+  const pods=[[1,6],[7,12],[13,18]].map(([lo,hi])=>{let raw=0,diff=0,scored=0;for(const h of holeData){if(h.hole<lo||h.hole>hi)continue;const hd=byHole[h.hole];if(!hd||!hd.scored)continue;raw+=hd.raw;diff+=hd.diff;scored++;}return{lo,hi,raw,diff,scored,complete:scored===6};});
+  return{byHole,front,frontDiff:front-frontPar,back,backDiff:back-backPar,total,totalDiff:total-totalPar,pods,podDiffs:pods.map(p=>p.diff)};
+}
+
+// PG-PODS-2026-10-30: pod winners are TEAM scores only (never individual scores).
+// A pod winner is the lowest score-to-par among teams that finished that pod;
+// if no team finished it yet, the lowest scored team is shown as leading.
+function podWinners(board,idx){
+  const all=(board||[]).map(t=>({name:t.name||("Team "+(t.i!==undefined?t.i+1:"?")),diff:t.sc.pods[idx].diff,raw:t.sc.pods[idx].raw,complete:t.sc.pods[idx].complete}));
+  const complete=all.filter(p=>p.complete);
+  const pool=complete.length?complete:all.filter(p=>p.raw>0);
+  if(!pool.length)return null;
+  const min=Math.min(...pool.map(p=>p.diff));
+  return{names:pool.filter(p=>p.diff===min).map(p=>p.name),diff:min,complete:complete.length>0};
+}
+function podWinnerText(w){
+  if(!w)return "—";
+  const d=w.diff===0?"E":w.diff>0?("+"+w.diff):String(w.diff);
+  return w.names.join(" / ")+" ("+d+(w.complete?"":", leading")+ ")";
 }
 
 export default function TourneySpectator({ tourney: initialTourney, onBack }) {
@@ -110,9 +128,20 @@ export default function TourneySpectator({ tourney: initialTourney, onBack }) {
         {tab==="board"&&(
           <>
             {/* Column headers */}
+            {(tourney.pods_enabled===true)&&(
+              <div style={{ background:C.card, border:"1px solid "+C.gold+"44", borderRadius:14, padding:"14px", marginBottom:12 }}>
+                <div style={{ fontSize:11, color:C.gold, letterSpacing:1.5, textTransform:"uppercase", marginBottom:8, fontWeight:600 }}>🏆 Pod Winners · score-to-par · team scores only</div>
+                {[["Pod 1 · holes 1–6",0],["Pod 2 · holes 7–12",1],["Pod 3 · holes 13–18",2]].map(([lbl,idx])=>(
+                  <div key={lbl} style={{ display:"flex", justifyContent:"space-between", fontSize:13, padding:"4px 0" }}>
+                    <span style={{ color:C.muted }}>{lbl}</span>
+                    <span style={{ fontWeight:800 }}>{podWinnerText(podWinners(board,idx))}</span>
+                  </div>
+                ))}
+              </div>
+            )}
             <div style={{ display:"flex", padding:"4px 14px", marginBottom:6 }}>
               <div style={{ flex:1, fontSize:10, color:C.muted, letterSpacing:1.5, textTransform:"uppercase" }}>Team</div>
-              {["F9","B9","TOT"].map(l=><div key={l} style={{ width:44, textAlign:"center", fontSize:10, color:C.muted, letterSpacing:1, textTransform:"uppercase" }}>{l}</div>)}
+              {(tourney.pods_enabled===true?["P1","P2","P3","TOT"]:["F9","B9","TOT"]).map(l=><div key={l} style={{ width:44, textAlign:"center", fontSize:10, color:C.muted, letterSpacing:1, textTransform:"uppercase" }}>{l}</div>)}
             </div>
 
             {board.map((team,rank)=>(
@@ -128,7 +157,7 @@ export default function TourneySpectator({ tourney: initialTourney, onBack }) {
                       {team.players?.filter(Boolean).join(" · ")||"—"}
                     </div>
                   </div>
-                  {[team.sc.frontDiff,team.sc.backDiff,team.sc.totalDiff].map((d,i)=>(
+                  {(tourney.pods_enabled===true?[team.sc.podDiffs[0],team.sc.podDiffs[1],team.sc.podDiffs[2],team.sc.totalDiff]:[team.sc.frontDiff,team.sc.backDiff,team.sc.totalDiff]).map((d,i)=>(
                     <div key={i} style={{ width:44,textAlign:"center",fontWeight:800,fontSize:16,color:team.sc.total===0?C.muted:relColor(d) }}>{team.sc.total===0?"—":relLabel(d)}</div>
                   ))}
                 </div>
