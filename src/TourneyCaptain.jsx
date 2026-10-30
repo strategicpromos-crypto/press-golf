@@ -82,13 +82,17 @@ function podWinnerText(w){
 
 
 
-// PG-GROUPCHECK-2026-10-30: score-together checkmark, nothing else.
-// Checked teams in a row share one scorecard. Unchecked teams are always on their own.
+
+// PG-CARDGROUP-2026-10-30: scorecard number box, nothing else.
+// Blank = this team scores alone. Same number = same scorecard. Different number = a different card.
+function cardKey(t){
+  if(!t||t.card==null) return null;
+  const s=String(t.card).trim(); if(!s) return null;
+  if(/^\d+$/.test(s)) return String(parseInt(s,10)); return s;
+}
 function groupedTeams(list, idx){
-  const t=list[idx]; if(!t||!t.groupTogether) return [idx];
-  let start=idx; while(start>0&&list[start-1].groupTogether) start--;
-  let end=idx; while(end+1<list.length&&list[end+1].groupTogether) end++;
-  const out=[]; for(let i=start;i<=end;i++) out.push(i); return out;
+  const k=cardKey(list[idx]); if(k===null) return [idx];
+  const out=[]; list.forEach((t,i)=>{ if(cardKey(t)===k) out.push(i); }); return out;
 }
 
 export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBack }) {
@@ -154,7 +158,7 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
 
   const team      = (tourney.teams || [])[teamIdx];
   const groupTeams  = groupedTeams(tourney.teams||[], teamIdx); // PG-GROUPS-2026-10-30
-  const groupLocalKey = `press_writer_${initialTourney.id}_group_${groupedTeams(initialTourney.teams||[], teamIdx)[0]}`;
+  const groupLocalKey = `press_writer_${initialTourney.id}_card_${cardKey((initialTourney.teams||[])[teamIdx]) ?? ("team"+teamIdx)}`;
   const course    = COURSES[tourney.course_id || "south-toledo"];
   const holeData  = course?.holes[currentHole - 1];
   const isLastHole= currentHole === (course?.holes?.length || 18);
@@ -1008,7 +1012,7 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
           );
         })()}
 
-        {/* PG-GROUPCHECK-2026-10-30: score-together card — checked teams in a row, on one hole screen */}
+        {/* PG-CARDGROUP-2026-10-30: scorecard-number card — same number, one hole screen */}
         {groupTeams.map(ti=>{
           const gteam=(tourney.teams||[])[ti]; if(!gteam) return null;
           const bbpG=tourney.ball_count_by_par||{3:2,4:2,5:2};
@@ -1021,7 +1025,7 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
                 <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10,marginTop:ti!==teamIdx?14:0}}>
                   <div style={{width:12,height:12,borderRadius:"50%",background:gteam.color,flexShrink:0}}/>
                   <div style={{fontWeight:800,fontSize:15}}>{gteam.name}</div>
-                  <div style={{fontSize:11,color:C.muted}}>⛳ Score together</div>
+                  <div style={{fontSize:11,color:C.muted}}>⛳ Scorecard {cardKey(gteam)??""}</div>
                 </div>
               )}
               {Array.from({length:gteam.size||4},(_,j)=>{
