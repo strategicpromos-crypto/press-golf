@@ -278,6 +278,8 @@ export default function TeamTournament({onBack, user, onDelete}){
   const[bigBoyEnabled,setBigBoyEnabled]=useState(false);
   const[netSkinsEnabled,setNetSkinsEnabled]=useState(false); // PG-NETSKINS-2026-10-29: parallel net pot, gross untouched
   const[podsEnabled,setPodsEnabled]=useState(false); // PG-PODS-2026-10-30: 6-hole pod winners, team scores only, no money yet
+  const[fsNames,setFsNames]=useState(["","","",""]); // PG-GROUPS-2026-10-30: foursome builder — 4 players in a set 4some
+  const[fsPick,setFsPick]=useState([]); // indices (0-3) tapped to make the first 2-man team; the other 2 are the second team
   const[teammatesTie,setTeammatesTie]=useState(false); // false=teammates don't cancel skin, true=stricter
   const[ctpEnabled,setCtpEnabled]=useState(false);
   const[ctpHoles,setCtpHoles]=useState([]);          // hole numbers designated as CTP
@@ -703,6 +705,30 @@ export default function TeamTournament({onBack, user, onDelete}){
       id:i,name:"Team "+(i+1),color:TEAM_COLORS[i%TEAM_COLORS.length],
       size:2,players:["",""],strokesPerSide:0,scores:{}
     });
+  }
+
+
+  // PG-GROUPS-2026-10-30: foursome-first. A team carries foursome = its 4some index.
+  // Old tournaments have no foursome field — fall back to consecutive pairs (1+2, 3+4),
+  // which is how foursomes are normally listed, so group scorecards still work for them.
+  function foursomeTeamsFor(list, idx){
+    const t=list[idx]; if(!t) return [idx];
+    if(typeof t.foursome==="number") return list.map((_,i)=>i).filter(i=>list[i].foursome===t.foursome);
+    const base=Math.floor(idx/2)*2; const out=[base]; if(list[base+1]) out.push(base+1); return out;
+  }
+  function addFoursome(){
+    const names=fsNames.map(s=>(s||"").trim());
+    if(names.some(n=>!n)||fsPick.length!==2) return;
+    const rest=[0,1,2,3].filter(i=>!fsPick.includes(i));
+    const nextFoursome=teams.length?Math.max(...teams.map(t=>typeof t.foursome==="number"?t.foursome:-1))+1:0;
+    const baseId=Math.max(-1,...teams.map(t=>t.id??-1))+1;
+    const mk=(players,offset)=>{
+      let n=teams.length+offset+1; while(teams.some(tm=>tm.name==="Team "+n)) n++;
+      return{id:baseId+offset,name:"Team "+n,color:TEAM_COLORS[(teams.length+offset)%TEAM_COLORS.length],size:2,players,strokesPerSide:0,scores:{},foursome:nextFoursome};
+    };
+    setTeams(prev=>[...prev,mk(fsPick.map(i=>names[i]),0),mk(rest.map(i=>names[i]),1)]);
+    setNumTeams(prev=>prev+2);
+    setFsNames(["","","",""]); setFsPick([]);
   }
 
   function updateTeam(idx,patch){setTeams(prev=>prev.map((t,i)=>i===idx?{...t,...patch}:t));}
@@ -1312,6 +1338,33 @@ export default function TeamTournament({onBack, user, onDelete}){
             </div>
           </div>
 
+          {/* PG-GROUPS-2026-10-30: Foursomes first — enter a set 4some, tap 2 to make one team, the other 2 are the second team */}
+          <div style={{background:C.card,border:"1px solid "+C.border,borderRadius:12,padding:"14px 16px",marginBottom:16}}>
+            <div style={{fontWeight:700,fontSize:15,marginBottom:4}}>⛳ Foursomes — split a 4some into its 2 teams</div>
+            <div style={{fontSize:11,color:C.muted,marginBottom:12}}>Your 4somes are already set. Enter the 4 players in a 4some, tap 2 of them to make the first team — the other 2 automatically become the second team. Both teams appear in the Teams list below, and that 4some gets one scorecard.</div>
+            {fsNames.map((nm,i)=>(
+              <div key={i} style={{display:"flex",gap:8,marginBottom:8,alignItems:"center"}}>
+                <input value={nm} onChange={e=>setFsNames(prev=>prev.map((v,j)=>j===i?e.target.value:v))} placeholder={"Player "+(i+1)}
+                  style={{flex:1,minWidth:0,boxSizing:"border-box",padding:"10px 12px",background:C.bg,border:"1px solid "+C.border,borderRadius:8,color:C.text,fontSize:14,outline:"none"}}/>
+                <button onClick={()=>setFsPick(prev=>prev.includes(i)?prev.filter(x=>x!==i):prev.length<2?[...prev,i]:prev)}
+                  style={{padding:"10px 12px",borderRadius:8,border:"1px solid "+(fsPick.includes(i)?C.green:C.border),background:fsPick.includes(i)?C.green:"transparent",color:fsPick.includes(i)?"#0a1a0f":C.muted,fontSize:12,fontWeight:800,cursor:"pointer",flexShrink:0}}>
+                  {fsPick.includes(i)?"✓ Team 1":"Tap for Team 1"}
+                </button>
+              </div>
+            ))}
+            {fsNames.every(n=>n.trim())&&fsPick.length===2&&(
+              <div style={{fontSize:12,color:C.muted,marginBottom:10,lineHeight:1.6}}>
+                Team 1: <b style={{color:C.text}}>{fsPick.map(i=>fsNames[i].trim()).join(" + ")}</b><br/>
+                Team 2: <b style={{color:C.text}}>{[0,1,2,3].filter(i=>!fsPick.includes(i)).map(i=>fsNames[i].trim()).join(" + ")}</b>
+              </div>
+            )}
+            <button onClick={addFoursome} disabled={fsNames.some(n=>!n.trim())||fsPick.length!==2}
+              style={{width:"100%",padding:"14px",borderRadius:12,border:"none",background:(fsNames.some(n=>!n.trim())||fsPick.length!==2)?C.dim:C.green,color:(fsNames.some(n=>!n.trim())||fsPick.length!==2)?C.muted:"#0a1a0f",fontSize:14,fontWeight:800,cursor:(fsNames.some(n=>!n.trim())||fsPick.length!==2)?"not-allowed":"pointer"}}>
+              + Add this 4some as 2 teams
+            </button>
+            {fsPick.length>=2&&<div style={{fontSize:11,color:C.muted,marginTop:8,textAlign:"center"}}>To change a pick, tap a picked player to untap them first.</div>}
+          </div>
+
           {/* Num teams */}
           <div style={{background:C.card,border:"1px solid "+C.border,borderRadius:12,padding:"14px 16px",marginBottom:16}}>
             <Lbl>Number of Teams</Lbl>
@@ -1587,35 +1640,51 @@ export default function TeamTournament({onBack, user, onDelete}){
             </div>
           )}
 
-          {/* Player entries */}
-          {Array.from({length:team.size},(_,j)=>{
-            const score=getPlayerScore(team,j,currentHole);
-            const isBest=best2Set.has(j)&&score!==null;
-            const diff=score!==null?score-effPar:null;
-
+          {/* PG-GROUPS-2026-10-30: foursome scorecard — every team in this 4some, on one hole screen */}
+          {foursomeTeamsFor(teams,activeTeam).map(ti=>{
+            const gteam=teams[ti]; if(!gteam) return null;
+            const gHoleScores=Array.from({length:gteam.size},(_,j)=>({j,s:getPlayerScore(gteam,j,currentHole)})).filter(x=>x.s!==null).sort((a,b)=>a.s-b.s);
+            const gBest=new Set(gHoleScores.slice(0,ballsThisHole).map(x=>x.j));
+            const gSc=calcTeamScore(gteam.scores,gteam.size,course.holes,birdieBonus,ballsByPar,holePars);
+            const groupSize=foursomeTeamsFor(teams,activeTeam).length;
             return(
-              <div key={j} style={{background:isBest?"rgba(123,180,80,0.08)":C.card,border:"1px solid "+(isBest?C.green:C.border),borderRadius:14,padding:"12px 14px",marginBottom:10}}>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-                  <div>
-                    <span style={{fontWeight:700,fontSize:15}}>{team.players[j]||"Player "+(j+1)}</span>
-                    {isBest&&<span style={{fontSize:10,color:C.green,fontWeight:700,marginLeft:8}}>✓ COUNTS</span>}
-
+              <div key={ti}>
+                {groupSize>1&&(
+                  <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10,marginTop:ti!==activeTeam?14:0}}>
+                    <div style={{width:12,height:12,borderRadius:"50%",background:gteam.color,flexShrink:0}}/>
+                    <div style={{fontWeight:800,fontSize:15}}>{gteam.name}</div>
+                    <div style={{fontSize:12,color:gSc.total===0?C.muted:relColor(gSc.totalDiff),fontWeight:800}}>{gSc.total===0?"--":relLabel(gSc.totalDiff)}</div>
+                    <div style={{fontSize:11,color:C.muted}}>⛳ Foursome {(gteam.foursome??Math.floor(ti/2))+1}</div>
                   </div>
-                  <div style={{display:"flex",alignItems:"center",gap:8}}>
-                    {diff!==null&&<div style={{fontSize:14,fontWeight:800,color:relColor(diff)}}>{relLabel(diff)}{diff<=-1?"  (birdie)":""}</div>}
-
-                  </div>
-                </div>
-                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
-                  <button onClick={()=>setPlayerScore(activeTeam,j,currentHole,score!==null?Math.max(1,score-1):effPar-1)}
-                    style={{width:56,height:56,borderRadius:"50%",background:C.dim,border:"1px solid "+C.border,color:C.text,fontSize:30,fontWeight:700,cursor:"pointer"}}>−</button>
-                  <div style={{flex:1,textAlign:"center"}}>
-                    <div style={{fontSize:56,fontWeight:800,color:score!==null?C.text:C.muted,lineHeight:1}}>{score!==null?score:"--"}</div>
-                    {score===null&&<div style={{fontSize:11,color:C.muted,marginTop:4}}>tap + to enter</div>}
-                  </div>
-                  <button onClick={()=>setPlayerScore(activeTeam,j,currentHole,score!==null?score+1:effPar)}
-                    style={{width:56,height:56,borderRadius:"50%",background:C.dim,border:"1px solid "+C.border,color:C.text,fontSize:30,fontWeight:700,cursor:"pointer"}}>+</button>
-                </div>
+                )}
+                {Array.from({length:gteam.size},(_,j)=>{
+                  const score=getPlayerScore(gteam,j,currentHole);
+                  const isBest=gBest.has(j)&&score!==null;
+                  const diff=score!==null?score-effPar:null;
+                  return(
+                    <div key={j} style={{background:isBest?"rgba(123,180,80,0.08)":C.card,border:"1px solid "+(isBest?C.green:C.border),borderRadius:14,padding:"12px 14px",marginBottom:10}}>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                        <div>
+                          <span style={{fontWeight:700,fontSize:15}}>{gteam.players[j]||"Player "+(j+1)}</span>
+                          {isBest&&<span style={{fontSize:10,color:C.green,fontWeight:700,marginLeft:8}}>✓ COUNTS</span>}
+                        </div>
+                        <div style={{display:"flex",alignItems:"center",gap:8}}>
+                          {diff!==null&&<div style={{fontSize:14,fontWeight:800,color:relColor(diff)}}>{relLabel(diff)}{diff<=-1?"  (birdie)":""}</div>}
+                        </div>
+                      </div>
+                      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
+                        <button onClick={()=>setPlayerScore(ti,j,currentHole,score!==null?Math.max(1,score-1):effPar-1)}
+                          style={{width:56,height:56,borderRadius:"50%",background:C.dim,border:"1px solid "+C.border,color:C.text,fontSize:30,fontWeight:700,cursor:"pointer"}}>−</button>
+                        <div style={{flex:1,textAlign:"center"}}>
+                          <div style={{fontSize:56,fontWeight:800,color:score!==null?C.text:C.muted,lineHeight:1}}>{score!==null?score:"--"}</div>
+                          {score===null&&<div style={{fontSize:11,color:C.muted,marginTop:4}}>tap + to enter</div>}
+                        </div>
+                        <button onClick={()=>setPlayerScore(ti,j,currentHole,score!==null?score+1:effPar)}
+                          style={{width:56,height:56,borderRadius:"50%",background:C.dim,border:"1px solid "+C.border,color:C.text,fontSize:30,fontWeight:700,cursor:"pointer"}}>+</button>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             );
           })}
@@ -2108,6 +2177,9 @@ export default function TeamTournament({onBack, user, onDelete}){
                         style={{flex:1,minWidth:0,boxSizing:"border-box",padding:"9px 12px",background:C.surface,border:"1px solid "+C.border,borderRadius:8,color:C.text,fontSize:14,fontWeight:700,outline:"none"}}/>
                     </div>
 
+                    {typeof team.foursome==="number"&&(
+                      <div style={{fontSize:11,color:C.muted,marginBottom:10}}>⛳ Foursome {team.foursome+1}{teams.filter((t,idx)=>idx!==i&&t.foursome===team.foursome).length?(" · with "+teams.filter((t,idx)=>idx!==i&&t.foursome===team.foursome).map(t=>t.name||"Team").join(" + ")):""}</div>
+                    )}
                     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
                       {/* Team size */}
                       <div style={{background:C.surface,borderRadius:10,padding:"10px 12px"}}>
