@@ -80,6 +80,15 @@ function podWinnerText(w){
   return w.names.join(" / ")+" ("+d+(w.complete?"":", leading")+ ")";
 }
 
+
+// PG-GROUPS-2026-10-30: foursome-first. Team carries foursome = its 4some index.
+// Old tournaments have no foursome field — fall back to consecutive pairs (1+2, 3+4).
+function foursomeTeams(list, idx){
+  const t=list[idx]; if(!t) return [idx];
+  if(typeof t.foursome==="number") return list.map((_,i)=>i).filter(i=>list[i].foursome===t.foursome);
+  const base=Math.floor(idx/2)*2; const out=[base]; if(list[base+1]) out.push(base+1); return out;
+}
+
 export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBack }) {
   const [tourney,      setTourney]      = useState(initialTourney);
   const [currentHole,  setCurrentHole]  = useState(initialTourney.current_hole||1);
@@ -142,6 +151,8 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
   const ctpLeaders  = tourney.ctp_leaders||{};
 
   const team      = (tourney.teams || [])[teamIdx];
+  const groupTeams  = foursomeTeams(tourney.teams||[], teamIdx); // PG-GROUPS-2026-10-30
+  const groupLocalKey = `press_writer_${initialTourney.id}_group_${(initialTourney.teams||[])[teamIdx]?.foursome ?? Math.floor(teamIdx/2)}`;
   const course    = COURSES[tourney.course_id || "south-toledo"];
   const holeData  = course?.holes[currentHole - 1];
   const isLastHole= currentHole === (course?.holes?.length || 18);
@@ -211,8 +222,9 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
   async function claimWriterToken(token){
     const{data:current}=await sb.from("team_tournaments").select("teams").eq("id",tourney.id).single();
     if(!current) return false;
+    const grp=foursomeTeams(current.teams||[], teamIdx); // PG-GROUPS-2026-10-30: claim the whole 4some, not just one team
     const updatedTeams=(current.teams||[]).map((t,i)=>
-      i===teamIdx ? {...t, writer_token: token} : t
+      grp.includes(i) ? {...t, writer_token: token} : t
     );
     const{error}=await sb.from("team_tournaments").update({
       teams: updatedTeams,
@@ -221,12 +233,14 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
     return !error;
   }
 
+
   // ── Reclaim — captain refreshed or PWA reset, localStorage gone ────────────
   async function reclaimWriter(){
     setClaiming(true);
     const newToken = Date.now().toString(36)+"_"+Math.random().toString(36).slice(2,6);
     const ok = await claimWriterToken(newToken);
     if(ok){
+      localStorage.setItem(groupLocalKey, newToken);
       localStorage.setItem(localKey, newToken);
       isWriter.current = true;
       setReadOnlyMode(false);
@@ -243,14 +257,18 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
     if(readOnlyMode) return false;
     try{
       const{data}=await sb.from("team_tournaments").select("teams").eq("id",tourney.id).single();
-      const sbToken=(data?.teams||[])[teamIdx]?.writer_token||null;
-      if(sbToken){ setReadOnlyMode(true); return false; } // someone claimed it first
-      const newToken=Date.now().toString(36)+"_"+Math.random().toString(36).slice(2,6);
-      const ok=await claimWriterToken(newToken);
-      if(ok){ localStorage.setItem(localKey,newToken); isWriter.current=true; return true; }
+      const grp=foursomeTeams(data?.teams||[], teamIdx); // PG-GROUPS-2026-10-30
+      const tokens=grp.map(i=>(data?.teams||[])[i]?.writer_token||null);
+      const myClaim=localStorage.getItem(groupLocalKey)||localStorage.getItem(localKey);
+      if(myClaim&&tokens.filter(Boolean).every(t=>t===myClaim)){ localStorage.setItem(groupLocalKey,myClaim); isWriter.current=true; return true; }
+      if(tokens.some(Boolean)){ setReadOnlyMode(true); return false; }
+      const newClaim=Date.now().toString(36)+"__"+Math.random().toString(36).slice(2,6);
+      const ok=await claimWriterToken(newClaim);
+      if(ok){ localStorage.setItem(groupLocalKey,newClaim); localStorage.setItem(localKey,newClaim); isWriter.current=true; return true; }
     }catch(e){}
     return false;
   }
+
 
   useEffect(()=>{
     async function initWriter(){
@@ -320,7 +338,7 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
       const dbTeams=current?.teams||teamsToSave;
       // Preserve the slot's writer_token — the captain's local team copy may
       // predate the claim, and saving scores must not erase the lock.
-      const safeTeams=dbTeams.map((t,i)=>i===teamIdx?{...teamsToSave[i],writer_token:(t.writer_token||teamsToSave[i]?.writer_token||undefined)}:t);
+      const grpFlush=foursomeTeams(teamsToSave, teamIdx); const safeTeams=dbTeams.map((t,i)=>grpFlush.includes(i)?{...teamsToSave[i], writer_token: t.writer_token || teamsToSave[i].writer_token} : t);
       const{error}=await sb.from("team_tournaments").update({teams:safeTeams,updated_at:new Date().toISOString()}).eq("id",tourney.id);
       if(error) throw error; // never report "saved" when the write failed (e.g. RLS)
       pendingTeams.current=null;
@@ -351,13 +369,21 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
   }
 
   function setPlayerScore(pi, hole, val) {
+    return setGroupPlayerScore(teamIdx, pi, hole, val);
+  }
+  function setGroupPlayerScore(ti, pi, hole, val) { // PG-GROUPS-2026-10-30: score any player in the 4some
     const updatedTeams = (tourney.teams || []).map((t, i) => {
-      if (i !== teamIdx) return t;
+      if (i !== ti) return t;
       return { ...t, scores: { ...t.scores, [pi]: { ...(t.scores[pi] || {}), [hole]: val } } };
     });
     setTourney(prev => ({ ...prev, teams: updatedTeams }));
     scheduleSync(updatedTeams);
   }
+  function getGroupPlayerScore(ti, pi, hole) {
+    const v = (tourney.teams||[])[ti]?.scores?.[pi]?.[hole];
+    return (v === undefined || v === null) ? null : safeInt(v);
+  }
+
 
   function updatePlayerName(pi, name) {
     const updatedTeams = (tourney.teams || []).map((t, i) => {
@@ -942,7 +968,7 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
         {/* Hole selector - scroll to any hole */}
         <div style={{ display:"flex", overflowX:"auto", gap:6, marginBottom:14, paddingBottom:4 }}>
           {course.holes.map(h=>{
-            const scored=Object.values(team.scores||{}).some(ps=>ps?.[h.hole]!==undefined);
+            const scored=groupTeams.some(ti=>Object.values((tourney.teams||[])[ti]?.scores||{}).some(ps=>ps?.[h.hole]!==undefined));
             return(
               <button key={h.hole} onClick={async()=>{
                 if(saveTimer.current) clearTimeout(saveTimer.current);
@@ -980,32 +1006,50 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
           );
         })()}
 
-        {/* Player scores */}
-        {Array.from({length:team.size||4},(_,j)=>{
-          const score=getPlayerScore(j,currentHole);
-          const isBest=best2Set.has(j)&&score!==null;
-          const diff=score!==null?score-effPar:null;
+        {/* PG-GROUPS-2026-10-30: foursome scorecard — every player in this 4some, on one hole screen */}
+        {groupTeams.map(ti=>{
+          const gteam=(tourney.teams||[])[ti]; if(!gteam) return null;
+          const bbpG=tourney.ball_count_by_par||{3:2,4:2,5:2};
+          const ballsHere=parseInt(bbpG[effPar])||2;
+          const gHoleScores=Array.from({length:gteam.size||4},(_,j)=>({j,s:getGroupPlayerScore(ti,j,currentHole)})).filter(x=>x.s!==null).sort((a,b)=>a.s-b.s);
+          const gBest=new Set(gHoleScores.slice(0,ballsHere).map(x=>x.j));
           return(
-            <div key={j} style={{ background:isBest?"rgba(123,180,80,0.08)":C.card, border:`1px solid ${isBest?C.green:C.border}`, borderRadius:14, padding:"12px 14px", marginBottom:10 }}>
-              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
-                <div>
-                  <span style={{ fontWeight:700, fontSize:15 }}>{team.players?.[j]||"Player "+(j+1)}</span>
-                  {isBest&&<span style={{ fontSize:10, color:C.green, fontWeight:700, marginLeft:8 }}>COUNTS</span>}
+            <div key={ti}>
+              {groupTeams.length>1&&(
+                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10,marginTop:ti!==teamIdx?14:0}}>
+                  <div style={{width:12,height:12,borderRadius:"50%",background:gteam.color,flexShrink:0}}/>
+                  <div style={{fontWeight:800,fontSize:15}}>{gteam.name}</div>
+                  <div style={{fontSize:11,color:C.muted}}>⛳ Foursome {(gteam.foursome??Math.floor(ti/2))+1}</div>
                 </div>
-                <div style={{display:"flex",alignItems:"center",gap:8}}>
-                  {diff!==null&&<div style={{ fontSize:14, fontWeight:800, color:relColor(diff) }}>{relLabel(diff)}</div>}
-                </div>
-              </div>
-              <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:8 }}>
-                <button onClick={()=>!readOnlyMode&&setPlayerScore(j,currentHole,score!==null?Math.max(1,score-1):effPar-1)}
-                  style={{ width:56,height:56,borderRadius:"50%",background:C.dim,border:`1px solid ${C.border}`,color:readOnlyMode?C.dim:C.text,fontSize:30,fontWeight:700,cursor:readOnlyMode?"not-allowed":"pointer",opacity:readOnlyMode?0.4:1 }}>−</button>
-                <div style={{ flex:1,textAlign:"center" }}>
-                  <div style={{ fontSize:56,fontWeight:800,color:score!==null?C.text:C.muted,lineHeight:1,fontVariantNumeric:"tabular-nums" }}>{score!==null?score:"--"}</div>
-                  {score===null&&<div style={{ fontSize:11,color:C.muted,marginTop:4 }}>{readOnlyMode?"view only":"tap + to enter"}</div>}
-                </div>
-                <button onClick={()=>!readOnlyMode&&setPlayerScore(j,currentHole,score!==null?score+1:effPar)}
-                  style={{ width:56,height:56,borderRadius:"50%",background:C.dim,border:`1px solid ${C.border}`,color:readOnlyMode?C.dim:C.text,fontSize:30,fontWeight:700,cursor:readOnlyMode?"not-allowed":"pointer",opacity:readOnlyMode?0.4:1 }}>+</button>
-              </div>
+              )}
+              {Array.from({length:gteam.size||4},(_,j)=>{
+                const score=getGroupPlayerScore(ti,j,currentHole);
+                const isBest=gBest.has(j)&&score!==null;
+                const diff=score!==null?score-effPar:null;
+                return(
+                  <div key={j} style={{ background:isBest?"rgba(123,180,80,0.08)":C.card, border:`1px solid ${isBest?C.green:C.border}`, borderRadius:14, padding:"12px 14px", marginBottom:10 }}>
+                    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
+                      <div>
+                        <span style={{ fontWeight:700, fontSize:15 }}>{gteam.players?.[j]||"Player "+(j+1)}</span>
+                        {isBest&&<span style={{ fontSize:10, color:C.green, fontWeight:700, marginLeft:8 }}>COUNTS</span>}
+                      </div>
+                      <div style={{display:"flex",alignItems:"center",gap:8}}>
+                        {diff!==null&&<div style={{ fontSize:14, fontWeight:800, color:relColor(diff) }}>{relLabel(diff)}</div>}
+                      </div>
+                    </div>
+                    <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:8 }}>
+                      <button onClick={()=>!readOnlyMode&&setGroupPlayerScore(ti,j,currentHole,score!==null?Math.max(1,score-1):effPar-1)}
+                        style={{ width:56,height:56,borderRadius:"50%",background:C.dim,border:`1px solid ${C.border}`,color:readOnlyMode?C.dim:C.text,fontSize:30,fontWeight:700,cursor:readOnlyMode?"not-allowed":"pointer",opacity:readOnlyMode?0.4:1 }}>−</button>
+                      <div style={{ flex:1,textAlign:"center" }}>
+                        <div style={{ fontSize:56,fontWeight:800,color:score!==null?C.text:C.muted,lineHeight:1,fontVariantNumeric:"tabular-nums" }}>{score!==null?score:"--"}</div>
+                        {score===null&&<div style={{ fontSize:11,color:C.muted,marginTop:4 }}>{readOnlyMode?"view only":"tap + to enter"}</div>}
+                      </div>
+                      <button onClick={()=>!readOnlyMode&&setGroupPlayerScore(ti,j,currentHole,score!==null?score+1:effPar)}
+                        style={{ width:56,height:56,borderRadius:"50%",background:C.dim,border:`1px solid ${C.border}`,color:readOnlyMode?C.dim:C.text,fontSize:30,fontWeight:700,cursor:readOnlyMode?"not-allowed":"pointer",opacity:readOnlyMode?0.4:1 }}>+</button>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           );
         })}
