@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { getStrokeHoles, calcAutoPressNassau, calcSkins, courseHasHdcp } from "./golf.js";
 
 // ── TOURNAMENT SIDE BETS ─────────────────────────────────────────────────────
@@ -130,6 +130,9 @@ function amtColor(amt, C){
 // spectators omit it (read-only). canSetup swaps the empty-state hint so the
 // captain view doesn't tell captains to wait for the director.
 export function SideBetsTab({bets, teams, course, courseId, C, onDelete, canSetup}){
+  // PG-PGDIALOG-2026-10-31: in-app Press Golf confirm, not the browser's
+  // window.confirm (Android titles that with the site address).
+  const [pendingDelete, setPendingDelete] = useState(null);
   if(!bets||bets.length===0){
     return(
       <div style={{background:C.card,border:"1px solid "+C.border,borderRadius:14,padding:"20px",textAlign:"center"}}>
@@ -161,7 +164,7 @@ export function SideBetsTab({bets, teams, course, courseId, C, onDelete, canSetu
                 )}
               </div>
               {onDelete&&(
-                <button onClick={()=>{if(window.confirm("Remove this side bet? Scores are not affected."))onDelete(bet.id);}}
+                <button onClick={()=>setPendingDelete(bet.id)}
                   style={{background:"transparent",border:"1px solid "+C.red,color:C.red,fontSize:11,cursor:"pointer",padding:"6px 10px",borderRadius:8,flexShrink:0}}>✕ Remove</button>
               )}
             </div>
@@ -246,6 +249,20 @@ export function SideBetsTab({bets, teams, course, courseId, C, onDelete, canSetu
           </div>
         );
       })}
+      {pendingDelete!==null&&onDelete&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.65)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:9999,padding:20}} onClick={()=>setPendingDelete(null)}>
+          <div style={{background:C.card,border:"1px solid "+C.border,borderRadius:16,padding:22,width:"100%",maxWidth:340}} onClick={e=>e.stopPropagation()}>
+            <div style={{fontWeight:800,fontSize:18,marginBottom:10}}>⛳ Press Golf</div>
+            <div style={{fontSize:15,lineHeight:1.4,marginBottom:20}}>Remove this side bet? Scores are not affected.</div>
+            <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}>
+              <button onClick={()=>setPendingDelete(null)}
+                style={{background:C.surface,border:"1px solid "+C.border,color:C.text,fontSize:15,fontWeight:700,padding:"10px 20px",borderRadius:10,cursor:"pointer"}}>Cancel</button>
+              <button onClick={()=>{onDelete(pendingDelete); setPendingDelete(null);}}
+                style={{background:C.red,border:"1px solid "+C.red,color:"#fff",fontSize:15,fontWeight:700,padding:"10px 20px",borderRadius:10,cursor:"pointer"}}>Remove</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
