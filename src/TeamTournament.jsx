@@ -10,6 +10,7 @@ import { COURSES, courseHasHdcp } from "./golf.js";
 import { isLibraryCourse } from "./courseStore.js";
 import CourseSearch, { CourseDeletePanel } from "./CourseSearch.jsx";
 import { sb } from "./supabase.js";
+import { pgAlert } from "./PgDialog.js";
 import { calcSkins, SkinsTab, missingNetHdcp } from "./skins.jsx";
 import { SideBetsTab } from "./sideBets.jsx";
 import { RulesTab } from "./RulesTab.jsx";
@@ -736,12 +737,12 @@ export default function TeamTournament({onBack, user, onDelete}){
   // a manual press is a call made in person, and side-bet opponents may be in
   // different groups — Nassau presses on tournament side bets are auto only.
   function saveBet(){
-    if(!betA||!betB){ window.alert("Pick two players first."); return; }
-    if(betA===betB){ window.alert("Pick two different players."); return; }
+    if(!betA||!betB){ pgAlert("Pick two players first."); return; }
+    if(betA===betB){ pgAlert("Pick two different players."); return; }
     const parseRef=(v)=>{ const parts=v.split(":"); return {team:parseInt(parts[0],10),pi:parseInt(parts[1],10)}; };
     const count=betStrokesTo==="none"?0:betStrokesCount;
     const strokes=betStrokesTo==="B"?count:betStrokesTo==="A"?-count:0;
-    if(strokes!==0&&!courseHasHdcp(courseId)){ window.alert("This course has no handicap data, so strokes can't apply here. Add handicaps first (course picker → Search for a course… → Edit a saved course), or set strokes to No strokes."); return; }
+    if(strokes!==0&&!courseHasHdcp(courseId)){ pgAlert("This course has no handicap data, so strokes can't apply here. Add handicaps first (course picker → Search for a course… → Edit a saved course), or set strokes to No strokes."); return; }
     const bet={ id:"bet_"+Date.now()+"_"+Math.floor(Math.random()*1000),
       a:parseRef(betA), b:parseRef(betB), betType, betAmount,
       strokes, pressDown:betType==="nassau-press"?betPressDown:2, carryOver:betCarryOver };
