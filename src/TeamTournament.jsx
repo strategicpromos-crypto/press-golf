@@ -1,3 +1,4 @@
+// PG-LINKS-2026-10-31: links use window.location.origin, not hardcoded vercel.app.
 // PG-NETSKINS-2026-10-29
 // DELETEFIX-2026-10-28 (TeamTournament — delete no longer resurrects last team)
 // OUTINGTEAMS-2026-10-28 (TeamTournament — Add/Delete Team in Settings, full-width Player rows, no overflow)
@@ -1387,7 +1388,7 @@ export default function TeamTournament({onBack, user, onDelete}){
 
           {/* Share Panel — link based, no codes, no PINs */}
           {tourneyId&&(()=>{
-            const appUrl="https://press-golf.vercel.app";
+            const appUrl=window.location.origin;
             const spectatorLink=`${appUrl}?tourney=${tourneyId}&spectate=1`;
             return(
               <div style={{background:"rgba(123,180,80,0.06)",border:"1px solid rgba(123,180,80,0.2)",borderRadius:14,padding:"16px",marginBottom:16}}>
@@ -2206,7 +2207,7 @@ export default function TeamTournament({onBack, user, onDelete}){
                     {/* Resend captain link */}
                     {tourneyId&&(
                       <button onClick={()=>{
-                        const link=`https://press-golf.vercel.app?tourney=${tourneyId}&team=${i}`;
+                        const link=`${window.location.origin}?tourney=${tourneyId}&team=${i}`;
                         window.open(`sms:?&body=${encodeURIComponent(`⛳ ${team.name||"Team "+(i+1)} — tap to score:\n${link}\n\n— Press Golf`)}`);
                       }} style={{width:"100%",padding:"10px",background:"transparent",color:C.green,border:"1px solid "+C.green+"44",borderRadius:8,fontSize:12,fontWeight:700,cursor:"pointer"}}>
                         📱 Resend Captain Link
@@ -2254,13 +2255,13 @@ export default function TeamTournament({onBack, user, onDelete}){
                   <div style={{fontWeight:700,fontSize:14,marginBottom:8}}>👀 Spectator Leaderboard</div>
                   <div style={{display:"flex",gap:8}}>
                     <button onClick={()=>{
-                      const link=`https://press-golf.vercel.app?tourney=${tourneyId}&spectate=1`;
+                      const link=`${window.location.origin}?tourney=${tourneyId}&spectate=1`;
                       window.open(`sms:?&body=${encodeURIComponent(`Watch the tournament live!\n${link}`)}`);
                     }} style={{flex:2,padding:"11px",background:C.green,color:"#0a1a0f",border:"none",borderRadius:10,fontSize:13,fontWeight:800,cursor:"pointer"}}>
                       📱 Text Spectators
                     </button>
                     <button onClick={()=>{
-                      const link=`https://press-golf.vercel.app?tourney=${tourneyId}&spectate=1`;
+                      const link=`${window.location.origin}?tourney=${tourneyId}&spectate=1`;
                       navigator.clipboard?.writeText(link);
                     }} style={{flex:1,padding:"11px",background:"transparent",color:C.muted,border:"1px solid "+C.border,borderRadius:10,fontSize:12,cursor:"pointer"}}>
                       📋 Copy
