@@ -1,6 +1,7 @@
 // BUDDYPICKER-2026-10-28 (LiveRound — Selected card + Search button + tap list, no dropdown)
 import { useState, useEffect, useRef } from "react";
 import { sb } from "./supabase.js";
+import { pgConfirm } from "./PgDialog.js";
 import { COURSES, getStrokeHoles, calcAutoPressNassau, courseHasHdcp } from "./golf.js";
 import CourseSearch from "./CourseSearch.jsx";
 
@@ -806,8 +807,8 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
       <div style={{width:"100%",maxWidth:340,display:"flex",flexDirection:"column",gap:10}}>
         <BigBtn onClick={()=>{setResuming(false);setStep("playing");}}>Resume Round</BigBtn>
         <GhostBtn onClick={()=>{setResuming(false);setStep("summary");}}>Go to Summary</GhostBtn>
-        <GhostBtn onClick={()=>{
-          if(window.confirm("Are you sure you want to discard this round? All scores will be lost and cannot be recovered.")) {
+        <GhostBtn onClick={async()=>{
+          if(await pgConfirm("Are you sure you want to discard this round? All scores will be lost and cannot be recovered.","Discard")) {
             discardRound();
           }
         }} color={C.red}>Discard Round</GhostBtn>
