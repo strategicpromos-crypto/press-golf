@@ -4,6 +4,7 @@
 // TOURNAMENTS-PLURAL-2026-10-28 (App.jsx only)
 import React, { useState, useEffect, useCallback } from "react";
 import { sb } from "./supabase.js";
+import { pgConfirm } from "./PgDialog.js";
 import { loadStripe } from "https://esm.sh/@stripe/stripe-js@2";
 import LiveRound from "./LiveRound.jsx";
 import IndividualRound from "./IndividualRound.jsx";
@@ -1552,7 +1553,7 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
             ▶ Resume Scoring
           </button>
           <button onClick={async()=>{
-            if(window.confirm("Delete this round? All scores will be permanently removed.")){
+            if(await pgConfirm("Delete this round? All scores will be permanently removed.","Delete")){
               await sb.from("live_rounds").delete().eq("id",d.id);
               localStorage.removeItem(LIVE_KEY);
               setLiveSession(null);
@@ -1890,7 +1891,7 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
       <div style={{textAlign:"center",padding:"24px 0 6px",fontSize:11,color:C.muted}}>
         <button onClick={onPrivacy} style={{background:"none",border:"none",color:C.muted,fontSize:11,cursor:"pointer",textDecoration:"underline"}}>Privacy Policy & Terms</button>
         <div style={{marginTop:14}}>
-          <button onClick={()=>{if(window.confirm("Sign out? You will need your password to sign back in. Tap Cancel if you do not know it."))onSignOut();}} style={{background:"transparent",border:`1px solid ${C.border}`,color:C.muted,padding:"8px 20px",borderRadius:20,fontSize:12,fontWeight:600,cursor:"pointer"}}>Sign out</button>
+          <button onClick={async()=>{if(await pgConfirm("Sign out? You will need your password to sign back in. Tap Cancel if you do not know it.","Sign out"))onSignOut();}} style={{background:"transparent",border:`1px solid ${C.border}`,color:C.muted,padding:"8px 20px",borderRadius:20,fontSize:12,fontWeight:600,cursor:"pointer"}}>Sign out</button>
         </div>
       </div>
       <Toast msg={toast.msg} error={toast.error}/>
@@ -2140,7 +2141,7 @@ function Press({user,onSignOut,onPrivacy,onUpgrade,onShowProInfo,isPro,setIsPro}
             <LinkStatusPanel player={player} user={user} isPro={isPro} saving={saving}
               onGenerateInvite={generateInvite}
               onUnlink={async()=>{
-                if(!window.confirm("Unlink "+player.name+"?"))return;
+                if(!(await pgConfirm("Unlink "+player.name+"?","Unlink")))return;
                 await sb.from("players").update({linked_user_id:null,linked_email:null}).eq("id",player.id);
                 await sb.from("invites").update({accepted:false,invitee_id:null}).eq("player_id",player.id);
                 setPlayers(prev=>prev.map(p=>p.id===player.id?{...p,linked_user_id:null,linked_email:null}:p));
