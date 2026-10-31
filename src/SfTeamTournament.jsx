@@ -697,6 +697,17 @@ export default function SfTeamTournament({onBack, user, onDelete, resumeId}){
     });
   }
 
+  // PG-SFCARDGROUP-2026-10-31: scorecard number box, same as Outing.
+  // Blank = this team scores alone. Same number = same scorecard. Different number = a different card.
+  function cardKey(t){
+    if(!t||t.card==null) return null;
+    const s=String(t.card).trim(); if(!s) return null;
+    if(/^\d+$/.test(s)) return String(parseInt(s,10)); return s;
+  }
+  function groupedTeams(list, idx){
+    const k=cardKey(list[idx]); if(k===null) return [idx];
+    const out=[]; list.forEach((t,i)=>{ if(cardKey(t)===k) out.push(i); }); return out;
+  }
   function updateTeam(idx,patch){setTeams(prev=>prev.map((t,i)=>i===idx?{...t,...patch}:t));}
 
   function setPlayerScore(ti,pi,hole,val){
@@ -1342,6 +1353,12 @@ export default function SfTeamTournament({onBack, user, onDelete, resumeId}){
                 <input value={team.name} onChange={e=>updateTeam(i,{name:e.target.value})} placeholder={"Team "+(i+1)}
                   style={{flex:1,padding:"10px",background:C.surface,border:"1px solid "+C.border,borderRadius:8,color:C.text,fontSize:15,outline:"none",fontWeight:700}}/>
               </div>
+              <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
+                <span style={{fontSize:13,fontWeight:700,flexShrink:0}}>⛳ Scorecard</span>
+                <input value={team.card??""} onChange={e=>updateTeam(i,{card:e.target.value})} placeholder="Blank = own card"
+                  style={{width:110,flexShrink:0,padding:"10px 12px",background:C.surface,border:"1px solid "+C.border,borderRadius:8,color:C.text,fontSize:14,outline:"none",textAlign:"center"}}/>
+                <span style={{fontSize:11,color:C.muted}}>Same number = same card</span>
+              </div>
               <div style={{marginBottom:10}}>
                 <NumStepper label={team.size===1?"Players on team (Individual)":"Players on team"} value={team.size} min={1} max={6} onChange={size=>{
                   const players=Array.from({length:size},(_,j)=>team.players[j]||"");
@@ -1622,43 +1639,77 @@ export default function SfTeamTournament({onBack, user, onDelete, resumeId}){
             </div>
           </div>
 
-          {/* Player entries */}
-          {Array.from({length:team.size},(_,j)=>{
-            const score=getPlayerScore(team,j,currentHole);
-            const hdcp=team.hdcp?.[j]??12;
-            const pts=sfHolePoints(score,hdcp,holeData,course.holes,effPar,sfCfg.points,sfCfg.counting);
-            const isBest=sfCountSet.has(j)&&score!==null;
-
+          {/* PG-SFCARDGROUP-2026-10-31: scorecard groups — same number, one hole screen */}
+          {groupedTeams(teams,activeTeam).map(ti=>{
+            const gteam=teams[ti]; if(!gteam) return null;
+            const gsc=sfTeamPoints(gteam,course.holes,holePars,ballsByPar,sfCfg);
+            const gThisHolePts=Array.from({length:gteam.size},(_,j)=>({j,pts:sfHolePoints(getPlayerScore(gteam,j,currentHole),gteam.hdcp?.[j]??12,holeData,course.holes,effPar,sfCfg.points,sfCfg.counting)})).filter(x=>x.pts!==null).sort((a,b)=>b.pts-a.pts);
+            const gCountSet=new Set(gThisHolePts.slice(0,ballsThisHole).map(x=>x.j));
+            const gCounted=gThisHolePts.slice(0,ballsThisHole).reduce((s,x)=>s+x.pts,0);
+            const groupSize=groupedTeams(teams,activeTeam).length;
             return(
-              <div key={j} style={{background:isBest?"rgba(123,180,80,0.08)":C.card,border:"1px solid "+(isBest?C.green:C.border),borderRadius:14,padding:"12px 14px",marginBottom:10}}>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-                  <div>
-                    <span style={{fontWeight:700,fontSize:15}}>{team.players[j]||"Player "+(j+1)}</span>
-                    <span style={{fontSize:11,color:C.muted,marginLeft:8}}>HDCP {hdcp}</span>
-                    {isBest&&<span style={{fontSize:10,color:C.green,fontWeight:700,marginLeft:8}}>✓ COUNTS</span>}
-
+              <div key={ti}>
+                {groupSize>1&&(
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",background:C.card,border:"1px solid "+C.border,borderRadius:12,padding:"12px 16px",marginBottom:12,marginTop:ti!==activeTeam?14:0}}>
+                    <div style={{display:"flex",alignItems:"center",gap:8}}>
+                      <div style={{width:12,height:12,borderRadius:"50%",background:gteam.color}}/>
+                      <div style={{fontWeight:800,fontSize:16}}>{gteam.name}</div>
+                      <div style={{fontSize:11,color:C.muted}}>⛳ Scorecard {cardKey(gteam)??""}</div>
+                    </div>
+                    <div style={{display:"flex",gap:16}}>
+                      {[["F9",gsc.front],["B9",gsc.back],["Tot",gsc.total]].map(([lbl,pts])=>(
+                        <div key={lbl} style={{textAlign:"center"}}>
+                          <div style={{fontSize:10,color:C.muted}}>{lbl}</div>
+                          <div style={{fontSize:15,fontWeight:800,color:pts===0?C.muted:C.green}}>{pts} <span style={{fontSize:10}}>pts</span></div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                  <div style={{display:"flex",alignItems:"center",gap:8}}>
-                    {pts!==null&&<div style={{fontSize:14,fontWeight:800,color:C.green}}>{pts} pts</div>}
-
+                )}
+                {Array.from({length:gteam.size},(_,j)=>{
+                  const score=getPlayerScore(gteam,j,currentHole);
+                  const hdcp=gteam.hdcp?.[j]??12;
+                  const pts=sfHolePoints(score,hdcp,holeData,course.holes,effPar,sfCfg.points,sfCfg.counting);
+                  const isBest=gCountSet.has(j)&&score!==null;
+                  return(
+                  <div key={j} style={{background:isBest?"rgba(123,180,80,0.08)":C.card,border:"1px solid "+(isBest?C.green:C.border),borderRadius:14,padding:"12px 14px",marginBottom:10}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                      <div>
+                        <span style={{fontWeight:700,fontSize:15}}>{gteam.players[j]||"Player "+(j+1)}</span>
+                        <span style={{fontSize:11,color:C.muted,marginLeft:8}}>HDCP {hdcp}</span>
+                        {isBest&&<span style={{fontSize:10,color:C.green,fontWeight:700,marginLeft:8}}>✓ COUNTS</span>}
+                      </div>
+                      <div style={{display:"flex",alignItems:"center",gap:8}}>
+                        {pts!==null&&<div style={{fontSize:14,fontWeight:800,color:C.green}}>{pts} pts</div>}
+                      </div>
+                    </div>
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
+                      <button onClick={()=>setPlayerScore(ti,j,currentHole,score!==null?Math.max(1,score-1):effPar-1)}
+                        style={{width:56,height:56,borderRadius:"50%",background:C.dim,border:"1px solid "+C.border,color:C.text,fontSize:30,fontWeight:700,cursor:"pointer"}}>−</button>
+                      <div style={{flex:1,textAlign:"center"}}>
+                        <div style={{fontSize:56,fontWeight:800,color:score!==null?C.text:C.muted,lineHeight:1}}>{score!==null?score:"--"}</div>
+                        {score===null&&<div style={{fontSize:11,color:C.muted,marginTop:4}}>tap + to enter</div>}
+                      </div>
+                      <button onClick={()=>setPlayerScore(ti,j,currentHole,score!==null?score+1:effPar)}
+                        style={{width:56,height:56,borderRadius:"50%",background:C.dim,border:"1px solid "+C.border,color:C.text,fontSize:30,fontWeight:700,cursor:"pointer"}}>+</button>
+                    </div>
                   </div>
-                </div>
-                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
-                  <button onClick={()=>setPlayerScore(activeTeam,j,currentHole,score!==null?Math.max(1,score-1):effPar-1)}
-                    style={{width:56,height:56,borderRadius:"50%",background:C.dim,border:"1px solid "+C.border,color:C.text,fontSize:30,fontWeight:700,cursor:"pointer"}}>−</button>
-                  <div style={{flex:1,textAlign:"center"}}>
-                    <div style={{fontSize:56,fontWeight:800,color:score!==null?C.text:C.muted,lineHeight:1}}>{score!==null?score:"--"}</div>
-                    {score===null&&<div style={{fontSize:11,color:C.muted,marginTop:4}}>tap + to enter</div>}
+                  );
+                })}
+                {groupSize>1&&gThisHolePts.length>=1&&(
+                  <div style={{background:"rgba(123,180,80,0.06)",border:"1px solid rgba(123,180,80,0.2)",borderRadius:10,padding:"12px 16px",marginBottom:14}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                      <div><div style={{fontSize:12,color:C.muted}}>{ballsThisHole} counting this hole</div></div>
+                      <div style={{textAlign:"right"}}><div style={{fontSize:22,fontWeight:800,color:C.green}}>{gCounted} pts</div></div>
+                    </div>
                   </div>
-                  <button onClick={()=>setPlayerScore(activeTeam,j,currentHole,score!==null?score+1:effPar)}
-                    style={{width:56,height:56,borderRadius:"50%",background:C.dim,border:"1px solid "+C.border,color:C.text,fontSize:30,fontWeight:700,cursor:"pointer"}}>+</button>
-                </div>
+                )}
               </div>
             );
           })}
 
           {/* This hole total — Stableford points */}
-          {thisHolePts.length>=1&&(()=>{
+          {groupedTeams(teams,activeTeam).length===1&&thisHolePts.length>=1&&(()=>{
             const counted=thisHolePts.slice(0,ballsThisHole).reduce((s,x)=>s+x.pts,0);
             return(
               <div style={{background:"rgba(123,180,80,0.06)",border:"1px solid rgba(123,180,80,0.2)",borderRadius:10,padding:"12px 16px",marginBottom:14}}>
@@ -2133,6 +2184,12 @@ export default function SfTeamTournament({onBack, user, onDelete, resumeId}){
                       <div style={{width:12,height:12,borderRadius:"50%",background:team.color,flexShrink:0}}/>
                       <input value={team.name||""} onChange={e=>updateTeam(i,{name:e.target.value})}
                         style={{flex:1,minWidth:0,boxSizing:"border-box",padding:"9px 12px",background:C.surface,border:"1px solid "+C.border,borderRadius:8,color:C.text,fontSize:14,fontWeight:700,outline:"none"}}/>
+                    </div>
+                    <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
+                      <span style={{fontSize:13,fontWeight:700,flexShrink:0}}>⛳ Scorecard</span>
+                      <input value={team.card??""} onChange={e=>updateTeam(i,{card:e.target.value})} placeholder="Blank = own card"
+                        style={{width:110,flexShrink:0,padding:"10px 12px",background:C.surface,border:"1px solid "+C.border,borderRadius:8,color:C.text,fontSize:14,outline:"none",textAlign:"center"}}/>
+                      <span style={{fontSize:11,color:C.muted}}>Same number = same card</span>
                     </div>
 
                     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
