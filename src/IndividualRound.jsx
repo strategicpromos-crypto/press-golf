@@ -1,6 +1,7 @@
 // BUDDYPICKER-2026-10-28 (IndividualRound — Selected card + Search button + tap list, no dropdown)
 import React, { useState, useEffect, useRef } from "react";
 import { sb } from "./supabase.js";
+import { pgConfirm } from "./PgDialog.js";
 import { COURSES, getStrokeHoles, calcAutoPressNassau, courseHasHdcp } from "./golf.js";
 import CourseSearch from "./CourseSearch.jsx";
 
@@ -399,7 +400,7 @@ export default function IndividualRound({ user, players, roundData: initialRound
   }
 
   async function deleteRound() {
-    if(window.confirm("Delete this round? All scores will be permanently removed.")) {
+    if(await pgConfirm("Delete this round? All scores will be permanently removed.","Delete")) {
       await sb.from("live_rounds").delete().eq("id", round?.id);
       localStorage.removeItem(localKey);
       if(onDelete) onDelete();
