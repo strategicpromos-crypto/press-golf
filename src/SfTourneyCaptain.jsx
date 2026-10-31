@@ -65,6 +65,18 @@ function calcTeamScore(teamScores,teamSize,holeData,birdieBonus,ballsByPar,holeP
   return{byHole,front,frontDiff:front-frontPar,back,backDiff:back-backPar,total,totalDiff:total-totalPar};
 }
 
+// PG-SFCARDGROUP-2026-10-31: scorecard number box, same as Outing.
+// Blank = this team scores alone. Same number = same scorecard. Different number = a different card.
+function cardKey(t){
+  if(!t||t.card==null) return null;
+  const s=String(t.card).trim(); if(!s) return null;
+  if(/^\d+$/.test(s)) return String(parseInt(s,10)); return s;
+}
+function groupedTeams(list, idx){
+  const k=cardKey(list[idx]); if(k===null) return [idx];
+  const out=[]; list.forEach((t,i)=>{ if(cardKey(t)===k) out.push(i); }); return out;
+}
+
 export default function SfTourneyCaptain({ tourney: initialTourney, teamIdx, onBack }) {
   const [tourney,      setTourney]      = useState(initialTourney);
   const [currentHole,  setCurrentHole]  = useState(initialTourney.current_hole||1);
@@ -123,6 +135,8 @@ export default function SfTourneyCaptain({ tourney: initialTourney, teamIdx, onB
   const ctpLeaders  = tourney.ctp_leaders||{};
 
   const team      = (tourney.teams || [])[teamIdx];
+  const groupTeams  = groupedTeams(tourney.teams||[], teamIdx);
+  const groupLocalKey = `press_writer_${initialTourney.id}_card_${cardKey((initialTourney.teams||[])[teamIdx]) ?? ("team"+teamIdx)}`;
   const course    = COURSES[tourney.course_id || "south-toledo"];
   const holeData  = course?.holes[currentHole - 1];
   const isLastHole= currentHole === (course?.holes?.length || 18);
@@ -193,8 +207,9 @@ export default function SfTourneyCaptain({ tourney: initialTourney, teamIdx, onB
   async function claimWriterToken(token){
     const{data:current}=await sb.from("sf_tournaments").select("teams").eq("id",tourney.id).single();
     if(!current) return false;
+    const grp=groupedTeams(current.teams||[], teamIdx);
     const updatedTeams=(current.teams||[]).map((t,i)=>
-      i===teamIdx ? {...t, writer_token: token} : t
+      grp.includes(i) ? {...t, writer_token: token} : t
     );
     const{error}=await sb.from("sf_tournaments").update({
       teams: updatedTeams,
@@ -209,6 +224,7 @@ export default function SfTourneyCaptain({ tourney: initialTourney, teamIdx, onB
     const newToken = Date.now().toString(36)+"_"+Math.random().toString(36).slice(2,6);
     const ok = await claimWriterToken(newToken);
     if(ok){
+      localStorage.setItem(groupLocalKey, newToken);
       localStorage.setItem(localKey, newToken);
       isWriter.current = true;
       setReadOnlyMode(false);
@@ -225,11 +241,14 @@ export default function SfTourneyCaptain({ tourney: initialTourney, teamIdx, onB
     if(readOnlyMode) return false;
     try{
       const{data}=await sb.from("sf_tournaments").select("teams").eq("id",tourney.id).single();
-      const sbToken=(data?.teams||[])[teamIdx]?.writer_token||null;
-      if(sbToken){ setReadOnlyMode(true); return false; } // someone claimed it first
-      const newToken=Date.now().toString(36)+"_"+Math.random().toString(36).slice(2,6);
-      const ok=await claimWriterToken(newToken);
-      if(ok){ localStorage.setItem(localKey,newToken); isWriter.current=true; return true; }
+      const grp=groupedTeams(data?.teams||[], teamIdx);
+      const tokens=grp.map(i=>(data?.teams||[])[i]?.writer_token||null);
+      const myClaim=localStorage.getItem(groupLocalKey)||localStorage.getItem(localKey);
+      if(myClaim&&tokens.filter(Boolean).every(t=>t===myClaim)){ localStorage.setItem(groupLocalKey,myClaim); isWriter.current=true; return true; }
+      if(tokens.some(Boolean)){ setReadOnlyMode(true); return false; }
+      const newClaim=Date.now().toString(36)+"__"+Math.random().toString(36).slice(2,6);
+      const ok=await claimWriterToken(newClaim);
+      if(ok){ localStorage.setItem(groupLocalKey,newClaim); localStorage.setItem(localKey,newClaim); isWriter.current=true; return true; }
     }catch(e){}
     return false;
   }
@@ -302,7 +321,7 @@ export default function SfTourneyCaptain({ tourney: initialTourney, teamIdx, onB
       const dbTeams=current?.teams||teamsToSave;
       // Preserve the slot's writer_token — the captain's local team copy may
       // predate the claim, and saving scores must not erase the lock.
-      const safeTeams=dbTeams.map((t,i)=>i===teamIdx?{...teamsToSave[i],writer_token:(t.writer_token||teamsToSave[i]?.writer_token||undefined)}:t);
+      const grpFlush=groupedTeams(teamsToSave, teamIdx); const safeTeams=dbTeams.map((t,i)=>grpFlush.includes(i)?{...teamsToSave[i], writer_token: t.writer_token || teamsToSave[i].writer_token} : t);
       const{error}=await sb.from("sf_tournaments").update({teams:safeTeams,updated_at:new Date().toISOString()}).eq("id",tourney.id);
       if(error) throw error; // never report "saved" when the write failed (e.g. RLS)
       pendingTeams.current=null;
@@ -333,12 +352,19 @@ export default function SfTourneyCaptain({ tourney: initialTourney, teamIdx, onB
   }
 
   function setPlayerScore(pi, hole, val) {
+    return setGroupPlayerScore(teamIdx, pi, hole, val);
+  }
+  function setGroupPlayerScore(ti, pi, hole, val) {
     const updatedTeams = (tourney.teams || []).map((t, i) => {
-      if (i !== teamIdx) return t;
+      if (i !== ti) return t;
       return { ...t, scores: { ...t.scores, [pi]: { ...(t.scores[pi] || {}), [hole]: val } } };
     });
     setTourney(prev => ({ ...prev, teams: updatedTeams }));
     scheduleSync(updatedTeams);
+  }
+  function getGroupPlayerScore(ti, pi, hole) {
+    const v = (tourney.teams||[])[ti]?.scores?.[pi]?.[hole];
+    return (v === undefined || v === null) ? null : safeInt(v);
   }
 
   function updatePlayerName(pi, name) {
@@ -830,54 +856,81 @@ export default function SfTourneyCaptain({ tourney: initialTourney, teamIdx, onB
       </div>
 
       <div style={{ padding:"14px 16px" }}>
-        {/* Player scores */}
-        {Array.from({length:team.size||4},(_,j)=>{
-          const score=getPlayerScore(j,currentHole);
-          const hdcp=team.hdcp?.[j]??12;
-          const pts=sfHolePoints(score,hdcp,holeData,course.holes,effPar,sfCfg.points,sfCfg.counting);
-          const isBest=sfCountSet.has(j)&&score!==null;
+        {/* PG-SFCARDGROUP-2026-10-31: scorecard groups — same number, one hole screen */}
+        {groupTeams.map(ti=>{
+          const gteam=(tourney.teams||[])[ti]; if(!gteam) return null;
+          const gsc=sfTeamPoints(gteam, course.holes, tourney.hole_pars||{}, tourney.ball_count_by_par||{3:2,4:2,5:2}, sfCfg);
+          const gThisHolePts=Array.from({length:gteam.size||4},(_,j)=>({j,pts:sfHolePoints(getGroupPlayerScore(ti,j,currentHole),gteam.hdcp?.[j]??12,holeData,course.holes,effPar,sfCfg.points,sfCfg.counting)})).filter(x=>x.pts!==null).sort((a,b)=>b.pts-a.pts);
+          const gCountSet=new Set(gThisHolePts.slice(0,ballsHere).map(x=>x.j));
+          const gCounted=gThisHolePts.slice(0,ballsHere).reduce((s,x)=>s+x.pts,0);
           return(
-            <div key={j} style={{ background:isBest?"rgba(123,180,80,0.08)":C.card, border:`1px solid ${isBest?C.green:C.border}`, borderRadius:14, padding:"12px 14px", marginBottom:10 }}>
-              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
-                <div>
-                  <span style={{ fontWeight:700, fontSize:15 }}>{team.players?.[j]||"Player "+(j+1)}</span>
-                  <span style={{ fontSize:11, color:C.muted, marginLeft:8 }}>HDCP {hdcp}</span>
-                  {isBest&&<span style={{ fontSize:10, color:C.green, fontWeight:700, marginLeft:8 }}>COUNTS</span>}
+            <div key={ti}>
+              {groupTeams.length>1&&(
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:"12px 16px",marginBottom:12,marginTop:ti!==teamIdx?14:0}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8}}>
+                    <div style={{width:12,height:12,borderRadius:"50%",background:gteam.color}}/>
+                    <div style={{fontWeight:800,fontSize:16}}>{gteam.name}</div>
+                    <div style={{fontSize:11,color:C.muted}}>⛳ Scorecard {cardKey(gteam)??""}</div>
+                  </div>
+                  <div style={{display:"flex",gap:14}}>
+                    {[["F",gsc.front],["B",gsc.back],["T",gsc.total]].map(([l,pts])=>(
+                      <div key={l} style={{textAlign:"center"}}>
+                        <div style={{fontSize:9,color:C.muted}}>{l}</div>
+                        <div style={{fontSize:14,fontWeight:800,color:pts===0?C.muted:C.green}}>{pts} pts</div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-                <div style={{display:"flex",alignItems:"center",gap:8}}>
-                  {pts!==null&&<div style={{ fontSize:14, fontWeight:800, color:C.green }}>{pts} pts</div>}
+              )}
+              {Array.from({length:gteam.size||4},(_,j)=>{
+                const score=getGroupPlayerScore(ti,j,currentHole);
+                const hdcp=gteam.hdcp?.[j]??12;
+                const pts=sfHolePoints(score,hdcp,holeData,course.holes,effPar,sfCfg.points,sfCfg.counting);
+                const isBest=gCountSet.has(j)&&score!==null;
+                return(
+                  <div key={j} style={{ background:isBest?"rgba(123,180,80,0.08)":C.card, border:`1px solid ${isBest?C.green:C.border}`, borderRadius:14, padding:"12px 14px", marginBottom:10 }}>
+                    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
+                      <div>
+                        <span style={{ fontWeight:700, fontSize:15 }}>{gteam.players?.[j]||"Player "+(j+1)}</span>
+                        <span style={{ fontSize:11, color:C.muted, marginLeft:8 }}>HDCP {hdcp}</span>
+                        {isBest&&<span style={{ fontSize:10, color:C.green, fontWeight:700, marginLeft:8 }}>COUNTS</span>}
+                      </div>
+                      <div style={{display:"flex",alignItems:"center",gap:8}}>
+                        {pts!==null&&<div style={{ fontSize:14, fontWeight:800, color:C.green }}>{pts} pts</div>}
+                      </div>
+                    </div>
+                    <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:8 }}>
+                      <button onClick={()=>!readOnlyMode&&setGroupPlayerScore(ti,j,currentHole,score!==null?Math.max(1,score-1):effPar-1)}
+                        style={{ width:56,height:56,borderRadius:"50%",background:C.dim,border:`1px solid ${C.border}`,color:readOnlyMode?C.dim:C.text,fontSize:30,fontWeight:700,cursor:readOnlyMode?"not-allowed":"pointer",opacity:readOnlyMode?0.4:1 }}>−</button>
+                      <div style={{ flex:1,textAlign:"center" }}>
+                        <div style={{ fontSize:56,fontWeight:800,color:score!==null?C.text:C.muted,lineHeight:1,fontVariantNumeric:"tabular-nums" }}>{score!==null?score:"--"}</div>
+                        {score===null&&<div style={{ fontSize:11,color:C.muted,marginTop:4 }}>{readOnlyMode?"view only":"tap + to enter"}</div>}
+                      </div>
+                      <button onClick={()=>!readOnlyMode&&setGroupPlayerScore(ti,j,currentHole,score!==null?score+1:effPar)}
+                        style={{ width:56,height:56,borderRadius:"50%",background:C.dim,border:`1px solid ${C.border}`,color:readOnlyMode?C.dim:C.text,fontSize:30,fontWeight:700,cursor:readOnlyMode?"not-allowed":"pointer",opacity:readOnlyMode?0.4:1 }}>+</button>
+                    </div>
+                  </div>
+                );
+              })}
+              {groupTeams.length>1&&gThisHolePts.length>=1&&(
+                <div style={{ background:"rgba(123,180,80,0.06)",border:`1px solid rgba(123,180,80,0.2)`,borderRadius:10,padding:"12px 16px",marginBottom:14 }}>
+                  <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center" }}>
+                    <div><div style={{ fontSize:12,color:C.muted }}>{ballsHere} counting · Stableford points</div></div>
+                    <div style={{ textAlign:"right" }}><div style={{ fontSize:22,fontWeight:800,color:C.green }}>{gCounted} pts</div></div>
+                  </div>
                 </div>
-              </div>
-              <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:8 }}>
-                <button onClick={()=>!readOnlyMode&&setPlayerScore(j,currentHole,score!==null?Math.max(1,score-1):effPar-1)}
-                  style={{ width:56,height:56,borderRadius:"50%",background:C.dim,border:`1px solid ${C.border}`,color:readOnlyMode?C.dim:C.text,fontSize:30,fontWeight:700,cursor:readOnlyMode?"not-allowed":"pointer",opacity:readOnlyMode?0.4:1 }}>−</button>
-                <div style={{ flex:1,textAlign:"center" }}>
-                  <div style={{ fontSize:56,fontWeight:800,color:score!==null?C.text:C.muted,lineHeight:1,fontVariantNumeric:"tabular-nums" }}>{score!==null?score:"--"}</div>
-                  {score===null&&<div style={{ fontSize:11,color:C.muted,marginTop:4 }}>{readOnlyMode?"view only":"tap + to enter"}</div>}
-                </div>
-                <button onClick={()=>!readOnlyMode&&setPlayerScore(j,currentHole,score!==null?score+1:effPar)}
-                  style={{ width:56,height:56,borderRadius:"50%",background:C.dim,border:`1px solid ${C.border}`,color:readOnlyMode?C.dim:C.text,fontSize:30,fontWeight:700,cursor:readOnlyMode?"not-allowed":"pointer",opacity:readOnlyMode?0.4:1 }}>+</button>
-              </div>
+              )}
             </div>
           );
         })}
-
-        {/* This hole total */}
-        {thisHolePts.length>=1&&(()=>{
-          const counted=thisHolePts.slice(0,ballsHere).reduce((s,x)=>s+x.pts,0);
-          return(
-            <div style={{ background:"rgba(123,180,80,0.06)",border:`1px solid rgba(123,180,80,0.2)`,borderRadius:10,padding:"12px 16px",marginBottom:14 }}>
-              <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center" }}>
-                <div>
-                  <div style={{ fontSize:12,color:C.muted }}>{ballsHere} counting · Stableford points</div>
-                </div>
-                <div style={{ textAlign:"right" }}>
-                  <div style={{ fontSize:22,fontWeight:800,color:C.green }}>{counted} pts</div>
-                </div>
-              </div>
+        {groupTeams.length===1&&thisHolePts.length>=1&&(()=>{ const counted=thisHolePts.slice(0,ballsHere).reduce((s,x)=>s+x.pts,0); return(
+          <div style={{ background:"rgba(123,180,80,0.06)",border:`1px solid rgba(123,180,80,0.2)`,borderRadius:10,padding:"12px 16px",marginBottom:14 }}>
+            <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center" }}>
+              <div><div style={{ fontSize:12,color:C.muted }}>{ballsHere} counting · Stableford points</div></div>
+              <div style={{ textAlign:"right" }}><div style={{ fontSize:22,fontWeight:800,color:C.green }}>{counted} pts</div></div>
             </div>
-          );
-        })()}
+          </div>
+        ); })()}
 
         {/* Next hole — Leaderboard/Rules now live in the header stack above */}
 
