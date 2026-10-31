@@ -1,3 +1,4 @@
+// PG-LINKS-2026-10-31: links use window.location.origin, not hardcoded vercel.app.
 // BUDDYPICKER-2026-10-28 (IndividualRound — Selected card + Search button + tap list, no dropdown)
 import React, { useState, useEffect, useRef } from "react";
 import { sb } from "./supabase.js";
@@ -1033,7 +1034,7 @@ export default function IndividualRound({ user, players, roundData: initialRound
               Send each player in a different group their own link. They enter their scores on their phone — your screen updates instantly.
             </div>
             {opponents.filter(o=>!o.sameGroup).map(opp=>{
-              const link="https://press-golf.vercel.app?round="+(round?.id||"")+"&player="+opp.playerId;
+              const link=window.location.origin+"?round="+(round?.id||"")+"&player="+opp.playerId;
               const sms=encodeURIComponent("Hey "+opp.name+" - enter your scores here as we play:\n"+link+"\n\nYour scores sync to my round in real time. - Press Golf");
               return(
                 <div key={opp.playerId} style={{background:C.card,border:"1px solid "+C.border,borderRadius:14,padding:"16px",marginBottom:12}}>
