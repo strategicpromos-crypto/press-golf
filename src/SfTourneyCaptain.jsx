@@ -6,6 +6,7 @@
 // with Stableford scoring throughout. Reads/writes ONLY sf_tournaments.
 import React, { useState, useEffect, useRef } from "react";
 import { sb } from "./supabase.js";
+import { pgAlert } from "./PgDialog.js";
 import { COURSES, courseHasHdcp } from "./golf.js";
 import { SfSkinsTab } from "./sfSkins.jsx";
 import { SfIndividualList } from "./SfIndividualList.jsx";
@@ -403,13 +404,13 @@ export default function SfTourneyCaptain({ tourney: initialTourney, teamIdx, onB
   const captainBetBName=captainAllPlayers.find(p=>p.team+":"+p.pi===betB)?.name;
 
   async function saveCaptainBet(){
-    if(!betA||!betB){ window.alert("Pick two players first."); return; }
-    if(betA===betB){ window.alert("Pick two different players."); return; }
+    if(!betA||!betB){ pgAlert("Pick two players first."); return; }
+    if(betA===betB){ pgAlert("Pick two different players."); return; }
     const parseRef=(v)=>{ const p=v.split(":"); return {team:parseInt(p[0],10),pi:parseInt(p[1],10)}; };
     const count=betStrokesTo==="none"?0:betStrokesCount;
     const strokes=betStrokesTo==="B"?count:betStrokesTo==="A"?-count:0;
     const cid=tourney.course_id||"south-toledo";
-    if(strokes!==0&&!courseHasHdcp(cid)){ window.alert("This course has no handicap data, so strokes can't apply here. Ask the director to add handicaps, or set strokes to No strokes."); return; }
+    if(strokes!==0&&!courseHasHdcp(cid)){ pgAlert("This course has no handicap data, so strokes can't apply here. Ask the director to add handicaps, or set strokes to No strokes."); return; }
     const bet={ id:"bet_"+Date.now()+"_"+Math.floor(Math.random()*1000),
       a:parseRef(betA), b:parseRef(betB), betType, betAmount,
       strokes, pressDown:betType==="nassau-press"?betPressDown:2, carryOver:betCarryOver };
@@ -423,7 +424,7 @@ export default function SfTourneyCaptain({ tourney: initialTourney, teamIdx, onB
       setTourney(prev=>({...prev, side_bets:next}));
       setBetA(""); setBetB(""); setShowBetSetup(false);
     }catch(e){
-      window.alert("Couldn't save that bet — check your connection and try again. Scores are not affected.");
+      pgAlert("Couldn't save that bet — check your connection and try again. Scores are not affected.");
     }
     setBetSaving(false);
   }
@@ -437,7 +438,7 @@ export default function SfTourneyCaptain({ tourney: initialTourney, teamIdx, onB
       if(error) throw error;
       setTourney(prev=>({...prev, side_bets:next}));
     }catch(e){
-      window.alert("Couldn't remove that bet — check your connection and try again.");
+      pgAlert("Couldn't remove that bet — check your connection and try again.");
     }
   }
 
