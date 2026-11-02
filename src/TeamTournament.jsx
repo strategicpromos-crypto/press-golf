@@ -1,3 +1,4 @@
+// PG-NETTEAM3-2026-11-02: net team best-ball + pro give-back (hardest hole).
 // PG-LINKS-2026-10-31: links use window.location.origin, not hardcoded vercel.app.
 // PG-NETSKINS-2026-10-29
 // DELETEFIX-2026-10-28 (TeamTournament — delete no longer resurrects last team)
@@ -12,7 +13,7 @@ import { isLibraryCourse } from "./courseStore.js";
 import CourseSearch, { CourseDeletePanel } from "./CourseSearch.jsx";
 import { sb } from "./supabase.js";
 import { pgAlert } from "./PgDialog.js";
-import { calcSkins, SkinsTab, missingNetHdcp } from "./skins.jsx";
+import { calcSkins, SkinsTab, missingNetHdcp, strokesOnHole } from "./skins.jsx";
 import { SideBetsTab } from "./sideBets.jsx";
 import { RulesTab } from "./RulesTab.jsx";
 
@@ -182,7 +183,7 @@ function Top10Tab({ teams, course, holePars, C }){
   );
 }
 
-function calcTeamScore(teamScores,teamSize,holeData,birdieBonus,ballsByPar,holePars){
+function calcTeamScore(teamScores,teamSize,holeData,birdieBonus,ballsByPar,holePars,teamHdcp,netTeam){
   // ballsByPar: {3:N, 4:N, 5:N} — balls counted per hole by par value
   // Falls back to legacy single number if a plain int is passed
   const getBalls=(par)=>{
@@ -192,19 +193,20 @@ function calcTeamScore(teamScores,teamSize,holeData,birdieBonus,ballsByPar,holeP
     return parseInt(ballsByPar)||Math.min(teamSize,Math.max(teamSize,1));
   };
   const byHole={};
+  // PG-NETTEAM3-2026-11-02: pro give-back lands on the hardest hole (course hdcp rank 1), not split front/back.
   let front=0,back=0,total=0;
   let frontPar=0,backPar=0;
   const hpar=(h)=>(holePars?.[h.hole]??h.par);
   for(const h of holeData){
     const balls=getBalls(hpar(h));
     const scores=[];
-    for(let p=0;p<teamSize;p++){const s=teamScores?.[p]?.[h.hole];if(s!==undefined&&s!==null)scores.push(safeInt(s));}
+    for(let p=0;p<teamSize;p++){const s=teamScores?.[p]?.[h.hole];if(s!==undefined&&s!==null){const g=safeInt(s);const hd=teamHdcp?.[p];let ns=netTeam&&hd!==null&&hd!==undefined&&hd!==""?g-strokesOnHole(hd,h,holeData):g;scores.push(ns);}}
     if(scores.length===0){byHole[h.hole]=null;continue;}
     scores.sort((a,b)=>a-b);
     const bestN=scores.slice(0,balls);
     let raw=bestN.reduce((s,v)=>s+v,0);
     let bonusApplied=0;
-    if(birdieBonus){
+    if(birdieBonus&&!netTeam){
       const extraBirdies=scores.slice(balls).filter(s=>s<=hpar(h)-1);
       if(extraBirdies.length>0){bonusApplied=extraBirdies.reduce((sum,s)=>sum+(hpar(h)-s),0);raw-=bonusApplied;}
     }
@@ -280,6 +282,7 @@ export default function TeamTournament({onBack, user, onDelete}){
   const[bigBoyEnabled,setBigBoyEnabled]=useState(false);
   const[netSkinsEnabled,setNetSkinsEnabled]=useState(false); // PG-NETSKINS-2026-10-29: parallel net pot, gross untouched
   const[podsEnabled,setPodsEnabled]=useState(false); // PG-PODS-2026-10-30: 6-hole pod winners, team scores only, no money yet
+  const[netTeamEnabled,setNetTeamEnabled]=useState(false); // PG-NETTEAM3-2026-11-02: net team scoring — net each player by course-hdcp rank, then count best balls; pro teams add 1/side
   const[teammatesTie,setTeammatesTie]=useState(false); // false=teammates don't cancel skin, true=stricter
   const[ctpEnabled,setCtpEnabled]=useState(false);
   const[ctpHoles,setCtpHoles]=useState([]);          // hole numbers designated as CTP
@@ -360,14 +363,14 @@ export default function TeamTournament({onBack, user, onDelete}){
     teams:s?.teams||[], course_id:s?.course_id, birdie_bonus:s?.birdie_bonus,
     ball_count_by_par:s?.ball_count_by_par, hole_pars:s?.hole_pars,
     director_rules:s?.director_rules||"", hole_notes:s?.hole_notes||{},
-    skins_enabled:s?.skins_enabled, big_boy_enabled:s?.big_boy_enabled, net_skins_enabled:s?.net_skins_enabled, pods_enabled:s?.pods_enabled,
+    skins_enabled:s?.skins_enabled, big_boy_enabled:s?.big_boy_enabled, net_skins_enabled:s?.net_skins_enabled, pods_enabled:s?.pods_enabled, net_team_enabled:s?.net_team_enabled,
     teammates_tie:s?.teammates_tie, ctp_enabled:s?.ctp_enabled,
     ctp_holes:s?.ctp_holes, ctp_leaders:s?.ctp_leaders||{}, side_bets:s?.side_bets||[], current_hole:s?.current_hole,
   });
   const localSnap=()=>stateSnap({
     teams, course_id:courseId, birdie_bonus:birdieBonus, ball_count_by_par:ballsByPar,
     hole_pars:holePars, director_rules:directorRules, hole_notes:holeNotes,
-    skins_enabled:skinsEnabled, big_boy_enabled:bigBoyEnabled, net_skins_enabled:netSkinsEnabled, pods_enabled:podsEnabled,
+    skins_enabled:skinsEnabled, big_boy_enabled:bigBoyEnabled, net_skins_enabled:netSkinsEnabled, pods_enabled:podsEnabled, net_team_enabled:netTeamEnabled,
     teammates_tie:teammatesTie, ctp_enabled:ctpEnabled, ctp_holes:ctpHoles,
     ctp_leaders:ctpLeaders, side_bets:sideBets, current_hole:currentHole,
   });
@@ -497,7 +500,7 @@ export default function TeamTournament({onBack, user, onDelete}){
           director_rules:directorRules,
           hole_notes:holeNotes,
           skins_enabled:skinsEnabled,
-          big_boy_enabled:bigBoyEnabled, net_skins_enabled:netSkinsEnabled, pods_enabled:podsEnabled,
+          big_boy_enabled:bigBoyEnabled, net_skins_enabled:netSkinsEnabled, pods_enabled:podsEnabled, net_team_enabled:netTeamEnabled,
           teammates_tie:teammatesTie,
           ctp_enabled:ctpEnabled,
           ctp_holes:ctpHoles,
@@ -513,7 +516,7 @@ export default function TeamTournament({onBack, user, onDelete}){
         lastSavedSnap.current=stateSnap({
           teams:mergedTeams, course_id:courseId, birdie_bonus:birdieBonus,
           ball_count_by_par:ballsByPar, hole_pars:holePars, director_rules:directorRules, hole_notes:holeNotes, skins_enabled:skinsEnabled,
-          big_boy_enabled:bigBoyEnabled, net_skins_enabled:netSkinsEnabled, pods_enabled:podsEnabled, teammates_tie:teammatesTie, ctp_enabled:ctpEnabled,
+          big_boy_enabled:bigBoyEnabled, net_skins_enabled:netSkinsEnabled, pods_enabled:podsEnabled, net_team_enabled:netTeamEnabled, teammates_tie:teammatesTie, ctp_enabled:ctpEnabled,
           ctp_holes:ctpHoles, ctp_leaders:ctpToWrite, side_bets:sideBets, current_hole:currentHole,
         });
         lastSyncedSideBets.current=snap(sideBets);
@@ -533,7 +536,7 @@ export default function TeamTournament({onBack, user, onDelete}){
     };
     saveTimer.current=setTimeout(doSave,800);
     return()=>clearTimeout(saveTimer.current);
-  },[teams,currentHole,courseId,birdieBonus,holePars,ballsByPar,skinsEnabled,bigBoyEnabled,netSkinsEnabled,podsEnabled,teammatesTie,ctpEnabled,ctpHoles,ctpLeaders,sideBets,tourneyId]);
+  },[teams,currentHole,courseId,birdieBonus,holePars,ballsByPar,skinsEnabled,bigBoyEnabled,netSkinsEnabled,podsEnabled,netTeamEnabled,teammatesTie,ctpEnabled,ctpHoles,ctpLeaders,sideBets,tourneyId]);
 
   // ── Create new tournament in DB ────────────────────────────────────────────
   async function createTourney(builtTeams){
@@ -565,7 +568,7 @@ export default function TeamTournament({onBack, user, onDelete}){
       director_rules:directorRules,
       hole_notes:holeNotes,
       skins_enabled:skinsEnabled,
-      big_boy_enabled:bigBoyEnabled, net_skins_enabled:netSkinsEnabled, pods_enabled:podsEnabled,
+      big_boy_enabled:bigBoyEnabled, net_skins_enabled:netSkinsEnabled, pods_enabled:podsEnabled, net_team_enabled:netTeamEnabled,
       teammates_tie:teammatesTie,
       ctp_enabled:ctpEnabled,
       ctp_holes:ctpHoles,
@@ -607,6 +610,7 @@ export default function TeamTournament({onBack, user, onDelete}){
       setBigBoyEnabled(data.big_boy_enabled===true);
       setNetSkinsEnabled(data.net_skins_enabled===true);
       setPodsEnabled(data.pods_enabled===true);
+      setNetTeamEnabled(data.net_team_enabled===true);
       setTeammatesTie(data.teammates_tie===true);
       setCtpEnabled(data.ctp_enabled===true);
       setCtpHoles(data.ctp_holes||[]);
@@ -644,6 +648,7 @@ export default function TeamTournament({onBack, user, onDelete}){
             if(typeof s.big_boy_enabled==="boolean") setBigBoyEnabled(s.big_boy_enabled);
             if(typeof s.net_skins_enabled==="boolean") setNetSkinsEnabled(s.net_skins_enabled);
             if(typeof s.pods_enabled==="boolean") setPodsEnabled(s.pods_enabled);
+            if(typeof s.net_team_enabled==="boolean") setNetTeamEnabled(s.net_team_enabled);
             if(typeof s.teammates_tie==="boolean") setTeammatesTie(s.teammates_tie);
             if(typeof s.ctp_enabled==="boolean") setCtpEnabled(s.ctp_enabled);
             if(s.ctp_holes) setCtpHoles(s.ctp_holes);
@@ -752,7 +757,7 @@ export default function TeamTournament({onBack, user, onDelete}){
   }
 
   function getLeaderboard(){
-    return teams.map(t=>({...t,sc:calcTeamScore(t.scores,t.size,course.holes,birdieBonus,ballsByPar,holePars)}))
+    return teams.map(t=>({...t,sc:calcTeamScore(t.scores,t.size,course.holes,birdieBonus,ballsByPar,holePars,t.hdcp,netTeamEnabled)}))
       .sort((a,b)=>a.sc.totalDiff-b.sc.totalDiff);
   }
 
@@ -1146,7 +1151,21 @@ export default function TeamTournament({onBack, user, onDelete}){
             </div>
           </div>
 
-          {/* Big Boy — only shows when skins on */}
+                    {/* PG-NETTEAM3-2026-11-02: net team scoring — net each player by course-hdcp rank, then count best balls. Plus players enter a negative HDCP: -1 gives 1 back on the easiest hole, -2 on the two easiest, -3 on the three easiest. Birdie Bonus does not apply in net mode. Pods follow automatically, since pods sum the same hole diffs. */}
+          <div style={{background:C.card,border:"1px solid "+C.border,borderRadius:12,padding:"14px 16px",marginBottom:16}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <div>
+                <div style={{fontWeight:700,fontSize:15}}>⛳ Net Team Scoring</div>
+                <div style={{fontSize:11,color:C.muted,marginTop:3}}>{netTeamEnabled?"ON — team score = lowest NET ball(s), HDCP by course handicap rank. Set Scores That Count to 1 for 1 best ball.":"Off — team score stays gross"}</div>
+              </div>
+              <button onClick={async()=>{const v=!netTeamEnabled;setNetTeamEnabled(v);if(tourneyId)await sb.from("team_tournaments").update({net_team_enabled:v,updated_at:new Date().toISOString()}).eq("id",tourneyId);}} style={{width:52,height:28,borderRadius:14,border:"none",cursor:"pointer",background:netTeamEnabled?C.green:"#333",position:"relative",transition:"background 0.2s",flexShrink:0}}>
+                <div style={{position:"absolute",top:4,left:netTeamEnabled?26:4,width:20,height:20,borderRadius:"50%",background:"#fff",transition:"left 0.2s"}}/>
+              </button>
+            </div>
+            {netTeamEnabled&&(()=>{const ni=missingNetHdcp(teams,course);if(ni.missing.length>0)return(<div style={{fontSize:12,color:"#ff8a8a",fontWeight:700,marginTop:8,lineHeight:1.5}}>⚠️ HDCP needed for Net Team: {ni.missing.join(", ")} — enter HDCPs below (Teams). A player with no HDCP scores gross until it is entered.</div>);if(ni.courseHdcpMissing)return(<div style={{fontSize:12,color:"#ff8a8a",fontWeight:700,marginTop:8,lineHeight:1.5}}>⚠️ Course handicaps missing — net team scoring can't be calculated until course handicaps are added.</div>);return(<div style={{fontSize:11,color:C.green,marginTop:8}}>✓ All HDCPs entered — Net Team is live. 0 = scratch, blank = missing.</div>);})()}
+          </div>
+
+{/* Big Boy — only shows when skins on */}
           {skinsEnabled&&(
             <div style={{background:"rgba(232,184,75,0.06)",border:"1px solid rgba(232,184,75,0.25)",borderRadius:12,padding:"14px 16px",marginBottom:16,marginLeft:8}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
@@ -1366,9 +1385,9 @@ export default function TeamTournament({onBack, user, onDelete}){
                   <div key={j} style={{display:"flex",alignItems:"center",gap:8}}>
                     <input value={team.players[j]||""} onChange={e=>{const p=[...team.players];p[j]=e.target.value;updateTeam(i,{players:p});}}
                       placeholder={"Player "+(j+1)} style={{flex:1,padding:"10px",background:C.surface,border:"1px solid "+C.border,borderRadius:8,color:C.text,fontSize:13,outline:"none"}}/>
-                    {netSkinsEnabled&&(
-                      <input type="number" min="0" max="54" placeholder="HDCP" value={team.hdcp?.[j]??""}
-                        onChange={e=>{const h=[...(team.hdcp||Array(team.size).fill(null))];h[j]=e.target.value===""?null:Math.max(0,Math.min(54,parseInt(e.target.value)||0));updateTeam(i,{hdcp:h});}}
+                    {(netSkinsEnabled||netTeamEnabled)&&(
+                      <input type="number" min="-18" max="54" placeholder="HDCP" value={team.hdcp?.[j]??""}
+                        onChange={e=>{const h=[...(team.hdcp||Array(team.size).fill(null))];h[j]=e.target.value===""?null:Math.max(-18,Math.min(54,parseInt(e.target.value)||0));updateTeam(i,{hdcp:h});}}
                         style={{width:64,flexShrink:0,padding:"10px 8px",background:C.surface,border:"1px solid "+C.border,borderRadius:8,color:C.text,fontSize:13,outline:"none",textAlign:"center"}}/>
                     )}
                     {bigBoyEnabled&&(
@@ -1462,7 +1481,7 @@ export default function TeamTournament({onBack, user, onDelete}){
                 await sb.from("team_tournaments").update({
                   teams,course_id:courseId,birdie_bonus:birdieBonus,
                   ball_count_by_par:ballsByPar,hole_pars:holePars,director_rules:directorRules,hole_notes:holeNotes,
-                  skins_enabled:skinsEnabled,big_boy_enabled:bigBoyEnabled, net_skins_enabled:netSkinsEnabled,
+                  skins_enabled:skinsEnabled,big_boy_enabled:bigBoyEnabled, net_skins_enabled:netSkinsEnabled, net_team_enabled:netTeamEnabled,
                   ctp_enabled:ctpEnabled,ctp_holes:ctpHoles,ctp_leaders:ctpLeaders,
                   status:"active",current_hole:1,updated_at:new Date().toISOString()
                 }).eq("id",tourneyId);
@@ -1482,7 +1501,7 @@ export default function TeamTournament({onBack, user, onDelete}){
   // SCORING
   if(screen==="scoring"&&holeData){
     const team=teams[activeTeam];
-    const sc=calcTeamScore(team.scores,team.size,course.holes,birdieBonus,ballsByPar,holePars);
+    const sc=calcTeamScore(team.scores,team.size,course.holes,birdieBonus,ballsByPar,holePars,team.hdcp,netTeamEnabled);
     const thisHoleScores=Array.from({length:team.size},(_,j)=>({j,s:getPlayerScore(team,j,currentHole)})).filter(x=>x.s!==null).sort((a,b)=>a.s-b.s);
     const effPar = holePars[currentHole] ?? holeData.par;
     const ballsThisHole = (typeof ballsByPar==="object"?parseInt(ballsByPar[effPar])||2:parseInt(ballsByPar)||2);
@@ -1612,7 +1631,7 @@ export default function TeamTournament({onBack, user, onDelete}){
             const gteam=teams[ti]; if(!gteam) return null;
             const gHoleScores=Array.from({length:gteam.size},(_,j)=>({j,s:getPlayerScore(gteam,j,currentHole)})).filter(x=>x.s!==null).sort((a,b)=>a.s-b.s);
             const gBest=new Set(gHoleScores.slice(0,ballsThisHole).map(x=>x.j));
-            const gSc=calcTeamScore(gteam.scores,gteam.size,course.holes,birdieBonus,ballsByPar,holePars);
+            const gSc=calcTeamScore(gteam.scores,gteam.size,course.holes,birdieBonus,ballsByPar,holePars,gteam.hdcp,netTeamEnabled);
             const groupSize=groupedTeams(teams,activeTeam).length;
             return(
               <div key={ti}>
@@ -1897,7 +1916,20 @@ export default function TeamTournament({onBack, user, onDelete}){
                 </div>
               </div>
 
-              {/* ── SKINS ───────────────────────────────────────────────── */}
+              {/* PG-NETTEAM3-2026-11-02: Net Team toggle in Settings too, so an already-created tournament can turn it on mid-round */}
+              <div style={{background:C.card,border:"1px solid "+C.border,borderRadius:12,padding:"14px 16px",marginBottom:12}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                  <div>
+                    <div style={{fontWeight:700,fontSize:14}}>⛳ Net Team Scoring</div>
+                    <div style={{fontSize:11,color:C.muted,marginTop:2}}>{netTeamEnabled?"ON — lowest NET ball(s), HDCP by course handicap rank. Plus players enter a negative HDCP: -1 gives 1 back on the easiest hole, -2 on the two easiest, -3 on the three easiest.":"Off — team score stays gross"}</div>
+                  </div>
+                  <button onClick={async()=>{const v=!netTeamEnabled;setNetTeamEnabled(v);if(tourneyId)await sb.from("team_tournaments").update({net_team_enabled:v,updated_at:new Date().toISOString()}).eq("id",tourneyId);}} style={{width:52,height:28,borderRadius:14,border:"none",cursor:"pointer",background:netTeamEnabled?C.green:"#333",position:"relative",flexShrink:0,transition:"background 0.2s"}}>
+                    <div style={{position:"absolute",top:4,left:netTeamEnabled?26:4,width:20,height:20,borderRadius:"50%",background:"#fff",transition:"left 0.2s"}}/>
+                  </button>
+                </div>
+              </div>
+
+                            {/* ── SKINS ───────────────────────────────────────────────── */}
               <div style={{background:C.card,border:"1px solid "+C.border,borderRadius:12,padding:"14px 16px",marginBottom:skinsEnabled?8:20}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                   <div>
@@ -2179,19 +2211,19 @@ export default function TeamTournament({onBack, user, onDelete}){
                     </div>
 
                     {/* Player names — one full-width row per player, so nothing runs off the card */}
-                    <div style={{fontSize:11,color:C.muted,marginBottom:6,fontWeight:600}}>{netSkinsEnabled?"Player Names & HDCP (0 = scratch, blank = missing)":"Player Names"}</div>
+                    <div style={{fontSize:11,color:C.muted,marginBottom:6,fontWeight:600}}>{(netSkinsEnabled||netTeamEnabled)?"Player Names & HDCP (0 = scratch, negative = plus, blank = missing)":"Player Names"}</div>
                     <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:10}}>
                       {Array.from({length:size},(_,j)=>(
-                        netSkinsEnabled?(
+                        (netSkinsEnabled||netTeamEnabled)?(
                           <div key={j} style={{display:"flex",gap:8}}>
                             <input
                               value={team.players?.[j]||""}
                               onChange={e=>{const p=[...(team.players||Array(size).fill(""))];p[j]=e.target.value;updateTeam(i,{players:p});}}
                               placeholder={"Player "+(j+1)}
                               style={{flex:1,minWidth:0,boxSizing:"border-box",padding:"9px 10px",background:C.bg,border:"1px solid "+C.border,borderRadius:8,color:C.text,fontSize:13,outline:"none"}}/>
-                            <input type="number" min="0" max="54" placeholder="HDCP"
+                            <input type="number" min="-18" max="54" placeholder="HDCP"
                               value={team.hdcp?.[j]??""}
-                              onChange={e=>{const h=[...(team.hdcp||Array(size).fill(null))];h[j]=e.target.value===""?null:Math.max(0,Math.min(54,parseInt(e.target.value)||0));updateTeam(i,{hdcp:h});}}
+                              onChange={e=>{const h=[...(team.hdcp||Array(size).fill(null))];h[j]=e.target.value===""?null:Math.max(-18,Math.min(54,parseInt(e.target.value)||0));updateTeam(i,{hdcp:h});}}
                               style={{width:64,flexShrink:0,boxSizing:"border-box",padding:"9px 8px",background:C.bg,border:"1px solid "+((team.players?.[j]||"").trim()&&(team.hdcp?.[j]===null||team.hdcp?.[j]===undefined)?C.red:C.border),borderRadius:8,color:C.text,fontSize:13,outline:"none",textAlign:"center"}}/>
                           </div>
                         ):(
