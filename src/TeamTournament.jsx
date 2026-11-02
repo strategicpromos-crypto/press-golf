@@ -1,3 +1,4 @@
+// PG-HDCPSTEP-2026-11-02: HDCP inputs get - / + buttons so a plus (negative) HDCP can be tapped in on Android, where the number keypad has no minus key.
 // PG-NETTEAM3-2026-11-02: net team best-ball + pro give-back (hardest hole).
 // PG-LINKS-2026-10-31: links use window.location.origin, not hardcoded vercel.app.
 // PG-NETSKINS-2026-10-29
@@ -1386,9 +1387,13 @@ export default function TeamTournament({onBack, user, onDelete}){
                     <input value={team.players[j]||""} onChange={e=>{const p=[...team.players];p[j]=e.target.value;updateTeam(i,{players:p});}}
                       placeholder={"Player "+(j+1)} style={{flex:1,padding:"10px",background:C.surface,border:"1px solid "+C.border,borderRadius:8,color:C.text,fontSize:13,outline:"none"}}/>
                     {(netSkinsEnabled||netTeamEnabled)&&(
-                      <input type="number" min="-18" max="54" placeholder="HDCP" value={team.hdcp?.[j]??""}
-                        onChange={e=>{const h=[...(team.hdcp||Array(team.size).fill(null))];h[j]=e.target.value===""?null:Math.max(-18,Math.min(54,parseInt(e.target.value)||0));updateTeam(i,{hdcp:h});}}
-                        style={{width:64,flexShrink:0,padding:"10px 8px",background:C.surface,border:"1px solid "+C.border,borderRadius:8,color:C.text,fontSize:13,outline:"none",textAlign:"center"}}/>
+                      <div style={{display:"flex",alignItems:"center",gap:2,flexShrink:0}}>
+                        <button onClick={()=>{const cur=team.hdcp?.[j];const base=(cur===null||cur===undefined||cur==="")?0:cur;const h=[...(team.hdcp||Array(team.size).fill(null))];h[j]=Math.max(-18,Math.min(54,base-1));updateTeam(i,{hdcp:h});}} style={{width:28,height:36,borderRadius:8,background:C.dim,border:"1px solid "+C.border,color:C.text,fontSize:18,fontWeight:700,cursor:"pointer"}}>−</button>
+                        <input type="number" min="-18" max="54" placeholder="HDCP" value={team.hdcp?.[j]??""}
+                          onChange={e=>{const h=[...(team.hdcp||Array(team.size).fill(null))];h[j]=e.target.value===""?null:Math.max(-18,Math.min(54,parseInt(e.target.value)||0));updateTeam(i,{hdcp:h});}}
+                          style={{width:48,flexShrink:0,padding:"10px 8px",background:C.surface,border:"1px solid "+C.border,borderRadius:8,color:C.text,fontSize:13,outline:"none",textAlign:"center"}}/>
+                        <button onClick={()=>{const cur=team.hdcp?.[j];const base=(cur===null||cur===undefined||cur==="")?0:cur;const h=[...(team.hdcp||Array(team.size).fill(null))];h[j]=Math.max(-18,Math.min(54,base+1));updateTeam(i,{hdcp:h});}} style={{width:28,height:36,borderRadius:8,background:C.dim,border:"1px solid "+C.border,color:C.text,fontSize:18,fontWeight:700,cursor:"pointer"}}>+</button>
+                      </div>
                     )}
                     {bigBoyEnabled&&(
                       <button onClick={()=>{const bb=[...(team.bigBoy||Array(team.size).fill(false))];bb[j]=!bb[j];updateTeam(i,{bigBoy:bb});}}
@@ -2221,10 +2226,14 @@ export default function TeamTournament({onBack, user, onDelete}){
                               onChange={e=>{const p=[...(team.players||Array(size).fill(""))];p[j]=e.target.value;updateTeam(i,{players:p});}}
                               placeholder={"Player "+(j+1)}
                               style={{flex:1,minWidth:0,boxSizing:"border-box",padding:"9px 10px",background:C.bg,border:"1px solid "+C.border,borderRadius:8,color:C.text,fontSize:13,outline:"none"}}/>
-                            <input type="number" min="-18" max="54" placeholder="HDCP"
-                              value={team.hdcp?.[j]??""}
-                              onChange={e=>{const h=[...(team.hdcp||Array(size).fill(null))];h[j]=e.target.value===""?null:Math.max(-18,Math.min(54,parseInt(e.target.value)||0));updateTeam(i,{hdcp:h});}}
-                              style={{width:64,flexShrink:0,boxSizing:"border-box",padding:"9px 8px",background:C.bg,border:"1px solid "+((team.players?.[j]||"").trim()&&(team.hdcp?.[j]===null||team.hdcp?.[j]===undefined)?C.red:C.border),borderRadius:8,color:C.text,fontSize:13,outline:"none",textAlign:"center"}}/>
+                            <div style={{display:"flex",alignItems:"center",gap:2,flexShrink:0}}>
+                              <button onClick={()=>{const cur=team.hdcp?.[j];const base=(cur===null||cur===undefined||cur==="")?0:cur;const h=[...(team.hdcp||Array(size).fill(null))];h[j]=Math.max(-18,Math.min(54,base-1));updateTeam(i,{hdcp:h});}} style={{width:28,height:36,borderRadius:8,background:C.dim,border:"1px solid "+C.border,color:C.text,fontSize:18,fontWeight:700,cursor:"pointer"}}>−</button>
+                              <input type="number" min="-18" max="54" placeholder="HDCP"
+                                value={team.hdcp?.[j]??""}
+                                onChange={e=>{const h=[...(team.hdcp||Array(size).fill(null))];h[j]=e.target.value===""?null:Math.max(-18,Math.min(54,parseInt(e.target.value)||0));updateTeam(i,{hdcp:h});}}
+                                style={{width:48,flexShrink:0,boxSizing:"border-box",padding:"9px 8px",background:C.bg,border:"1px solid "+((team.players?.[j]||"").trim()&&(team.hdcp?.[j]===null||team.hdcp?.[j]===undefined)?C.red:C.border),borderRadius:8,color:C.text,fontSize:13,outline:"none",textAlign:"center"}}/>
+                              <button onClick={()=>{const cur=team.hdcp?.[j];const base=(cur===null||cur===undefined||cur==="")?0:cur;const h=[...(team.hdcp||Array(size).fill(null))];h[j]=Math.max(-18,Math.min(54,base+1));updateTeam(i,{hdcp:h});}} style={{width:28,height:36,borderRadius:8,background:C.dim,border:"1px solid "+C.border,color:C.text,fontSize:18,fontWeight:700,cursor:"pointer"}}>+</button>
+                            </div>
                           </div>
                         ):(
                           <input key={j}
