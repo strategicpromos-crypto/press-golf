@@ -12,11 +12,20 @@ function safeInt(v,f=0){const n=parseInt(v,10);return isNaN(n)?f:n;}
 // hardest holes first). HDCP null/undefined/"" = MISSING, 0 = scratch (valid).
 // A missing HDCP, or a course with no handicap ranks, puts the Net pot ON HOLD:
 // no net winners are counted, gross and Big Boy keep running.
+// PG-NETTEAM3-2026-11-02: signed strokes. Positive HDCP = strokes received, hardest holes first (rank 1, 2, ...).
+// Negative HDCP = plus player giving back: -1 on the EASIEST holes first (rank 18, then 17, then 16, ...),
+// one per plus point, plus a full stroke on every hole per full 18 of plus. Net = gross - strokesOnHole, so a
+// negative return adds a stroke back. 0 = scratch, null/undefined/"" = missing.
 export function strokesOnHole(hdcp, holeObj, holes){
-  if(hdcp===null||hdcp===undefined||hdcp===""||hdcp<=0) return 0;
+  if(hdcp===null||hdcp===undefined||hdcp==="") return 0;
   const sorted=[...(holes||[])].sort((a,b)=>((a.hdcp??99)-(b.hdcp??99)));
   const rank=sorted.findIndex(h=>h.hole===holeObj.hole)+1;
   if(rank<1) return 0;
+  if(hdcp<0){
+    const plus=-hdcp, n=sorted.length||18;
+    const full=Math.floor(plus/18), rem=plus%18;
+    return -(full+(rem>0&&rank>n-rem?1:0));
+  }
   const full=Math.floor(hdcp/18), rem=hdcp%18;
   return full+(rank<=rem?1:0);
 }
