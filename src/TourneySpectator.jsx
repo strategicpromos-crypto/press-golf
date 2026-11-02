@@ -1,8 +1,9 @@
+// PG-NETTEAM3-2026-11-02: net team best-ball + pro give-back (hardest hole).
 // PG-NETSKINS-2026-10-29
 import React, { useState, useEffect, useRef } from "react";
 import { sb } from "./supabase.js";
 import { COURSES } from "./golf.js";
-import { SkinsTab } from "./skins.jsx";
+import { SkinsTab, strokesOnHole } from "./skins.jsx";
 import { SideBetsTab } from "./sideBets.jsx";
 import { RulesTab } from "./RulesTab.jsx";
 
@@ -18,7 +19,7 @@ function safeInt(v,f=0){const n=parseInt(v,10);return isNaN(n)?f:n;}
 function relLabel(d){if(d===null||d===undefined)return"—";if(d===0)return"E";return d>0?"+"+d:String(d);}
 function relColor(d){if(d===null||d===undefined)return C.muted;if(d<0)return C.green;if(d>0)return C.red;return C.muted;}
 
-function calcTeamScore(teamScores,teamSize,holeData,birdieBonus,ballsByPar,holePars){
+function calcTeamScore(teamScores,teamSize,holeData,birdieBonus,ballsByPar,holePars,teamHdcp,netTeam){
   const getBalls=(par)=>{
     if(typeof ballsByPar==="object"&&ballsByPar!==null&&!Array.isArray(ballsByPar)){
       return parseInt(ballsByPar[par])||parseInt(ballsByPar[4])||2;
@@ -32,12 +33,12 @@ function calcTeamScore(teamScores,teamSize,holeData,birdieBonus,ballsByPar,holeP
   for(const h of holeData){
     const balls=getBalls(hpar(h));
     const scores=[];
-    for(let p=0;p<teamSize;p++){const s=teamScores?.[p]?.[h.hole];if(s!==undefined&&s!==null)scores.push(safeInt(s));}
+    for(let p=0;p<teamSize;p++){const s=teamScores?.[p]?.[h.hole];if(s!==undefined&&s!==null){const g=safeInt(s);const hd=teamHdcp?.[p];let ns=netTeam&&hd!==null&&hd!==undefined&&hd!==""?g-strokesOnHole(hd,h,holeData):g;scores.push(ns);}}
     if(scores.length===0){byHole[h.hole]=null;continue;}
     scores.sort((a,b)=>a-b);
     const bestN=scores.slice(0,balls);
     let raw=bestN.reduce((s,v)=>s+v,0);
-    if(birdieBonus){const eb=scores.slice(balls).filter(s=>s<=hpar(h)-1);if(eb.length>0)raw-=eb.reduce((sum,s)=>sum+(hpar(h)-s),0);}
+    if(birdieBonus&&!netTeam){const eb=scores.slice(balls).filter(s=>s<=hpar(h)-1);if(eb.length>0)raw-=eb.reduce((sum,s)=>sum+(hpar(h)-s),0);}
     byHole[h.hole]={raw,diff:raw-(hpar(h)*balls),scored:true};
     if(h.side==="front"){front+=raw;frontPar+=hpar(h)*balls;}
     else{back+=raw;backPar+=hpar(h)*balls;}
@@ -45,7 +46,7 @@ function calcTeamScore(teamScores,teamSize,holeData,birdieBonus,ballsByPar,holeP
   }
   const totalPar=frontPar+backPar;
   const pods=[[1,6],[7,12],[13,18]].map(([lo,hi])=>{let raw=0,diff=0,scored=0;for(const h of holeData){if(h.hole<lo||h.hole>hi)continue;const hd=byHole[h.hole];if(!hd||!hd.scored)continue;raw+=hd.raw;diff+=hd.diff;scored++;}return{lo,hi,raw,diff,scored,complete:scored===6};});
-  return{byHole,front,frontDiff:front-frontPar,back,backDiff:back-backPar,total,totalDiff:total-totalPar,pods,podDiffs:pods.map(p=>p.diff)};
+  return{byHole,front,frontDiff:front-frontPar,back,backDiff:back-backPar,total,totalDiff:total-totalPar,frontPar,backPar,totalPar,pods,podDiffs:pods.map(p=>p.diff)};
 }
 
 // PG-PODS-2026-10-30: pod winners are TEAM scores only (never individual scores).
@@ -94,7 +95,7 @@ export default function TourneySpectator({ tourney: initialTourney, onBack }) {
   const board = (tourney?.teams || []).map((t,i) => ({
     ...t,
     color: t.color || TEAM_COLORS[i%TEAM_COLORS.length],
-    sc: calcTeamScore(t.scores||{}, t.size||4, course.holes, birdieBonus, ballsByPar, tourney.hole_pars||{})
+    sc: calcTeamScore(t.scores||{}, t.size||4, course.holes, birdieBonus, ballsByPar, tourney.hole_pars||{}, t.hdcp, tourney.net_team_enabled===true)
   })).sort((a,b) => a.sc.totalDiff - b.sc.totalDiff);
 
   const holesPlayed = course.holes.filter(h =>
