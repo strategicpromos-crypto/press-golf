@@ -2595,30 +2595,18 @@ export default function SfTeamTournament({onBack, user, onDelete, resumeId}){
                 <div style={{display:"flex",flexWrap:"wrap",gap:6}}>{allPlayers.map(p=>{ const k=p.team+":"+p.pi; const on=teamBPlayers.includes(k); return(<button key={k} onClick={()=>toggleTeam("B",k)} style={{padding:"10px 12px",borderRadius:10,background:on?C.gold:C.surface,color:on?"#0a1a0f":C.muted,border:"1px solid "+(on?C.gold:C.border),cursor:"pointer",fontSize:12,fontWeight:on?700:500}}>{p.name}</button>); })}</div>
               </div>
               <div style={{background:C.card,border:"1px solid "+C.border,borderRadius:14,padding:"14px",marginBottom:14}}>
-                <div style={{fontWeight:700,fontSize:15,marginBottom:10}}>2 · Match selection</div>
+                <div style={{fontWeight:700,fontSize:15,marginBottom:10}}>2 · Match selection — 1 on 1</div>
                 <Lbl>{teamA} — Player 1</Lbl>
                 <select value={ryderA1} onChange={e=>setRyderA1(e.target.value)} style={selStyle}><option value="">— pick —</option>{aOpts.map(p=><option key={p.team+":"+p.pi} value={p.team+":"+p.pi}>{p.name} ({p.teamName})</option>)}</select>
-                <Lbl>{teamA} — Player 2 (optional, 2-man match)</Lbl>
-                <select value={ryderA2} onChange={e=>setRyderA2(e.target.value)} style={selStyle}><option value="">— none (singles) —</option>{aOpts.map(p=><option key={p.team+":"+p.pi} value={p.team+":"+p.pi}>{p.name} ({p.teamName})</option>)}</select>
-                <Lbl>{teamA} — Player 3 (optional, up to 4 per side)</Lbl>
-                <select value={ryderA3} onChange={e=>setRyderA3(e.target.value)} style={selStyle}><option value="">— none —</option>{aOpts.map(p=><option key={p.team+":"+p.pi} value={p.team+":"+p.pi}>{p.name} ({p.teamName})</option>)}</select>
-                <Lbl>{teamA} — Player 4 (optional, up to 4 per side)</Lbl>
-                <select value={ryderA4} onChange={e=>setRyderA4(e.target.value)} style={selStyle}><option value="">— none —</option>{aOpts.map(p=><option key={p.team+":"+p.pi} value={p.team+":"+p.pi}>{p.name} ({p.teamName})</option>)}</select>
                 <Lbl>{teamB} — Player 1</Lbl>
                 <select value={ryderB1} onChange={e=>setRyderB1(e.target.value)} style={selStyle}><option value="">— pick —</option>{bOpts.map(p=><option key={p.team+":"+p.pi} value={p.team+":"+p.pi}>{p.name} ({p.teamName})</option>)}</select>
-                <Lbl>{teamB} — Player 2 (optional, 2-man match)</Lbl>
-                <select value={ryderB2} onChange={e=>setRyderB2(e.target.value)} style={selStyle}><option value="">— none (singles) —</option>{bOpts.map(p=><option key={p.team+":"+p.pi} value={p.team+":"+p.pi}>{p.name} ({p.teamName})</option>)}</select>
-                <Lbl>{teamB} — Player 3 (optional, up to 4 per side)</Lbl>
-                <select value={ryderB3} onChange={e=>setRyderB3(e.target.value)} style={selStyle}><option value="">— none —</option>{bOpts.map(p=><option key={p.team+":"+p.pi} value={p.team+":"+p.pi}>{p.name} ({p.teamName})</option>)}</select>
-                <Lbl>{teamB} — Player 4 (optional, up to 4 per side)</Lbl>
-                <select value={ryderB4} onChange={e=>setRyderB4(e.target.value)} style={selStyle}><option value="">— none —</option>{bOpts.map(p=><option key={p.team+":"+p.pi} value={p.team+":"+p.pi}>{p.name} ({p.teamName})</option>)}</select>
                 <Lbl>Strokes for this match</Lbl>
                 <div style={{display:"flex",gap:6,marginBottom:12}}>
                   <button onClick={()=>setRyderMode("difference")} style={{flex:1,padding:"10px",borderRadius:8,background:ryderMode==="difference"?C.gold:C.surface,color:ryderMode==="difference"?"#0a1a0f":C.muted,border:"1px solid "+(ryderMode==="difference"?C.gold:C.border),cursor:"pointer",fontSize:12,fontWeight:700}}>Difference (default)</button>
                   <button onClick={()=>setRyderMode("full")} style={{flex:1,padding:"10px",borderRadius:8,background:ryderMode==="full"?C.gold:C.surface,color:ryderMode==="full"?"#0a1a0f":C.muted,border:"1px solid "+(ryderMode==="full"?C.gold:C.border),cursor:"pointer",fontSize:12,fontWeight:700}}>Full HDCP</button>
                 </div>
                 <div style={{fontSize:11,color:C.muted,marginBottom:12}}>{ryderMode==="difference"?"Lowest HDCP in the match = scratch, others get HDCP − lowest. A 1-stroke difference = 1 stroke on the #1 handicap hole only.":"Each player gets full course HDCP strokes, 1 per hole on the hardest holes. A pro's negative HDCP gives back on the easiest holes."}</div>
-                <BigBtn onClick={()=>{ if(!ryderA1||!ryderB1){ pgAlert("Pick at least one player per side first."); return; } const m={id:"ryder_"+Date.now(), a:[ryderA1,...(ryderA2?[ryderA2]:[]),...(ryderA3?[ryderA3]:[]),...(ryderA4?[ryderA4]:[])], b:[ryderB1,...(ryderB2?[ryderB2]:[]),...(ryderB3?[ryderB3]:[]),...(ryderB4?[ryderB4]:[])], mode:ryderMode}; setRyder({teamA, teamB, matches:[...matches, m]}); setRyderA1(""); setRyderA2(""); setRyderB1(""); setRyderB2(""); setRyderA3(""); setRyderA4(""); setRyderB3(""); setRyderB4(""); }}>＋ Add Match</BigBtn>
+                <BigBtn onClick={()=>{ if(!ryderA1||!ryderB1){ pgAlert("Pick at least one player per side first."); return; } const m={id:"ryder_"+Date.now(), a:[ryderA1], b:[ryderB1], mode:ryderMode}; setRyder({teamA, teamB, matches:[...matches, m]}); setRyderA1(""); setRyderB1(""); }}>＋ Add Match</BigBtn>
               </div>
               <div style={{fontSize:11,color:C.gold,letterSpacing:1.5,textTransform:"uppercase",marginBottom:12,fontWeight:600}}>3 · Matches — calculated</div>
               {matches.length===0&&<div style={{fontSize:13,color:C.muted}}>No matches yet. Set up teams, add a match above — it will score itself as holes are entered.</div>}
