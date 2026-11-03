@@ -1,3 +1,4 @@
+// PG-SFPRO-2026-11-02: Stableford PRO button (type a number, tap PRO = negative) + HDCP clamp lowered to -18 (was 0, so a negative could never be saved).
 // PG-LINKS-2026-10-31: links use window.location.origin, not hardcoded vercel.app.
 // PG-NETSKINS-2026-10-29
 // DELETEFIX-2026-10-28 (SfTeamTournament — delete no longer resurrects last team)
@@ -1374,8 +1375,9 @@ export default function SfTeamTournament({onBack, user, onDelete, resumeId}){
                   <div key={j} style={{display:"flex",alignItems:"center",gap:8}}>
                     <input value={team.players[j]||""} onChange={e=>{const p=[...team.players];p[j]=e.target.value;updateTeam(i,{players:p});}}
                       placeholder={"Player "+(j+1)} style={{flex:1,padding:"10px",background:C.surface,border:"1px solid "+C.border,borderRadius:8,color:C.text,fontSize:13,outline:"none"}}/>
-                    <input type="number" value={team.hdcp?.[j]??""} onChange={e=>{const h=[...(team.hdcp||Array(team.size).fill(null))];h[j]=e.target.value===""?null:Math.max(0,Math.min(54,parseInt(e.target.value)||0));updateTeam(i,{hdcp:h});}}
+                    <input type="number" min="-18" max="54" value={team.hdcp?.[j]??""} onChange={e=>{const h=[...(team.hdcp||Array(team.size).fill(null))];h[j]=e.target.value===""?null:Math.max(-18,Math.min(54,parseInt(e.target.value)||0));updateTeam(i,{hdcp:h});}}
                       placeholder="HDCP" title="Handicap" style={{width:64,padding:"10px",background:C.surface,border:"1px solid "+C.border,borderRadius:8,color:C.text,fontSize:13,outline:"none",textAlign:"center"}}/>
+                    <button onClick={()=>{const n=Number(team.hdcp?.[j]);const nv=(team.hdcp?.[j]===null||team.hdcp?.[j]===undefined||team.hdcp?.[j]===""||n===0)?-1:-n;const h=[...(team.hdcp||Array(team.size).fill(null))];h[j]=nv;updateTeam(i,{hdcp:h});}} style={{padding:"10px 12px",borderRadius:10,fontSize:12,fontWeight:800,cursor:"pointer",flexShrink:0,background:((team.hdcp?.[j]||0)<0)?C.gold:"rgba(232,184,75,0.08)",color:((team.hdcp?.[j]||0)<0)?"#0a1a0f":C.gold,border:"1.5px solid "+(((team.hdcp?.[j]||0)<0)?C.gold:"rgba(232,184,75,0.45)")}}>PRO</button>
                     {bigBoyEnabled&&(
                       <button onClick={()=>{const bb=[...(team.bigBoy||Array(team.size).fill(false))];bb[j]=!bb[j];updateTeam(i,{bigBoy:bb});}}
                         style={{flexShrink:0,padding:"10px 14px",borderRadius:10,fontSize:12,fontWeight:800,cursor:"pointer",letterSpacing:0.5,
@@ -1412,8 +1414,9 @@ export default function SfTeamTournament({onBack, user, onDelete, resumeId}){
                   <div key={j} style={{display:"flex",alignItems:"center",gap:8}}>
                     <input value={team.players?.[j]||""} onChange={e=>{const p=[...(team.players||[])];p[j]=e.target.value;updateTeam(i,{players:p});}}
                       placeholder={"Player "+(j+1)} style={{flex:1,padding:"10px",background:C.surface,border:"1px solid "+C.border,borderRadius:8,color:C.text,fontSize:13,outline:"none"}}/>
-                    <input type="number" value={team.hdcp?.[j]??""} onChange={e=>{const h=[...(team.hdcp||Array(team.size).fill(null))];h[j]=e.target.value===""?null:Math.max(0,Math.min(54,parseInt(e.target.value)||0));updateTeam(i,{hdcp:h});}}
+                    <input type="number" min="-18" max="54" value={team.hdcp?.[j]??""} onChange={e=>{const h=[...(team.hdcp||Array(team.size).fill(null))];h[j]=e.target.value===""?null:Math.max(-18,Math.min(54,parseInt(e.target.value)||0));updateTeam(i,{hdcp:h});}}
                       placeholder="HDCP" title="Handicap" style={{width:64,padding:"10px",background:C.surface,border:"1px solid "+C.border,borderRadius:8,color:C.text,fontSize:13,outline:"none",textAlign:"center"}}/>
+                    <button onClick={()=>{const n=Number(team.hdcp?.[j]);const nv=(team.hdcp?.[j]===null||team.hdcp?.[j]===undefined||team.hdcp?.[j]===""||n===0)?-1:-n;const h=[...(team.hdcp||Array(team.size).fill(null))];h[j]=nv;updateTeam(i,{hdcp:h});}} style={{padding:"10px 12px",borderRadius:10,fontSize:12,fontWeight:800,cursor:"pointer",flexShrink:0,background:((team.hdcp?.[j]||0)<0)?C.gold:"rgba(232,184,75,0.08)",color:((team.hdcp?.[j]||0)<0)?"#0a1a0f":C.gold,border:"1.5px solid "+(((team.hdcp?.[j]||0)<0)?C.gold:"rgba(232,184,75,0.45)")}}>PRO</button>
                     {bigBoyEnabled&&(
                       <button onClick={()=>{const bb=[...(team.bigBoy||Array(team.size).fill(false))];bb[j]=!bb[j];updateTeam(i,{bigBoy:bb});}}
                         style={{flexShrink:0,padding:"10px 14px",borderRadius:10,fontSize:12,fontWeight:800,cursor:"pointer",letterSpacing:0.5,
@@ -2233,11 +2236,12 @@ export default function SfTeamTournament({onBack, user, onDelete, resumeId}){
                             onChange={e=>{const p=[...(team.players||Array(size).fill(""))];p[j]=e.target.value;updateTeam(i,{players:p});}}
                             placeholder={"Player "+(j+1)}
                             style={{flex:1,minWidth:0,boxSizing:"border-box",padding:"9px 10px",background:C.bg,border:"1px solid "+C.border,borderRadius:8,color:C.text,fontSize:13,outline:"none"}}/>
-                          <input type="number"
+                          <input type="number" min="-18" max="54"
                             value={team.hdcp?.[j]??""}
-                            onChange={e=>{const h=[...(team.hdcp||Array(size).fill(null))];h[j]=e.target.value===""?null:Math.max(0,Math.min(54,parseInt(e.target.value)||0));updateTeam(i,{hdcp:h});}}
+                            onChange={e=>{const h=[...(team.hdcp||Array(size).fill(null))];h[j]=e.target.value===""?null:Math.max(-18,Math.min(54,parseInt(e.target.value)||0));updateTeam(i,{hdcp:h});}}
                             placeholder="HDCP" title="Handicap"
                             style={{width:64,flexShrink:0,boxSizing:"border-box",padding:"9px 10px",background:C.surface,border:"1px solid "+C.border,borderRadius:8,color:C.text,fontSize:13,outline:"none",textAlign:"center"}}/>
+                          <button onClick={()=>{const n=Number(team.hdcp?.[j]);const nv=(team.hdcp?.[j]===null||team.hdcp?.[j]===undefined||team.hdcp?.[j]===""||n===0)?-1:-n;const h=[...(team.hdcp||Array(size).fill(null))];h[j]=nv;updateTeam(i,{hdcp:h});}} style={{padding:"9px 12px",borderRadius:10,fontSize:12,fontWeight:800,cursor:"pointer",flexShrink:0,background:((team.hdcp?.[j]||0)<0)?C.gold:"rgba(232,184,75,0.08)",color:((team.hdcp?.[j]||0)<0)?"#0a1a0f":C.gold,border:"1.5px solid "+(((team.hdcp?.[j]||0)<0)?C.gold:"rgba(232,184,75,0.45)")}}>PRO</button>
                         </div>
                       ))}
                     </div>
