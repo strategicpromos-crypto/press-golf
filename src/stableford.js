@@ -40,8 +40,17 @@ export function sfPointsForDiff(diff, pts) {
 
 // Strokes on a hole for a handicap, by course-handicap rank (1 = hardest).
 // Over 18, a second stroke lands on the hardest holes first.
+// PG-SFPRO-2026-11-02: signed — negative (plus) HDCP gives back easiest-first, like Outing. Previously hdcp<=0 returned 0, so a pro got no give-back at all.
 export function sfStrokesOnHole(hdcp, holeObj, holes) {
-  if (!hdcp || hdcp <= 0) return 0;
+  if (hdcp === null || hdcp === undefined || hdcp === "") return 0;
+  if (hdcp === 0) return 0;
+  if (hdcp < 0) {
+    const sorted0 = [...(holes || [])].sort((a, b) => (a.hdcp ?? 99) - (b.hdcp ?? 99));
+    const rank0 = sorted0.findIndex(h => h.hole === holeObj.hole) + 1;
+    if (rank0 < 1) return 0;
+    const plus = -hdcp, n = sorted0.length || 18, full0 = Math.floor(plus / 18), rem0 = plus % 18;
+    return -(full0 + (rem0 > 0 && rank0 > n - rem0 ? 1 : 0));
+  }
   const sorted = [...(holes || [])].sort((a, b) => (a.hdcp ?? 99) - (b.hdcp ?? 99));
   const rank = sorted.findIndex(h => h.hole === holeObj.hole) + 1;
   if (rank < 1) return 0;
