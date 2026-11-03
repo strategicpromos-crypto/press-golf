@@ -1,3 +1,4 @@
+// PG-PROBUTTON-2026-11-02: PRO button flips a player's HDCP sign (type 2, tap PRO = -2; tap again = back to 2; 0/blank + PRO = -1). No minus typing needed.
 // PG-HDCPSTEP-2026-11-02: HDCP inputs get - / + buttons so a plus (negative) HDCP can be tapped in on Android, where the number keypad has no minus key.
 // PG-NETTEAM3-2026-11-02: net team best-ball + pro give-back (hardest hole).
 // PG-LINKS-2026-10-31: links use window.location.origin, not hardcoded vercel.app.
@@ -1393,6 +1394,7 @@ export default function TeamTournament({onBack, user, onDelete}){
                           onChange={e=>{const h=[...(team.hdcp||Array(team.size).fill(null))];h[j]=e.target.value===""?null:Math.max(-18,Math.min(54,parseInt(e.target.value)||0));updateTeam(i,{hdcp:h});}}
                           style={{width:48,flexShrink:0,padding:"10px 8px",background:C.surface,border:"1px solid "+C.border,borderRadius:8,color:C.text,fontSize:13,outline:"none",textAlign:"center"}}/>
                         <button onClick={()=>{const cur=team.hdcp?.[j];const base=(cur===null||cur===undefined||cur==="")?0:cur;const h=[...(team.hdcp||Array(team.size).fill(null))];h[j]=Math.max(-18,Math.min(54,base+1));updateTeam(i,{hdcp:h});}} style={{width:28,height:36,borderRadius:8,background:C.dim,border:"1px solid "+C.border,color:C.text,fontSize:18,fontWeight:700,cursor:"pointer"}}>+</button>
+                        <button onClick={()=>{const cur=team.hdcp?.[j];const nv=(cur===null||cur===undefined||cur===""||cur===0)?-1:-cur;const h=[...(team.hdcp||Array(team.size).fill(null))];h[j]=nv;updateTeam(i,{hdcp:h});}} style={{padding:"10px 12px",borderRadius:10,fontSize:12,fontWeight:800,cursor:"pointer",flexShrink:0,background:((team.hdcp?.[j]||0)<0)?C.gold:"rgba(232,184,75,0.08)",color:((team.hdcp?.[j]||0)<0)?"#0a1a0f":C.gold,border:"1.5px solid "+(((team.hdcp?.[j]||0)<0)?C.gold:"rgba(232,184,75,0.45)")}}>PRO</button>
                       </div>
                     )}
                     {bigBoyEnabled&&(
@@ -2233,6 +2235,7 @@ export default function TeamTournament({onBack, user, onDelete}){
                                 onChange={e=>{const h=[...(team.hdcp||Array(size).fill(null))];h[j]=e.target.value===""?null:Math.max(-18,Math.min(54,parseInt(e.target.value)||0));updateTeam(i,{hdcp:h});}}
                                 style={{width:48,flexShrink:0,boxSizing:"border-box",padding:"9px 8px",background:C.bg,border:"1px solid "+((team.players?.[j]||"").trim()&&(team.hdcp?.[j]===null||team.hdcp?.[j]===undefined)?C.red:C.border),borderRadius:8,color:C.text,fontSize:13,outline:"none",textAlign:"center"}}/>
                               <button onClick={()=>{const cur=team.hdcp?.[j];const base=(cur===null||cur===undefined||cur==="")?0:cur;const h=[...(team.hdcp||Array(size).fill(null))];h[j]=Math.max(-18,Math.min(54,base+1));updateTeam(i,{hdcp:h});}} style={{width:28,height:36,borderRadius:8,background:C.dim,border:"1px solid "+C.border,color:C.text,fontSize:18,fontWeight:700,cursor:"pointer"}}>+</button>
+                              <button onClick={()=>{const cur=team.hdcp?.[j];const nv=(cur===null||cur===undefined||cur===""||cur===0)?-1:-cur;const h=[...(team.hdcp||Array(size).fill(null))];h[j]=nv;updateTeam(i,{hdcp:h});}} style={{padding:"9px 12px",borderRadius:10,fontSize:12,fontWeight:800,cursor:"pointer",flexShrink:0,background:((team.hdcp?.[j]||0)<0)?C.gold:"rgba(232,184,75,0.08)",color:((team.hdcp?.[j]||0)<0)?"#0a1a0f":C.gold,border:"1.5px solid "+(((team.hdcp?.[j]||0)<0)?C.gold:"rgba(232,184,75,0.45)")}}>PRO</button>
                             </div>
                           </div>
                         ):(
