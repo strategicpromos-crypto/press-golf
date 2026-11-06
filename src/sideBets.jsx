@@ -1,5 +1,11 @@
 import React, { useState } from "react";
 import { getStrokeHoles, calcAutoPressNassau, calcSkins, courseHasHdcp } from "./golf.js";
+// PG-BANKPOST-2026-11-06: one-tap "Post to Bank" for director side bets.
+// SideBetsTab takes an optional onPostToBank prop (director only). When it
+// is absent (captains / spectators) no button renders at all. The confirm
+// uses PgDialog pgConfirm (this file did NOT use PgDialog before — its
+// delete used its own inline modal); pgAlert reports a failed post.
+import { pgConfirm, pgAlert } from "./PgDialog.js";
 
 // ── TOURNAMENT SIDE BETS ─────────────────────────────────────────────────────
 // A side bet is a buddy-game calculation that runs on TOP of tournament
@@ -101,7 +107,7 @@ export function calcSideBet(bet, teams, course, courseId){
     holesPlayed,aStrokeHoles,bStrokeHoles};
 }
 
-function betTypeLabel(bet){
+export function betTypeLabel(bet){
   if(bet.betType==="skins")return "Skins · $"+bet.betAmount+" / skin";
   if(bet.betType==="match")return "Match Play · $"+bet.betAmount+" / hole";
   if(bet.betType==="nassau")return "Nassau · $"+bet.betAmount+" front / back / total";
@@ -129,10 +135,15 @@ function amtColor(amt, C){
 // Pass onDelete to show Remove buttons (director and captains both run bets);
 // spectators omit it (read-only). canSetup swaps the empty-state hint so the
 // captain view doesn't tell captains to wait for the director.
-export function SideBetsTab({bets, teams, course, courseId, C, onDelete, canSetup}){
+// PG-BANKPOST-2026-11-06: pass onPostToBank (director only) to show the
+// "Post to Bank" button under a finished bet's settle line.
+export function SideBetsTab({bets, teams, course, courseId, C, onDelete, canSetup, onPostToBank}){
+  // PG-BANKPOST-2026-11-06: onPostToBank is director-only. Captains and
+  // spectators never pass it, so they never see the button.
   // PG-PGDIALOG-2026-10-31: in-app Press Golf confirm, not the browser's
   // window.confirm (Android titles that with the site address).
   const [pendingDelete, setPendingDelete] = useState(null);
+  const [postingId, setPostingId] = useState(null); // PG-BANKPOST-2026-11-06: bet id mid-post (double-tap guard)
   if(!bets||bets.length===0){
     return(
       <div style={{background:C.card,border:"1px solid "+C.border,borderRadius:14,padding:"20px",textAlign:"center"}}>
@@ -246,6 +257,36 @@ export function SideBetsTab({bets, teams, course, courseId, C, onDelete, canSetu
               </span>
             </div>
             <div style={{fontSize:12,color:C.muted,marginTop:6}}>{settleLine(calc)}</div>
+            {/* PG-BANKPOST-2026-11-06: director-only Post to Bank. Renders
+                only when onPostToBank is passed, only on a finished round
+                (18 holes, both players scored) and only on a non-zero total.
+                After posting, bankPosted on the saved bet makes this a
+                disabled "Posted to Bank ✓" line that survives reload. */}
+            {onPostToBank&&bet.bankPosted?(
+              <button disabled style={{width:"100%",padding:"12px",background:C.surface,border:"1px solid "+C.border,color:C.muted,borderRadius:10,fontSize:14,fontWeight:700,marginTop:10,cursor:"default"}}>Posted to Bank ✓ ${bet.bankPosted.amount}</button>
+            ):onPostToBank&&calc.holesPlayed>=18&&calc.total!==0?(
+              <button disabled={postingId===bet.id} onClick={async()=>{
+                const amt=Math.abs(calc.total);
+                const winner=calc.total>0?calc.aName:calc.bName;
+                const loser=calc.total>0?calc.bName:calc.aName;
+                const ok=await pgConfirm("Post "+loser+" -$"+amt+" / "+winner+" +$"+amt+" to the bank?","Post to Bank");
+                if(!ok)return;
+                setPostingId(bet.id);
+                try{
+                  const res=await onPostToBank(bet,calc);
+                  if(res&&res.ok===false){
+                    let msg="Couldn't post to the bank: "+(res.error||"Unknown error.");
+                    if(res.posted&&res.posted.length)msg+=" Posted so far: "+res.posted.join(", ")+".";
+                    if(res.inserted&&res.inserted.length)msg+=" Bank rows are still in the bank for: "+res.inserted.join(", ")+".";
+                    if(res.rolledBack===false)msg+=" The bank rows could not be rolled back.";
+                    msg+=" Check the bank before retrying.";
+                    await pgAlert(msg);
+                  }
+                }finally{ setPostingId(null); }
+              }} style={{width:"100%",padding:"12px",background:C.gold,border:"none",color:"#0a1a0f",borderRadius:10,fontSize:14,fontWeight:800,marginTop:10,cursor:postingId===bet.id?"default":"pointer",opacity:postingId===bet.id?0.6:1}}>
+                {postingId===bet.id?"Posting…":"Post to Bank · $"+Math.abs(calc.total)}
+              </button>
+            ):null}
           </div>
         );
       })}
