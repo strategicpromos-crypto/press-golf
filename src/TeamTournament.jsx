@@ -18,11 +18,12 @@ import { COURSES, courseHasHdcp } from "./golf.js";
 import { isLibraryCourse } from "./courseStore.js";
 import CourseSearch, { CourseDeletePanel } from "./CourseSearch.jsx";
 import { sb } from "./supabase.js";
-import { pgAlert } from "./PgDialog.js";
+import { pgAlert, pgConfirm } from "./PgDialog.js";
 import { calcSkins, SkinsTab, missingNetHdcp, strokesOnHole } from "./skins.jsx";
 import { SideBetsTab, betTypeLabel, loadBankNameMap, BANK_ME } from "./sideBets.jsx";
 import { RulesTab } from "./RulesTab.jsx";
-// // PG-GAMES-OUTING-2026-11-06: Games hub — Nines / Wolf / Sixes. ADDITIVE: a calculation layer on
+// // PG-GAMES-OUTING-2026-11-06 / PG-GAMES-REMOVEFIX-2026-11-06: Games hub — Nines / Wolf / Sixes. ADDITIVE: a calculation layer on
+// PG-GAMES-WOLFPROG-2026-11-06: Wolf Progressive stakes — Off / +1 per hole / ×2-×3 by sixes. Multiplier applies to all Wolf points on a hole, Blind Lone on top.
 // top of scores already entered (same pattern as Skins / Ryder Cup). No score
 // entry, no new DB column. Games are stored as plain JSON in the game state
 // (see the per-file setGames wrapper). One game of each type per round.
@@ -57,12 +58,14 @@ function gamesMoney(v){ if(!v) return "$0"; return (v>0?"+$":"-$")+Math.abs(v).t
 function gamesNewGame(type,keys){
   const base={id:"g_"+Date.now()+"_"+Math.floor(Math.random()*1000),type,players:keys.slice(),net:true,perPoint:1,collapsed:false};
   if(type==="nines") return {...base,p1:5,p2:3,p3:1};
-  if(type==="wolf") return {...base,wolf:{}};
+  if(type==="wolf") return {...base,wolf:{},prog:"off"};
   return base;
 }
+function gamesWolfMult(game,hole){ const p=game.prog||"off"; if(p==="plus1") return hole; if(p==="sixes") return hole<=6?1:hole<=12?2:3; return 1; }
+function gamesWolfProgLabel(game){ const p=game.prog||"off"; if(p==="plus1") return "Progressive +1/hole"; if(p==="sixes") return "Progressive ×2/×3 by sixes"; return ""; }
 function gamesCalc(game,players,holes){
   const totals={}; players.forEach(p=>{totals[p.key]=0;});
-  const perHole={}; let holesPlayed=0; const pending=[];
+  const perHole={}; const perHoleMult={}; let holesPlayed=0; const pending=[];
   if(game.type==="nines"){
     const pts=[game.p1??5,game.p2??3,game.p3??1];
     for(const h of holes){
@@ -86,15 +89,16 @@ function gamesCalc(game,players,holes){
       const choice=(game.wolf||{})[h.hole];
       if(!choice){ pending.push(h.hole); continue; }
       holesPlayed++;
+      const mult=gamesWolfMult(game,h.hole); perHoleMult[h.hole]=mult;
       const wolfKeys=[wolf.key,choice.partner].filter(Boolean);
       const otherKeys=players.map(p=>p.key).filter(k=>!wolfKeys.includes(k));
       const best=(keys)=>{ const vs=keys.map(k=>scored.find(s=>s.p.key===k)?.v).filter(v=>v!==null&&v!==undefined); return vs.length?Math.min(...vs):null; };
       const wb=best(wolfKeys), ob=best(otherKeys); const row={};
       if(wb!==null&&ob!==null&&wb<ob){
-        if(choice.partner){ wolfKeys.forEach(k=>{row[k]=1; totals[k]+=1;}); }
-        else { const pts=choice.blind?4:2; row[wolf.key]=pts; totals[wolf.key]+=pts; }
+        if(choice.partner){ wolfKeys.forEach(k=>{row[k]=mult; totals[k]+=mult;}); }
+        else { const pts=(choice.blind?4:2)*mult; row[wolf.key]=pts; totals[wolf.key]+=pts; }
       } else if(wb!==null&&ob!==null&&wb>ob){
-        otherKeys.forEach(k=>{row[k]=1; totals[k]+=1;});
+        otherKeys.forEach(k=>{row[k]=mult; totals[k]+=mult;});
       }
       perHole[h.hole]=row;
     }
@@ -113,7 +117,7 @@ function gamesCalc(game,players,holes){
     }
   }
   const avg=players.length?players.reduce((s,p)=>s+totals[p.key],0)/players.length:0;
-  return {totals,perHole,holesPlayed,pending,avg};
+  return {totals,perHole,perHoleMult,holesPlayed,pending,avg};
 }
 function GamesHub({C,players,holes,games,setGames}){
   const [showAdd,setShowAdd]=useState(false);
@@ -150,7 +154,7 @@ function GamesHub({C,players,holes,games,setGames}){
       return(<div key={game.id} style={{background:C.card,border:"1px solid "+C.border,borderRadius:14,padding:"14px",marginBottom:12}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:game.collapsed?0:10}}>
           <button onClick={()=>updateGame(game.id,{collapsed:!game.collapsed})} style={{flex:1,textAlign:"left",background:"none",border:"none",color:C.text,cursor:"pointer",padding:0}}>
-            <span style={{fontWeight:800,fontSize:16}}>{def.emoji} {def.name}</span>
+            <span style={{fontWeight:800,fontSize:16}}>{def.emoji} {def.name}</span>{game.type==="wolf"&&gamesWolfProgLabel(game)&&(<span style={{fontSize:11,color:C.gold,marginLeft:8,fontWeight:700}}>{gamesWolfProgLabel(game)}</span>)}
             <span style={{fontSize:12,color:C.muted,marginLeft:8}}>{calc.holesPlayed} hole{calc.holesPlayed===1?"":"s"} scored</span>
             <span style={{fontSize:12,color:C.muted,marginLeft:6}}>{game.collapsed?"▸":"▾"}</span>
           </button>
@@ -164,6 +168,12 @@ function GamesHub({C,players,holes,games,setGames}){
             <button onClick={()=>updateGame(game.id,{perPoint:Math.max(0,Number(game.perPoint||0)-0.5)})} style={chip(false)}>−</button>
             <span style={{fontSize:14,fontWeight:800,minWidth:44,textAlign:"center"}}>${Number(game.perPoint||0).toFixed(2)}</span>
             <button onClick={()=>updateGame(game.id,{perPoint:Number(game.perPoint||0)+0.5})} style={chip(false)}>+</button>
+            {game.type==="wolf"&&(<span style={{display:"flex",gap:4,alignItems:"center",marginLeft:4,flexWrap:"wrap"}}>
+              <span style={{fontSize:12,color:C.muted}}>Progressive</span>
+              <button onClick={()=>updateGame(game.id,{prog:"off"})} style={chip((game.prog||"off")==="off")}>Off</button>
+              <button onClick={()=>updateGame(game.id,{prog:"plus1"})} style={chip(game.prog==="plus1")}>+1 / hole</button>
+              <button onClick={()=>updateGame(game.id,{prog:"sixes"})} style={chip(game.prog==="sixes")}>×2 / ×3 by sixes</button>
+            </span>)}
             {game.type==="nines"&&(<span style={{display:"flex",gap:4,alignItems:"center",marginLeft:4}}>
               <span style={{fontSize:12,color:C.muted}}>Pts</span>
               {[["p1",5],["p2",3],["p3",1]].map(([k])=>(<input key={k} type="number" min="0" value={game[k]??0} onChange={e=>updateGame(game.id,{[k]:Math.max(0,parseInt(e.target.value,10)||0)})} style={numInp}/>))}
@@ -172,6 +182,7 @@ function GamesHub({C,players,holes,games,setGames}){
             </span>)}
           </div>
           <div style={{fontSize:11,color:C.muted,marginBottom:8}}>{game.net?"Net scores (course-handicap strokes; a player with no HDCP plays gross).":"Gross scores."} $ settle is zero-sum: (points − average) × $ per point.</div>
+          {game.type==="wolf"&&(game.prog||"off")!=="off"&&(<div style={{fontSize:11,color:C.gold,marginBottom:8}}>Progressive on: {game.prog==="plus1"?"hole N is worth N× the base points (hole 1 = ×1 … hole 18 = ×18).":"holes 1–6 = ×1, holes 7–12 = ×2, holes 13–18 = ×3."} Applies to every Wolf point on the hole — partner win, Lone Wolf win, Blind Lone (on top), and Lone Wolf loss.</div>)}
           {ranked.map((p,idx)=>(<div key={p.key} style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:"1px solid rgba(255,255,255,0.04)"}}>
             <span style={{fontSize:14,fontWeight:idx===0?800:600}}>{idx+1}. {p.name}</span>
             <span style={{fontSize:14,fontWeight:800}}>{gamesFmt(calc.totals[p.key])} pts · <span style={{color:(calc.totals[p.key]-calc.avg)*(game.perPoint||0)===0?C.muted:(calc.totals[p.key]-calc.avg)>0?C.green:C.red}}>{gamesMoney((calc.totals[p.key]-calc.avg)*(game.perPoint||0))}</span></span>
@@ -183,13 +194,13 @@ function GamesHub({C,players,holes,games,setGames}){
               const choice=(game.wolf||{})[h.hole]||{};
               const setChoice=(patch)=>updateGame(game.id,{wolf:{...(game.wolf||{}),[h.hole]:{partner:choice.partner??null,blind:!!choice.blind,...patch}}});
               return(<div key={h.hole} style={{background:C.surface,border:"1px solid "+C.border,borderRadius:10,padding:"10px",marginBottom:8}}>
-                <div style={{fontSize:13,fontWeight:800,marginBottom:6}}>Hole {h.hole} · Wolf: {wolf.name}</div>
+                <div style={{fontSize:13,fontWeight:800,marginBottom:6}}>Hole {h.hole} · Wolf: {wolf.name}{(game.prog||"off")!=="off"?(" · ×"+gamesWolfMult(game,h.hole)):""}</div>
                 <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
                   {gps.filter(p=>p.key!==wolf.key).map(p=>(<button key={p.key} onClick={()=>setChoice({partner:choice.partner===p.key?null:p.key,blind:false})} style={chip(choice.partner===p.key)}>Partner: {p.name}</button>))}
                   <button onClick={()=>setChoice({partner:null,blind:false})} style={chip(!choice.partner&&!choice.blind&&choice.partner!==undefined&&game.wolf?.[h.hole])}>Lone Wolf</button>
                   <button onClick={()=>setChoice({partner:null,blind:!choice.blind})} style={chip(!!choice.blind)}>Blind Lone · 4 pts</button>
                 </div>
-                <div style={{fontSize:11,color:C.muted,marginTop:6}}>{choice.partner?("Partner: "+(gps.find(p=>p.key===choice.partner)?.name||"")+" — win = 1 pt each"):choice.blind?"Blind Lone Wolf — win = 4 pts, lose = each opponent 1 pt":game.wolf?.[h.hole]?"Lone Wolf — win = 2 pts, lose = each opponent 1 pt":"No pick yet — this hole is unscored."}</div>
+                <div style={{fontSize:11,color:C.muted,marginTop:6}}>{(()=>{ const m=gamesWolfMult(game,h.hole); const u=(n)=>n+" pt"+(n===1?"":"s"); return choice.partner?("Partner: "+(gps.find(p=>p.key===choice.partner)?.name||"")+" — win = "+u(m)+" each"):choice.blind?("Blind Lone Wolf — win = "+(4*m)+" pts, lose = each opponent "+u(m)):game.wolf?.[h.hole]?("Lone Wolf — win = "+(2*m)+" pts, lose = each opponent "+u(m)):"No pick yet — this hole is unscored."; })()}</div>
               </div>);
             })}
           </div>)}
@@ -197,7 +208,7 @@ function GamesHub({C,players,holes,games,setGames}){
           {showHoles[game.id]&&(<div style={{marginTop:8}}>
             {holesList.length===0&&(<div style={{fontSize:12,color:C.muted}}>No holes scored yet for this game.</div>)}
             {holesList.map(h=>(<div key={h.hole} style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"3px 0",borderBottom:"1px solid rgba(255,255,255,0.04)"}}>
-              <span style={{color:C.muted}}>Hole {h.hole}</span>
+              <span style={{color:C.muted}}>Hole {h.hole}{game.type==="wolf"?(" · ×"+(calc.perHoleMult?calc.perHoleMult[h.hole]||1:1)):""}</span>
               <span>{gps.map(p=>p.name.split(" ")[0]+" "+gamesFmt(calc.perHole[h.hole][p.key]??0)).join(" · ")}</span>
             </div>))}
           </div>)}
