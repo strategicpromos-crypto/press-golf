@@ -14,6 +14,13 @@ import { pgConfirm, pgAlert } from "./PgDialog.js";
 export const BANK_NAME_MAP_KEY = "pg-bank-name-map";
 export function loadBankNameMap(){ try{ return JSON.parse(localStorage.getItem(BANK_NAME_MAP_KEY)||"{}")||{}; }catch(e){ return {}; } }
 export function saveBankNameMap(map){ try{ localStorage.setItem(BANK_NAME_MAP_KEY, JSON.stringify(map||{})); }catch(e){} }
+export const BANK_ME = "__ME__";
+// PG-BANKPOST-ME-2026-11-06: "Me" — the director (Michael) is one side of a
+// side bet. The bank tracker is the DIRECTOR's money vs each opponent, so
+// there is no bank row for the director himself: a "Me" side gets no bets
+// row and no players update — only the OTHER side's bank moves by the full
+// amount. Stored in the same nickname map as a playerId, with this distinct
+// marker value, so it is remembered the same way ("KP" -> "__ME__").
 
 // ── TOURNAMENT SIDE BETS ─────────────────────────────────────────────────────
 // A side bet is a buddy-game calculation that runs on TOP of tournament
@@ -165,11 +172,75 @@ export function SideBetsTab({bets, teams, course, courseId, C, onDelete, canSetu
     await pgAlert(msg);
   }
 
+  // PG-BANKPOST-ME-2026-11-06: confirm text that tells the truth when one
+  // side is Me. Only the other side posts, so only that side's amount is
+  // named; the Me side is called out as getting no row.
+  function bankConfirmText(calc, isMeA, isMeB){
+    const amt=Math.abs(calc.total);
+    if(isMeA&&!isMeB){
+      const bAmt=-calc.total;
+      return "Post "+calc.bName+" "+(bAmt>0?"+$":"-$")+amt+" to the bank? ("+calc.aName+" is you — no row for you.)";
+    }
+    if(isMeB&&!isMeA){
+      const aAmt=calc.total;
+      return "Post "+calc.aName+" "+(aAmt>0?"+$":"-$")+amt+" to the bank? ("+calc.bName+" is you — no row for you.)";
+    }
+    const winner=calc.total>0?calc.aName:calc.bName;
+    const loser=calc.total>0?calc.bName:calc.aName;
+    return "Post "+loser+" -$"+amt+" / "+winner+" +$"+amt+" to the bank?";
+  }
+
   // PG-BANKPOST-PICKER-2026-11-06: Post to Bank flow. Confirm first, then
   // resolve bet nicknames to bank players. If every name matches (exact or
   // remembered) the post goes straight through; if a name doesn't match,
   // the picker opens instead of the post aborting.
+  // PG-BANKPOST-ME-2026-11-06: a picker choice is only pre-selected
+  // when it is a real roster id or "__ME__". Anything else (including a
+  // stale id) stays unselected — the picker must never default to
+  // "+ Add new player…" with a stray text field, as it did before.
+  function validChoice(suggestedId, roster){
+    if(!suggestedId) return "";
+    if(suggestedId===BANK_ME) return BANK_ME;
+    return (roster||[]).some(p=>p.id===suggestedId)?suggestedId:"";
+  }
   async function handlePostToBank(bet, calc){
+    // PG-BANKPOST-ME-2026-11-06: resolve FIRST, so the confirm text can
+    // say the truth when one side is Me (only the other side posts).
+    // Unmatched names open the picker — the picker's own Post button is
+    // the confirmation there, so no pgConfirm runs first in that case.
+    if(onResolveBankNames){
+      const r=await onResolveBankNames(bet,calc);
+      if(!r||r.ok===false){
+        if(r&&r.needsMapping){
+          const choices={}, newNames={};
+          for(const u of (r.unmatched||[])){ choices[u.side]=validChoice(u.suggestedId, r.roster); newNames[u.side]=u.betName; }
+          setBankPicker({bet, calc, roster:r.roster||[], unmatched:r.unmatched||[], matched:r.matched||{a:null,b:null}, isMe:r.isMe||{a:false,b:false}, choices, newNames});
+          return;
+        }
+        await pgAlert("Couldn't check the bank roster: "+(r&&r.error||"Unknown error."));
+        return;
+      }
+      const matched=r.matched||{};
+      const isMe=r.isMe||{a:false,b:false};
+      if(isMe.a&&isMe.b){ await pgAlert("Both sides can't be you — pick a bank player for one side."); return; }
+      if(!r.unmatched||r.unmatched.length===0){
+        const ok=await pgConfirm(bankConfirmText(calc, isMe.a, isMe.b),"Post to Bank");
+        if(!ok) return;
+        setPostingId(bet.id);
+        try{
+          const mapping={a:isMe.a?{isMe:true}:{playerId:matched.a&&matched.a.id}, b:isMe.b?{isMe:true}:{playerId:matched.b&&matched.b.id}};
+          const res=await onPostToBank(bet,calc,mapping);
+          if(res&&res.ok===false) await showPostError(res);
+        } finally { setPostingId(null); }
+        return;
+      }
+      const choices={}, newNames={};
+      for(const u of r.unmatched){ choices[u.side]=validChoice(u.suggestedId, r.roster); newNames[u.side]=u.betName; }
+      setBankPicker({bet, calc, roster:r.roster||[], unmatched:r.unmatched, matched, isMe, choices, newNames});
+      return;
+    }
+    // No resolver (should not happen from the director files): old
+    // confirm-first flow, unchanged.
     const amt=Math.abs(calc.total);
     const winner=calc.total>0?calc.aName:calc.bName;
     const loser=calc.total>0?calc.bName:calc.aName;
@@ -177,39 +248,16 @@ export function SideBetsTab({bets, teams, course, courseId, C, onDelete, canSetu
     if(!ok) return;
     setPostingId(bet.id);
     try{
-      if(!onResolveBankNames){
-        const res=await onPostToBank(bet,calc);
-        if(res&&res.ok===false){
-          if(res.needsMapping){
-            const choices={}, newNames={};
-            for(const u of (res.unmatched||[])){ choices[u.side]=u.suggestedId||""; newNames[u.side]=u.betName; }
-            setBankPicker({bet, calc, roster:res.roster||[], unmatched:res.unmatched||[], matched:res.matched||{a:null,b:null}, choices, newNames});
-            return;
-          }
-          await showPostError(res);
-        }
-        return;
-      }
-      const r=await onResolveBankNames(bet,calc);
-      if(!r||r.ok===false){
-        if(r&&r.needsMapping){
+      const res=await onPostToBank(bet,calc);
+      if(res&&res.ok===false){
+        if(res.needsMapping){
           const choices={}, newNames={};
-          for(const u of (r.unmatched||[])){ choices[u.side]=u.suggestedId||""; newNames[u.side]=u.betName; }
-          setBankPicker({bet, calc, roster:r.roster||[], unmatched:r.unmatched||[], matched:r.matched||{a:null,b:null}, choices, newNames});
+          for(const u of (res.unmatched||[])){ choices[u.side]=validChoice(u.suggestedId, res.roster); newNames[u.side]=u.betName; }
+          setBankPicker({bet, calc, roster:res.roster||[], unmatched:res.unmatched||[], matched:res.matched||{a:null,b:null}, isMe:res.isMe||{a:false,b:false}, choices, newNames});
           return;
         }
-        await pgAlert("Couldn't check the bank roster: "+(r&&r.error||"Unknown error."));
-        return;
+        await showPostError(res);
       }
-      const matched=r.matched||{};
-      if(!r.unmatched||r.unmatched.length===0){
-        const res=await onPostToBank(bet,calc,{a:{playerId:matched.a&&matched.a.id}, b:{playerId:matched.b&&matched.b.id}});
-        if(res&&res.ok===false) await showPostError(res);
-        return;
-      }
-      const choices={}, newNames={};
-      for(const u of r.unmatched){ choices[u.side]=u.suggestedId||""; newNames[u.side]=u.betName; }
-      setBankPicker({bet, calc, roster:r.roster||[], unmatched:r.unmatched, matched, choices, newNames});
     } finally { setPostingId(null); }
   }
 
@@ -223,17 +271,28 @@ export function SideBetsTab({bets, teams, course, courseId, C, onDelete, canSetu
       if(!pk.choices[u.side]){ await pgAlert("Pick a bank player for \""+u.betName+"\" (or choose Add new player)."); return; }
       if(pk.choices[u.side]==="__NEW__"&&!(pk.newNames[u.side]||"").trim()){ await pgAlert("Enter a name for the new bank player for \""+u.betName+"\"."); return; }
     }
+    // PG-BANKPOST-ME-2026-11-06: both sides can't be you. The dialog
+    // stays open so the director can fix one side.
+    const meSides=["a","b"].filter(s=>{
+      if(pk.isMe&&pk.isMe[s]) return true;
+      return pk.unmatched.some(u=>u.side===s&&pk.choices[s]===BANK_ME);
+    });
+    if(meSides.length>=2){ await pgAlert("Both sides can't be you — pick a bank player for one side."); return; }
     const mapping={a:{}, b:{}};
     for(const side of ["a","b"]){
+      if(pk.isMe&&pk.isMe[side]){ mapping[side]={isMe:true}; continue; }
       const m=pk.matched[side];
       if(m&&m.id) mapping[side]={playerId:m.id};
     }
     for(const u of pk.unmatched){
-      if(pk.choices[u.side]==="__NEW__") mapping[u.side]={newName:(pk.newNames[u.side]||"").trim()};
+      if(pk.choices[u.side]===BANK_ME) mapping[u.side]={isMe:true};
+      else if(pk.choices[u.side]==="__NEW__") mapping[u.side]={newName:(pk.newNames[u.side]||"").trim()};
       else mapping[u.side]={playerId:pk.choices[u.side]};
     }
     const map=loadBankNameMap(); let changed=false;
     for(const u of pk.unmatched){
+      // PG-BANKPOST-ME-2026-11-06: "Me" is remembered in the same map,
+      // as the "__ME__" marker — so the next KP bet auto-resolves to Me.
       if(pk.choices[u.side]&&pk.choices[u.side]!=="__NEW__"){
         const k=(u.betName||"").trim().toLowerCase();
         if(map[k]!==pk.choices[u.side]){ map[k]=pk.choices[u.side]; changed=true; }
@@ -398,6 +457,10 @@ export function SideBetsTab({bets, teams, course, courseId, C, onDelete, canSetu
                 <select value={bankPicker.choices[u.side]||""} onChange={e=>setBankPicker(prev=>({...prev, choices:{...prev.choices,[u.side]:e.target.value}}))}
                   style={{width:"100%",padding:"10px",background:C.surface,border:"1px solid "+C.border,color:C.text,borderRadius:10,fontSize:14}}>
                   <option value="">— Pick a bank player —</option>
+                  {/* PG-BANKPOST-ME-2026-11-06: "Me" first — the director is
+                      one side of the bet, and there is no bank row for him.
+                      Picking Me posts only the other side. */}
+                  <option value={BANK_ME}>★ Me — this is me (the director)</option>
                   {bankPicker.roster.map(pl=>(<option key={pl.id} value={pl.id}>{pl.name}</option>))}
                   <option value="__NEW__">＋ Add new player…</option>
                 </select>
