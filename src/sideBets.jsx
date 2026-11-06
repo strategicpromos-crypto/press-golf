@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { getStrokeHoles, calcAutoPressNassau, calcSkins, courseHasHdcp } from "./golf.js";
+import { getStrokeHoles, calcAutoPressNassau, calcSkins, courseHasHdcp, nassauAmounts } from "./golf.js";
 // PG-BANKPOST-2026-11-06: one-tap "Post to Bank" for director side bets.
 // SideBetsTab takes an optional onPostToBank prop (director only). When it
 // is absent (captains / spectators) no button renders at all. The confirm
@@ -31,6 +31,9 @@ export const BANK_ME = "__ME__";
 //     false = a tied hole is dead, each hole is worth exactly one skin.
 //   betType: "skins" | "match" | "nassau" | "nassau-press"
 //   betAmount: $ per skin / per hole / per side+total
+//   PG-NASSAU-AMOUNTS-2026-11-06: Nassau bets may also carry betFront /
+//   betBack / betTotal ($ front 9 / back 9 / overall). betAmount stays the
+//   front amount for old single-amount bets; missing segments fall back to it.
 //   strokes: SIGNED — >0 means player B receives that many, <0 means player A
 //     receives. Strokes split per side (getStrokeHoles): 2 = 1 front + 1 back.
 //   pressDown: auto-press trigger for nassau-press (default 2).
@@ -117,16 +120,19 @@ export function calcSideBet(bet, teams, course, courseId){
 
   // nassau / nassau-press — auto presses only (manualPresses: [])
   const r=calcAutoPressNassau({me:aScores,opp:bScores}, holes, aStrokeHoles, bStrokeHoles,
-    bet.betAmount, bet.betType==="nassau-press"?(bet.pressDown||2):99, []);
+    nassauAmounts(bet), bet.betType==="nassau-press"?(bet.pressDown||2):99, []);
   return {type:bet.betType,aName,bName,total:r.net,front:r.front,back:r.back,totalBet:r.total,
     holesPlayed,aStrokeHoles,bStrokeHoles};
 }
 
 export function betTypeLabel(bet){
+  // PG-NASSAU-AMOUNTS-2026-11-06: Nassau shows front / back / overall.
+  const na=nassauAmounts(bet);
+  const nassauStr="$"+na.front+"/$"+na.back+"/$"+na.total;
   if(bet.betType==="skins")return "Skins · $"+bet.betAmount+" / skin";
   if(bet.betType==="match")return "Match Play · $"+bet.betAmount+" / hole";
-  if(bet.betType==="nassau")return "Nassau · $"+bet.betAmount+" front / back / total";
-  return "Nassau + Auto Press · $"+bet.betAmount+" · press at "+(bet.pressDown||2)+" down";
+  if(bet.betType==="nassau")return "Nassau · "+nassauStr;
+  return "Nassau + Auto Press · "+nassauStr+" · press at "+(bet.pressDown||2)+" down";
 }
 
 function settleLine(calc){
