@@ -408,8 +408,31 @@ export function calcMatchPlay(scores, holeData, myStrokeHoles, oppStrokeHoles, b
   return { total, holesPlayed, holes };
 }
 
+// PG-NASSAU-AMOUNTS-2026-11-06: per-segment Nassau amounts (front / back / overall).
+// A bet/opponent may carry betFront/betBack/betTotal; betAmount stays the
+// back-compat fallback (and the front amount for old single-amount bets).
+export function nassauAmounts(o){
+  const base=(o&&typeof o.betAmount==="number"&&o.betAmount>0)?o.betAmount:5;
+  const num=(v,fb)=>{ const x=Number(v); return Number.isFinite(x)&&x>0?x:fb; };
+  return { front:num(o&&o.betFront,base), back:num(o&&o.betBack,base), total:num(o&&o.betTotal,base) };
+}
+// Normalise the betAmount arg of the Nassau calculators: a plain number means
+// the same amount on all three segments; an {front,back,total} object wins,
+// with a missing segment falling back to the first defined one.
+function nassauCalcAmounts(betAmount){
+  const n=(v)=>{ const x=Number(v); return Number.isFinite(x)&&x>0?x:NaN; };
+  if(betAmount&&typeof betAmount==="object"){
+    const f=n(betAmount.front), b=n(betAmount.back), t=n(betAmount.total);
+    const fb=Number.isFinite(f)?f:Number.isFinite(b)?b:Number.isFinite(t)?t:0;
+    return { front:Number.isFinite(f)?f:fb, back:Number.isFinite(b)?b:fb, total:Number.isFinite(t)?t:fb };
+  }
+  const x=n(betAmount); const v=Number.isFinite(x)?x:0;
+  return { front:v, back:v, total:v };
+}
+
 export function calcNassau(scores, holeData, myStrokeHoles, oppStrokeHoles, betAmount) {
-  function calcSide(holes) {
+  const amounts=nassauCalcAmounts(betAmount);
+  function calcSide(holes, amt) {
     let myTotal = 0, oppTotal = 0, complete = true;
     for (const h of holes) {
       const myScore  = scores.me[h.hole];
@@ -419,29 +442,35 @@ export function calcNassau(scores, holeData, myStrokeHoles, oppStrokeHoles, betA
       oppTotal += oppStrokeHoles.includes(h.hole) ? oppScore - 1 : oppScore;
     }
     if (!complete && myTotal === 0) return { result:"incomplete", amount:0 };
-    if (myTotal < oppTotal)  return { result:"won",  amount: betAmount };
-    if (myTotal > oppTotal)  return { result:"lost", amount:-betAmount };
+    if (myTotal < oppTotal)  return { result:"won",  amount: amt };
+    if (myTotal > oppTotal)  return { result:"lost", amount:-amt };
     return { result:"tied", amount:0 };
   }
 
-  const front = calcSide(holeData.filter(h => h.side === "front"));
-  const back  = calcSide(holeData.filter(h => h.side === "back"));
-  const total = calcSide(holeData);
+  const front = calcSide(holeData.filter(h => h.side === "front"), amounts.front);
+  const back  = calcSide(holeData.filter(h => h.side === "back"), amounts.back);
+  const total = calcSide(holeData, amounts.total);
 
   return { front, back, total, net: front.amount + back.amount + total.amount };
 }
 
 // ── AUTO PRESS NASSAU CALCULATOR ─────────────────────────────────────────────
 // Rules:
-// - Nassau: front 9, back 9, 18-hole total — each a flat bet
+// - Nassau: front 9, back 9, 18-hole total — each a flat bet (PG-NASSAU-AMOUNTS-2026-11-06:
+//   each segment may now carry its own amount; a plain betAmount still means
+//   the same amount on all three, so old callers keep working)
 // - When any active bet hits exactly -2 (2 down) → new press starts at 0
 // - Each press bet can itself get pressed if it hits -2
 // - 18-hole total NEVER gets pressed
 // - Each bet result: +betAmount (won), -betAmount (lost), 0 (tied)
 
 export function calcAutoPressNassau(scores, holeData, myStrokeHoles, oppStrokeHoles, betAmount, pressDown = 2, manualPresses = []) {
+  // PG-NASSAU-AMOUNTS-2026-11-06: betAmount may be a number (same on all
+  // three segments, as before) or {front,back,total}. Presses on a side use
+  // that side's amount; the 18-hole total uses the total amount.
+  const amounts=nassauCalcAmounts(betAmount);
 
-  function calcSideWithPress(sideHoles) {
+  function calcSideWithPress(sideHoles, sideAmt) {
     if (!sideHoles || sideHoles.length === 0) return { bets: [], total: 0 };
 
     // Each bet: { startHole, diff, pressed }
@@ -498,7 +527,7 @@ export function calcAutoPressNassau(scores, holeData, myStrokeHoles, oppStrokeHo
       startHole: bet.startHole,
       diff:      bet.diff,
       label:     bet.label || `Press ${i}`,
-      amount:    bet.diff > 0 ? betAmount : bet.diff < 0 ? -betAmount : 0,
+      amount:    bet.diff > 0 ? sideAmt : bet.diff < 0 ? -sideAmt : 0,
     }));
 
     const total = finalBets.reduce((s, b) => s + b.amount, 0);
@@ -508,8 +537,8 @@ export function calcAutoPressNassau(scores, holeData, myStrokeHoles, oppStrokeHo
   const frontHoles = holeData.filter(h => h.side === "front");
   const backHoles  = holeData.filter(h => h.side === "back");
 
-  const front = calcSideWithPress(frontHoles);
-  const back  = calcSideWithPress(backHoles);
+  const front = calcSideWithPress(frontHoles, amounts.front);
+  const back  = calcSideWithPress(backHoles, amounts.back);
 
   // 18-hole total — NEVER pressed, flat bet based on total score
   function calcTotal() {
@@ -524,8 +553,8 @@ export function calcAutoPressNassau(scores, holeData, myStrokeHoles, oppStrokeHo
       oppT += oppStrokeHoles.includes(h.hole) ? oppScore - 1 : oppScore;
     }
     if (holesPlayed === 0) return 0;
-    if (myT < oppT)  return  betAmount;
-    if (myT > oppT)  return -betAmount;
+    if (myT < oppT)  return  amounts.total;
+    if (myT > oppT)  return -amounts.total;
     return 0;
   }
 
