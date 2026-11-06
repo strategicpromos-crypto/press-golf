@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { sb } from "./supabase.js";
 import { pgConfirm } from "./PgDialog.js";
-import { COURSES, getStrokeHoles, calcAutoPressNassau, courseHasHdcp } from "./golf.js";
+import { COURSES, getStrokeHoles, calcAutoPressNassau, courseHasHdcp, nassauAmounts } from "./golf.js";
 import CourseSearch from "./CourseSearch.jsx";
 // // PG-GAMES-2026-11-06: Games hub — Nines / Wolf / Sixes. ADDITIVE: a calculation layer on
 // PG-GAMES-WOLFPROG-2026-11-06: Wolf Progressive stakes — Off / +1 per hole / ×2-×3 by sixes. Multiplier applies to all Wolf points on a hole, Blind Lone on top.
@@ -359,6 +359,11 @@ function calcSkinsTotal(scores, course, myStrokeHoles, oppStrokeHoles, betPerSki
   return net;
 }
 
+// PG-NASSAU-AMOUNTS-2026-11-06: per-segment Nassau amounts. betAmount stays the
+// back-compat fallback; betFront/betBack/betTotal (when present) win per segment.
+function nassauLbl(o){ const a=nassauAmounts(o); return "$"+a.front+"/$"+a.back+"/$"+a.total; }
+function nassauSeg(o,seg){ return nassauAmounts(o)[seg]; }
+
 function getTally(scores, course, opp, courseId) {
   const absStrokes = Math.abs(opp.strokes || 0);
   const strokeHoles    = getStrokeHoles(courseId || "south-toledo", absStrokes);
@@ -396,7 +401,7 @@ function getTally(scores, course, opp, courseId) {
         course.holes,
         myStrokeHoles,
         oppStrokeHoles,
-        opp.betAmount,
+        nassauAmounts(opp),
         99,
         manualPresses
       );
@@ -435,21 +440,22 @@ function getTally(scores, course, opp, courseId) {
       return diff < 0 ? Math.abs(diff) + " Up" : diff + " Down";
     }
 
-    function sideAmt(diff, played) {
+    const na = nassauAmounts(opp); // PG-NASSAU-AMOUNTS-2026-11-06
+    function sideAmt(diff, played, amt) {
       if (played === 0) return 0;
-      if (diff < 0) return opp.betAmount;
-      if (diff > 0) return -opp.betAmount;
+      if (diff < 0) return amt;
+      if (diff > 0) return -amt;
       return 0;
     }
-    const frontAmt = sideAmt(front.diff, front.played);
-    const backAmt  = sideAmt(back.diff,  back.played);
+    const frontAmt = sideAmt(front.diff, front.played, na.front);
+    const backAmt  = sideAmt(back.diff,  back.played, na.back);
     const allPlayed = course.holes.filter(h => {
       const my = safeInt(myScores[h.hole], -1);
       const op = safeInt(oppScores[h.hole], -1);
       return my >= 0 && op >= 0;
     }).length;
     const overall   = sideDiff(course.holes);
-    const overallAmt = allPlayed === 18 ? sideAmt(overall.diff, overall.played) : 0;
+    const overallAmt = allPlayed === 18 ? sideAmt(overall.diff, overall.played, na.total) : 0;
 
     const label = "F: " + standingLabel(front.diff, front.played) + " | B: " + standingLabel(back.diff, back.played);
     return { label, total: frontAmt + backAmt + overallAmt };
@@ -483,7 +489,7 @@ function getTally(scores, course, opp, courseId) {
       course.holes,
       myStrokeHoles,
       oppStrokeHoles,
-      opp.betAmount,
+      nassauAmounts(opp),
       opp.pressDown || 2,
       opp.manualPresses || []
     );
@@ -550,6 +556,10 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
   const [addBetType,     setAddBetType]     = useState("nassau");
   const [addPressDown,   setAddPressDown]   = useState(2);
   const [addBetAmt,      setAddBetAmt]      = useState("5");
+  // PG-NASSAU-AMOUNTS-2026-11-06: Nassau Front / Back / Overall amounts.
+  const [addBetFront, setAddBetFront] = useState("10");
+  const [addBetBack,  setAddBetBack]  = useState("10");
+  const [addBetTotal, setAddBetTotal] = useState("20");
   const [addCarryOver,   setAddCarryOver]   = useState(true); // skins only: tied holes roll forward (default)
   const [addSameGroup,   setAddSameGroup]   = useState(true); // same group = can enter scores + manual press
 
@@ -906,12 +916,17 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
     const finalStrokes = addStrokesDir === "igive" ? totalStrokes
                        : addStrokesDir === "iget"  ? -totalStrokes
                        : 0;
+    // PG-NASSAU-AMOUNTS-2026-11-06: Nassau stores per-segment amounts;
+    // betAmount stays the front amount so old saved rounds keep working.
+    const naAmt=(addBetType==="nassau"||addBetType==="nassau-press")
+      ? { front: safeInt(addBetFront, safeInt(addBetAmt, 5)), back: safeInt(addBetBack, safeInt(addBetAmt, 5)), total: safeInt(addBetTotal, safeInt(addBetAmt, 5)) }
+      : { front: safeInt(addBetAmt, 5), back: safeInt(addBetAmt, 5), total: safeInt(addBetAmt, 5) };
     setOpponents(prev => [...prev, {
       playerId:    player.id,
       name:        player.name,
       strokes:     finalStrokes,
       betType:     addBetType,
-      betAmount:   safeInt(addBetAmt, 5),
+      betAmount:   naAmt.front, betFront: naAmt.front, betBack: naAmt.back, betTotal: naAmt.total,
       pressDown:   addBetType === "nassau-press" ? addPressDown : 2,
       carryOver:   addCarryOver,
       sameGroup:   addSameGroup,
@@ -919,6 +934,7 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
       linkedUserId: player.linked_user_id || null,
     }]);
     setAddOppId(""); setAddStrokes("0"); setAddStrokesDir("even"); setAddBetAmt("5");
+    setAddBetFront("10"); setAddBetBack("10"); setAddBetTotal("20");
     setSheet(null);
   }
 
@@ -1123,8 +1139,8 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
                   <div style={{fontSize:12,color:C.muted,marginBottom:2}}>
                     {strokeLabel} - {
                       opp.betType === "match" ? "$" + opp.betAmount + "/hole"
-                      : opp.betType === "nassau" ? "Nassau $" + opp.betAmount
-                      : opp.betType === "nassau-press" ? "Nassau - Auto Press " + (opp.pressDown||2) + "D $" + opp.betAmount
+                      : opp.betType === "nassau" ? "Nassau " + nassauLbl(opp)
+                      : opp.betType === "nassau-press" ? "Nassau - Auto Press " + (opp.pressDown||2) + "D " + nassauLbl(opp)
                       : "Skins $" + opp.betAmount + (opp.carryOver===false?" · no carry":"")
                     }
                   </div>
@@ -1205,10 +1221,32 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
             </div>
           )}
 
-          <div>
-            <Lbl>{addBetType==="match"?"$ Per Hole":addBetType==="nassau"?"$ Per Side/Total":addBetType==="nassau-press"?"$ Per Side/Total/Press":"$ Per Skin"}</Lbl>
-            <input type="number" min="1" value={addBetAmt} onChange={e=>setAddBetAmt(e.target.value)} placeholder="e.g. 5" style={{width:"100%",padding:"12px",background:C.surface,border:"1px solid "+C.border,borderRadius:10,color:C.text,fontSize:20,outline:"none",boxSizing:"border-box",textAlign:"center",fontWeight:700}} inputMode="decimal"/>
-          </div>
+          {(addBetType==="nassau"||addBetType==="nassau-press")?(
+            <div>
+              <Lbl>Nassau amounts — Front / Back / Overall</Lbl>
+              <div style={{display:"flex",gap:8}}>
+                {[["Front",addBetFront,setAddBetFront],["Back",addBetBack,setAddBetBack],["Overall",addBetTotal,setAddBetTotal]].map(([lbl,v,setV])=>(
+                  <div key={lbl} style={{flex:1}}>
+                    <div style={{fontSize:11,color:C.muted,marginBottom:4,textAlign:"center"}}>{lbl}</div>
+                    <input type="number" min="1" value={v} onChange={e=>setV(e.target.value)}
+                      style={{width:"100%",padding:"12px 4px",background:C.surface,border:"1px solid "+C.border,borderRadius:10,color:C.text,fontSize:20,outline:"none",boxSizing:"border-box",textAlign:"center",fontWeight:700}} inputMode="decimal"/>
+                  </div>
+                ))}
+              </div>
+              <div style={{display:"flex",gap:6,marginTop:8}}>
+                {[["Equal",[addBetFront,addBetFront,addBetFront]],["10 / 10 / 20",[10,10,20]],["10 / 20 / 10",[10,20,10]]].map(([lbl,vals])=>(
+                  <button key={lbl} onClick={()=>{ setAddBetFront(String(vals[0])); setAddBetBack(String(vals[1])); setAddBetTotal(String(vals[2])); }}
+                    style={{flex:1,padding:"9px 4px",fontSize:11,fontWeight:600,background:C.surface,color:C.muted,border:"1px solid "+C.border,cursor:"pointer",borderRadius:8}}>{lbl}</button>
+                ))}
+              </div>
+              <div style={{fontSize:11,color:C.muted,marginTop:6,textAlign:"center"}}>Equal copies the Front amount to all three.</div>
+            </div>
+          ):(
+            <div>
+              <Lbl>{addBetType==="match"?"$ Per Hole":addBetType==="nassau"?"$ Per Side/Total":addBetType==="nassau-press"?"$ Per Side/Total/Press":"$ Per Skin"}</Lbl>
+              <input type="number" min="1" value={addBetAmt} onChange={e=>setAddBetAmt(e.target.value)} placeholder="e.g. 5" style={{width:"100%",padding:"12px",background:C.surface,border:"1px solid "+C.border,borderRadius:10,color:C.text,fontSize:20,outline:"none",boxSizing:"border-box",textAlign:"center",fontWeight:700}} inputMode="decimal"/>
+            </div>
+          )}
 
           {addBetType === "skins" && (
             <div>
@@ -1511,7 +1549,7 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
                         <div>
                           <div style={{fontSize:11,color:C.green,letterSpacing:1.5,textTransform:"uppercase",fontWeight:600,marginBottom:3}}>Bet — {opp.name}</div>
                           <div style={{fontSize:14,fontWeight:700}}>
-                            {opp.betType==="nassau"?"Nassau":opp.betType==="nassau-press"?"Nassau + Auto Press":opp.betType==="match"?"Match Play":"Skins"} · ${opp.betAmount}
+                            {opp.betType==="nassau"?"Nassau":opp.betType==="nassau-press"?"Nassau + Auto Press":opp.betType==="match"?"Match Play":"Skins"} · {(opp.betType==="nassau"||opp.betType==="nassau-press")?nassauLbl(opp):"$"+opp.betAmount}
                           </div>
                           <div style={{fontSize:11,color:C.muted,marginTop:2}}>
                             {opp.strokes===0?"Even":opp.strokes>0?"You give "+(opp.strokes/2)+"/side":"You get "+(Math.abs(opp.strokes)/2)+"/side"}
@@ -1571,7 +1609,7 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
                             {pd.front?.bets?.length>0&&(
                               <div style={{marginBottom:10}}>
                                 <div style={{fontSize:10,color:C.green,letterSpacing:1.5,textTransform:"uppercase",fontWeight:700,marginBottom:4}}>Front 9</div>
-                                {pd.front.bets.map(b=>betRow(b,opp.betAmount))}
+                                {pd.front.bets.map(b=>betRow(b,nassauSeg(opp,"front")))}
                                 {sideTotal(pd.front)}
                               </div>
                             )}
@@ -1579,7 +1617,7 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
                             {pd.back?.bets?.length>0&&(
                               <div style={{marginBottom:10}}>
                                 <div style={{fontSize:10,color:C.green,letterSpacing:1.5,textTransform:"uppercase",fontWeight:700,marginBottom:4}}>Back 9</div>
-                                {pd.back.bets.map(b=>betRow(b,opp.betAmount))}
+                                {pd.back.bets.map(b=>betRow(b,nassauSeg(opp,"back")))}
                                 {sideTotal(pd.back)}
                               </div>
                             )}
@@ -1614,9 +1652,9 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
                         const front=tally.front||0; const back=tally.back||0;
                         return(
                           <div>
-                            {[["Front 9",front],["Back 9",back],["18-hole",tally.total]].map(([lbl,amt])=>(
+                            {[["Front 9",front,nassauSeg(opp,"front")],["Back 9",back,nassauSeg(opp,"back")],["18-hole",tally.total,nassauSeg(opp,"total")]].map(([lbl,amt,seg])=>(
                               <div key={lbl} style={{display:"flex",justifyContent:"space-between",padding:"4px 0",borderBottom:"1px solid rgba(255,255,255,0.04)"}}>
-                                <span style={{fontSize:12,color:C.muted}}>{lbl} · ${opp.betAmount}</span>
+                                <span style={{fontSize:12,color:C.muted}}>{lbl} · ${seg}</span>
                                 <span style={{fontSize:12,fontWeight:800,color:amt===0?C.muted:amt>0?C.green:C.red}}>
                                   {amt===0?"$0":amt>0?"+$"+amt.toFixed(2):"-$"+Math.abs(amt).toFixed(2)}
                                 </span>
@@ -1709,8 +1747,8 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
                           </div>
                           <div style={{fontSize:11,color:C.muted,marginBottom:10}}>
                             {r.betType==="match"?"Match Play $"+r.betAmount+"/hole"
-                              :r.betType==="nassau"?"Nassau $"+r.betAmount
-                              :r.betType==="nassau-press"?"Nassau + Auto Press "+(r.pressDown||2)+"D · $"+r.betAmount
+                              :r.betType==="nassau"?"Nassau "+nassauLbl(r)
+                              :r.betType==="nassau-press"?"Nassau + Auto Press "+(r.pressDown||2)+"D · "+nassauLbl(r)
                               :"Skins $"+r.betAmount}
                             {r.strokes!==0&&(" · "+(r.strokes>0?"You give "+(r.strokes/2)+"/side":"You get "+(Math.abs(r.strokes)/2)+"/side"))}
                           </div>
@@ -1727,7 +1765,7 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
                                     <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",paddingBottom:4,marginBottom:4,borderBottom:i<pd.front.bets.length-1?"1px solid rgba(255,255,255,0.05)":"none"}}>
                                       <div>
                                         <div style={{fontSize:12,color:C.text,fontWeight:600}}>
-                                          {i===0?"Original $"+r.betAmount:(b.label||"Press")+" · hole "+b.startHole}
+                                          {i===0?"Original $"+nassauSeg(r,"front"):(b.label||"Press")+" · hole "+b.startHole}
                                         </div>
                                         <div style={{fontSize:10,color:C.muted,marginTop:1}}>
                                           {b.diff===0?"All Square":b.diff>0?b.diff+" hole"+(b.diff>1?"s":"")+' up':Math.abs(b.diff)+" hole"+(Math.abs(b.diff)>1?"s":"")+" dn"}
@@ -1753,7 +1791,7 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
                                     <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",paddingBottom:4,marginBottom:4,borderBottom:i<pd.back.bets.length-1?"1px solid rgba(255,255,255,0.05)":"none"}}>
                                       <div>
                                         <div style={{fontSize:12,color:C.text,fontWeight:600}}>
-                                          {i===0?"Original $"+r.betAmount:(b.label||"Press")+" · hole "+b.startHole}
+                                          {i===0?"Original $"+nassauSeg(r,"back"):(b.label||"Press")+" · hole "+b.startHole}
                                         </div>
                                         <div style={{fontSize:10,color:C.muted,marginTop:1}}>
                                           {b.diff===0?"All Square":b.diff>0?b.diff+" hole"+(b.diff>1?"s":"")+' up':Math.abs(b.diff)+" hole"+(Math.abs(b.diff)>1?"s":"")+" dn"}
@@ -1844,7 +1882,7 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
                   <div key={opp.playerId} style={{background:C.card,border:"1px solid "+C.border,borderRadius:14,padding:"16px",marginBottom:12}}>
                     <div style={{fontWeight:800,fontSize:16,marginBottom:4}}>{opp.name}</div>
                     <div style={{fontSize:12,color:C.muted,marginBottom:12}}>
-                      {opp.betType==="nassau"?"Nassau $"+opp.betAmount:opp.betType==="nassau-press"?"Nassau+Press $"+opp.betAmount:opp.betType==="match"?"Match Play $"+opp.betAmount+"/hole":"Skins $"+opp.betAmount}
+                      {opp.betType==="nassau"?"Nassau "+nassauLbl(opp):opp.betType==="nassau-press"?"Nassau+Press "+nassauLbl(opp):opp.betType==="match"?"Match Play $"+opp.betAmount+"/hole":"Skins $"+opp.betAmount}
                       {" - "}{opp.strokes===0?"Even":opp.strokes>0?"You give "+(opp.strokes/2)+"/side":"You get "+(Math.abs(opp.strokes)/2)+"/side"}
                     </div>
                     <div style={{display:"flex",gap:8}}>
@@ -1984,8 +2022,8 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
               </div>
               <div style={{fontSize:12,color:C.muted,marginBottom:8}}>
                 {r.betType==="match" ? "Match Play $" + r.betAmount + "/hole"
-                  : r.betType==="nassau" ? "Nassau $" + r.betAmount
-                  : r.betType==="nassau-press" ? "Nassau - Auto Press " + (r.pressDown||2) + "D $" + r.betAmount
+                  : r.betType==="nassau" ? "Nassau " + nassauLbl(r)
+                  : r.betType==="nassau-press" ? "Nassau - Auto Press " + (r.pressDown||2) + "D " + nassauLbl(r)
                   : "Skins $" + r.betAmount}
                 {" - "}
                 {r.strokes===0?"Even":r.strokes>0?"You gave " + (r.strokes/2) + "/side":"You got " + (Math.abs(r.strokes)/2) + "/side"}
@@ -2000,7 +2038,7 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
                       <div style={{fontSize:10,color:C.green,letterSpacing:1,textTransform:"uppercase",marginBottom:4}}>Front 9</div>
                       {r.tally.pressDetail.front.bets.map((b, i) => (
                         <div key={i} style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:2}}>
-                          <span style={{color:C.muted}}>{i===0 ? ("Original $" + r.betAmount) : (b.label || ("Press " + i)) + " (hole " + b.startHole + ")"}</span>
+                          <span style={{color:C.muted}}>{i===0 ? ("Original $" + nassauSeg(r,"front")) : (b.label || ("Press " + i)) + " (hole " + b.startHole + ")"}</span>
                           <span style={{color:b.amount>=0?C.green:C.red,fontWeight:700}}>
                             {b.amount>=0?"+":"-"}${Math.abs(b.amount).toFixed(2)}
                           </span>
@@ -2015,7 +2053,7 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
                       <div style={{fontSize:10,color:C.green,letterSpacing:1,textTransform:"uppercase",marginBottom:4}}>Back 9</div>
                       {r.tally.pressDetail.back.bets.map((b, i) => (
                         <div key={i} style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:2}}>
-                          <span style={{color:C.muted}}>{i===0 ? ("Original $" + r.betAmount) : (b.label || ("Press " + i)) + " (hole " + b.startHole + ")"}</span>
+                          <span style={{color:C.muted}}>{i===0 ? ("Original $" + nassauSeg(r,"back")) : (b.label || ("Press " + i)) + " (hole " + b.startHole + ")"}</span>
                           <span style={{color:b.amount>=0?C.green:C.red,fontWeight:700}}>
                             {b.amount>=0?"+":"-"}${Math.abs(b.amount).toFixed(2)}
                           </span>
