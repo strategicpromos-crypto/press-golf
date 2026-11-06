@@ -519,6 +519,11 @@ export default function SfTeamTournament({onBack, user, onDelete, resumeId}){
   const[betB,setBetB]=useState("");
   const[betType,setBetType]=useState("skins");
   const[betAmount,setBetAmount]=useState(5);
+  // PG-NASSAU-AMOUNTS-2026-11-06: Nassau Front / Back / Overall amounts
+  // for tournament side bets. betAmount stays the front amount (back-compat).
+  const[betFront,setBetFront]=useState(10);
+  const[betBack,setBetBack]=useState(10);
+  const[betTotal,setBetTotal]=useState(20);
   const[betStrokesTo,setBetStrokesTo]=useState("none"); // "none" | "A" | "B"
   const[betStrokesCount,setBetStrokesCount]=useState(2); // split per side: 2 = 1 front + 1 back
   const[betPressDown,setBetPressDown]=useState(2);
@@ -985,8 +990,12 @@ export default function SfTeamTournament({onBack, user, onDelete, resumeId}){
     const count=betStrokesTo==="none"?0:betStrokesCount;
     const strokes=betStrokesTo==="B"?count:betStrokesTo==="A"?-count:0;
     if(strokes!==0&&!courseHasHdcp(courseId)){ pgAlert("This course has no handicap data, so strokes can't apply here. Add handicaps first (course picker → Search for a course… → Edit a saved course), or set strokes to No strokes."); return; }
+    const isNassau=(betType==="nassau"||betType==="nassau-press");
     const bet={ id:"bet_"+Date.now()+"_"+Math.floor(Math.random()*1000),
-      a:parseRef(betA), b:parseRef(betB), betType, betAmount,
+      a:parseRef(betA), b:parseRef(betB), betType, betAmount:isNassau?betFront:betAmount,
+      // PG-NASSAU-AMOUNTS-2026-11-06: per-segment amounts; betAmount above
+      // stays the front amount so old saved bets keep working.
+      betFront:isNassau?betFront:betAmount, betBack:isNassau?betBack:betAmount, betTotal:isNassau?betTotal:betAmount,
       strokes, pressDown:betType==="nassau-press"?betPressDown:2, carryOver:betCarryOver };
     setSideBets(prev=>[...prev, bet]);
     setShowBetSetup(false);
@@ -2897,7 +2906,23 @@ export default function SfTeamTournament({onBack, user, onDelete, resumeId}){
                       <button key={id} onClick={()=>setBetType(id)} style={{flex:1,padding:"10px 4px",borderRadius:8,background:betType===id?C.green:C.surface,color:betType===id?"#0a1a0f":C.muted,border:"1px solid "+(betType===id?C.green:C.border),cursor:"pointer",fontSize:12,fontWeight:betType===id?700:500,whiteSpace:"nowrap"}}>{lbl}</button>
                     ))}
                   </div>
-                  <NumStepper value={betAmount} onChange={setBetAmount} min={1} max={99} label={betType==="skins"?"$ per skin":betType==="match"?"$ per hole":"$ per side / total"}/>
+                  {(betType==="nassau"||betType==="nassau-press")?(
+                    <>
+                      {/* PG-NASSAU-AMOUNTS-2026-11-06: per-segment Nassau amounts */}
+                      <NumStepper value={betFront} onChange={setBetFront} min={1} max={99} label="Front 9 — $"/>
+                      <NumStepper value={betBack} onChange={setBetBack} min={1} max={99} label="Back 9 — $"/>
+                      <NumStepper value={betTotal} onChange={setBetTotal} min={1} max={99} label="Overall 18 — $"/>
+                      <div style={{display:"flex",gap:6,marginBottom:12}}>
+                        {[["Equal",[betFront,betFront,betFront]],["10 / 10 / 20",[10,10,20]],["10 / 20 / 10",[10,20,10]]].map(([lbl,vals])=>(
+                          <button key={lbl} onClick={()=>{ setBetFront(vals[0]); setBetBack(vals[1]); setBetTotal(vals[2]); }}
+                            style={{flex:1,padding:"9px 4px",fontSize:11,fontWeight:600,background:C.surface,color:C.muted,border:"1px solid "+C.border,cursor:"pointer",borderRadius:8}}>{lbl}</button>
+                        ))}
+                      </div>
+                      <div style={{fontSize:11,color:C.muted,marginBottom:12}}>Equal copies the Front amount to all three.</div>
+                    </>
+                  ):(
+                    <NumStepper value={betAmount} onChange={setBetAmount} min={1} max={99} label={betType==="skins"?"$ per skin":betType==="match"?"$ per hole":"$ per side / total"}/>
+                  )}
                   {betType==="skins"&&(
                     <>
                       <Lbl>Tied holes</Lbl>
