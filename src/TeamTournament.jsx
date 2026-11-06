@@ -1,5 +1,6 @@
 // PG-BANKPOST-OUTING-2026-11-06: one-tap Post to Bank for tournament side bets (director only).
 // PG-BANKPOST-PICKER-OUTING-2026-11-06: nickname picker — bet names are nicknames ("KP"), bank names are roster names ("Ken Pratt"). A missing match opens a picker instead of aborting, and the pick is remembered in localStorage.
+// PG-BANKPOST-ME-OUTING-2026-11-06: "Me" option in the Post to Bank picker — the director is one side of a bet, so that side gets no bank row; only the other side posts. Remembered as "__ME__" in the nickname map.
 // PG-PROFIX-2026-11-02: PRO/stepper HDCP math coerces to Number first (string '0' gave -0, string '2'+1 gave '21').
 // PG-PROBUTTON-2026-11-02: PRO button flips a player's HDCP sign (type 2, tap PRO = -2; tap again = back to 2; 0/blank + PRO = -1). No minus typing needed.
 // PG-HDCPSTEP-2026-11-02: HDCP inputs get - / + buttons so a plus (negative) HDCP can be tapped in on Android, where the number keypad has no minus key.
@@ -19,7 +20,7 @@ import CourseSearch, { CourseDeletePanel } from "./CourseSearch.jsx";
 import { sb } from "./supabase.js";
 import { pgAlert } from "./PgDialog.js";
 import { calcSkins, SkinsTab, missingNetHdcp, strokesOnHole } from "./skins.jsx";
-import { SideBetsTab, betTypeLabel, loadBankNameMap } from "./sideBets.jsx";
+import { SideBetsTab, betTypeLabel, loadBankNameMap, BANK_ME } from "./sideBets.jsx";
 import { RulesTab } from "./RulesTab.jsx";
 
 // PG-BANKPOST-OUTING-2026-11-06: bank season for Post to Bank (same year App.jsx uses as CURRENT_SEASON).
@@ -831,10 +832,12 @@ export default function TeamTournament({onBack, user, onDelete}){
         const inSeason=matches.filter(p=>p.season===BANK_SEASON);
         if(inSeason.length===1) return {player:inSeason[0]};
         const sugg=remembered[norm(nm)];
+        if(sugg===BANK_ME) return {player:null, isMe:true};
         const sugPlayer=sugg?matches.find(p=>p.id===sugg):null;
         return {player:null, reason:"More than one bank player named \""+nm+"\" — pick the right one.", suggestedId:sugPlayer?sugPlayer.id:null};
       }
       const mappedId=remembered[norm(nm)];
+      if(mappedId===BANK_ME) return {player:null, isMe:true};
       if(mappedId){
         const p=list.find(x=>x.id===mappedId);
         if(p) return {player:p, remembered:true};
@@ -842,10 +845,13 @@ export default function TeamTournament({onBack, user, onDelete}){
       return {player:null, reason:"No bank player named \""+nm+"\" — pick who this is.", suggestedId:null};
     };
     const a=resolveOne(calc.aName), b=resolveOne(calc.bName);
+    // PG-BANKPOST-ME-OUTING-2026-11-06: a side remembered as Me is resolved, not unmatched — the
+    // picker never opens for it, and the post skips that side.
+    const isMe={a:!!a.isMe, b:!!b.isMe};
     const unmatched=[];
-    if(!a.player) unmatched.push({side:"a", betName:calc.aName, reason:a.reason, suggestedId:a.suggestedId||null});
-    if(!b.player) unmatched.push({side:"b", betName:calc.bName, reason:b.reason, suggestedId:b.suggestedId||null});
-    return {ok:true, roster:list, matched:{a:a.player||null, b:b.player||null}, unmatched};
+    if(!a.player&&!a.isMe) unmatched.push({side:"a", betName:calc.aName, reason:a.reason, suggestedId:a.suggestedId||null});
+    if(!b.player&&!b.isMe) unmatched.push({side:"b", betName:calc.bName, reason:b.reason, suggestedId:b.suggestedId||null});
+    return {ok:true, roster:list, matched:{a:a.player||null, b:b.player||null}, isMe, unmatched};
   }
 
   // PG-BANKPOST-PICKER-OUTING-2026-11-06: one-tap "Post to Bank" for a finished side bet (director
@@ -895,6 +901,8 @@ export default function TeamTournament({onBack, user, onDelete}){
       // error) when the director still has to pick who a name is.
       const resolveSide=async(side, betName)=>{
         const m=mapping?mapping[side]:null;
+        // PG-BANKPOST-ME-OUTING-2026-11-06: the director picked "Me" for this side — no bank row.
+        if(m&&m.isMe) return {player:null, isMe:true};
         if(m&&m.newName){
           const nm=(m.newName||"").trim();
           if(!nm) return {player:null, error:"Enter a name for the new bank player for \""+betName+"\"."};
@@ -917,6 +925,8 @@ export default function TeamTournament({onBack, user, onDelete}){
         }
         const remembered=loadBankNameMap();
         const mappedId=remembered[norm(betName)];
+        // PG-BANKPOST-ME-OUTING-2026-11-06: remembered as Me — no bank row for this side.
+        if(mappedId===BANK_ME) return {player:null, isMe:true};
         const rp=mappedId?(roster||[]).find(x=>x.id===mappedId):null;
         if(rp) return {player:rp};
         return {player:null, needsMapping:true, reason:"No bank player named \""+betName+"\" — pick who this is."};
@@ -924,18 +934,22 @@ export default function TeamTournament({onBack, user, onDelete}){
       const ra=await resolveSide("a", calc.aName);
       const rb=await resolveSide("b", calc.bName);
       const unmatched=[];
-      if(!ra.player&&ra.needsMapping) unmatched.push({side:"a", betName:calc.aName, reason:ra.reason, suggestedId:null});
-      if(!rb.player&&rb.needsMapping) unmatched.push({side:"b", betName:calc.bName, reason:rb.reason, suggestedId:null});
-      if(unmatched.length) return {ok:false, needsMapping:true, unmatched, roster:sortedRoster, matched:{a:ra.player||null, b:rb.player||null}, created};
-      if(!ra.player) return {ok:false, error:ra.error, created};
-      if(!rb.player) return {ok:false, error:rb.error, created};
+      if(!ra.player&&!ra.isMe&&ra.needsMapping) unmatched.push({side:"a", betName:calc.aName, reason:ra.reason, suggestedId:null});
+      if(!rb.player&&!rb.isMe&&rb.needsMapping) unmatched.push({side:"b", betName:calc.bName, reason:rb.reason, suggestedId:null});
+      if(unmatched.length) return {ok:false, needsMapping:true, unmatched, roster:sortedRoster, matched:{a:ra.player||null, b:rb.player||null}, isMe:{a:!!ra.isMe, b:!!rb.isMe}, created};
+      // PG-BANKPOST-ME-OUTING-2026-11-06: both sides Me is a dead end — no bank row would move at all.
+      if(ra.isMe&&rb.isMe) return {ok:false, error:"Both sides can't be you — pick a bank player for one side.", created};
+      if(!ra.player&&!ra.isMe) return {ok:false, error:ra.error, created};
+      if(!rb.player&&!rb.isMe) return {ok:false, error:rb.error, created};
       // Re-check the saved bet — scores may have moved since the tab rendered.
       const saved=(sideBetsRef.current||[]).find(b=>b.id===bet.id);
       if(saved&&saved.bankPosted) return {ok:false, error:"Already posted to the bank.", created};
-      const sides=[
-        {player:ra.player, amount:calc.total, label:calc.aName},
-        {player:rb.player, amount:-calc.total, label:calc.bName},
-      ];
+      // PG-BANKPOST-ME-OUTING-2026-11-06: a "Me" side gets no bets row and no players update —
+      // only the other side's bank moves, by the full amount. (calc.total
+      // is from A's perspective: A gets +total, B gets -total.)
+      const sides=[];
+      if(!ra.isMe) sides.push({player:ra.player, amount:calc.total, label:calc.aName});
+      if(!rb.isMe) sides.push({player:rb.player, amount:-calc.total, label:calc.bName});
       // Insert both bet rows first, then update both balances, so a
       // failure during inserts leaves no balance changed.
       for(const s of sides){
