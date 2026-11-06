@@ -1,3 +1,4 @@
+// PG-COURSE-DROPDOWN-2026-11-06: Saved courses is a custom collapsible (NOT a native <select>), identical in IndividualRound / LiveRound / TeamTournament / SfTeamTournament. Default collapsed; filter by name/city; selected first, then alphabetical; pick collapses.
 // PG-LINKS-2026-10-31: links use window.location.origin, not hardcoded vercel.app.
 // BUDDYPICKER-2026-10-28 (LiveRound — Selected card + Search button + tap list, no dropdown)
 import { useState, useEffect, useRef } from "react";
@@ -317,6 +318,8 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
   const [step,        setStep]        = useState("setup");
   const [courseId,    setCourseId]    = useState("south-toledo");
   const [showCourseSearch, setShowCourseSearch] = useState(false);
+  const [showSavedCourses, setShowSavedCourses] = useState(false); // PG-COURSE-DROPDOWN-2026-11-06: collapsed by default
+  const [savedFilter, setSavedFilter] = useState(""); // PG-COURSE-DROPDOWN-2026-11-06: filter saved courses by name/city
   // PG-BUDDYPICKER-2026-10-28 — scroll the search panel into view when it opens
   const searchPanelRef = useRef(null);
   useEffect(()=>{ if(showCourseSearch&&searchPanelRef.current){ searchPanelRef.current.scrollIntoView({behavior:"smooth",block:"start"}); } },[showCourseSearch]);
@@ -867,7 +870,7 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
         {/* Course picker — no native dropdown: Android's select opens scrolled to the
             selected course, so "Search for a course…" sat above the viewport and took a
             scroll to reach. Selected course is a card on top, Search sits right under
-            it, and saved courses are a plain tap list below. Tapping the already-selected
+            it, and saved courses are a collapsed tap list below (tap the Saved courses row to open it). Tapping the already-selected
             course does nothing. Same pattern as Tournament Setup. */}
         <div style={{marginBottom:16}}>
           <Lbl>Select Course</Lbl>
@@ -881,19 +884,28 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
             style={{width:"100%",padding:"14px",background:C.green,color:"#0a1a0f",border:"none",borderRadius:10,fontWeight:800,fontSize:15,cursor:"pointer",marginBottom:12}}>
             🔍 Search courses
           </button>
-          <div style={{fontSize:11,color:C.muted,letterSpacing:1.5,textTransform:"uppercase",marginBottom:6}}>Saved courses</div>
-          <div style={{display:"flex",flexDirection:"column",gap:8}}>
-            {Object.entries(COURSES).map(([id,c])=>{
-              const selected=id===courseId;
-              return(
-                <button key={id} onClick={()=>{ if(id!==courseId) setCourseId(id); }}
-                  style={{textAlign:"left",padding:"12px 14px",background:selected?"rgba(123,180,80,0.15)":C.surface,border:"1px solid "+(selected?C.green:C.border),borderRadius:10,color:C.text,cursor:"pointer"}}>
-                  <div style={{fontWeight:selected?800:600,fontSize:15}}>{selected?"✓ ":""}{c.name} — Par {c.par}</div>
-                  {c.city ? <div style={{fontSize:12,color:C.muted}}>{c.city}</div> : null}
-                </button>
-              );
-            })}
-          </div>
+          {/* PG-COURSE-DROPDOWN-2026-11-06: Saved courses is a custom collapsible (NOT a native <select> — Android's select opens scrolled to the selected course and hides Search above the viewport). Default collapsed; filter matches name or city; selected course first, then alphabetical; picking a course selects it and collapses. */}
+          <button onClick={()=>{ if(showSavedCourses) setSavedFilter(""); setShowSavedCourses(!showSavedCourses); }}
+            style={{width:"100%",display:"flex",justifyContent:"space-between",alignItems:"center",textAlign:"left",padding:"12px 14px",background:C.surface,border:"1px solid "+C.border,borderRadius:10,color:C.text,cursor:"pointer",marginBottom:showSavedCourses?8:0}}>
+            <span style={{fontWeight:700,fontSize:14}}>Saved courses ({Object.keys(COURSES).length}){COURSES[courseId]?" · "+COURSES[courseId].name:""}</span>
+            <span style={{fontSize:13,color:C.muted}}>{showSavedCourses?"▴":"▾"}</span>
+          </button>
+          {showSavedCourses && (
+            <div style={{display:"flex",flexDirection:"column",gap:8}}>
+              <input value={savedFilter} onChange={e=>setSavedFilter(e.target.value)} placeholder="Filter saved…"
+                style={{width:"100%",padding:"12px 14px",background:C.surface,border:"1px solid "+C.border,borderRadius:10,color:C.text,fontSize:15,outline:"none",boxSizing:"border-box"}} />
+              {(()=>{ const q=savedFilter.trim().toLowerCase(); const list=Object.entries(COURSES).filter(([id,c])=>!q||((c.name||"")+" "+(c.city||"")).toLowerCase().includes(q)).sort(([aId,a],[bId,b])=>{ if(aId===courseId) return -1; if(bId===courseId) return 1; return (a.name||"").localeCompare(b.name||""); }); if(!list.length) return (<div style={{fontSize:13,color:C.muted,padding:"8px 4px"}}>No saved courses match &ldquo;{savedFilter}&rdquo;.</div>); return list.map(([id,c])=>{
+                const selected=id===courseId;
+                return(
+                  <button key={id} onClick={()=>{ if(id!==courseId) setCourseId(id); setSavedFilter(""); setShowSavedCourses(false); }}
+                    style={{textAlign:"left",padding:"12px 14px",background:selected?"rgba(123,180,80,0.15)":C.surface,border:"1px solid "+(selected?C.green:C.border),borderRadius:10,color:C.text,cursor:"pointer"}}>
+                    <div style={{fontWeight:selected?800:600,fontSize:15}}>{selected?"✓ ":""}{c.name} — Par {c.par}</div>
+                    {c.city ? <div style={{fontSize:12,color:C.muted}}>{c.city}</div> : null}
+                  </button>
+                );
+              }); })()}
+            </div>
+          )}
           <div ref={searchPanelRef}>
             {showCourseSearch && <CourseSearch C={C} onClose={()=>setShowCourseSearch(false)} onPick={id=>{ setCourseId(id); setShowCourseSearch(false); }} onCourseDeleted={id=>{ if(id===courseId){ const rest=Object.keys(COURSES); if(rest.length) setCourseId(rest[0]); } }} />}
           </div>
