@@ -1,3 +1,4 @@
+// PG-BUDDY-OFFLINE-FIX-2026-11-06: connection hysteresis (port of LiveRound) — the red offline banner only appears after 3 consecutive failures, and only clears after 2 consecutive successes. A single dropped mobile WebSocket / one failed poll or save no longer flashes the banner.
 // PG-LINKS-2026-10-31: links use window.location.origin, not hardcoded vercel.app.
 // BUDDYPICKER-2026-10-28 (IndividualRound — Selected card + Search button + tap list, no dropdown)
 import React, { useState, useEffect, useRef } from "react";
@@ -170,6 +171,28 @@ export default function IndividualRound({ user, players, roundData: initialRound
   const pendingData  = useRef(null);
   const lastConfirmed= useRef(null);
   const [connStatus, setConnStatus]  = useState("connecting");
+  // PG-BUDDY-OFFLINE-FIX-2026-11-06: connection hysteresis, ported verbatim from
+  // LiveRound.jsx — the banner only appears after FAIL_TO_OFFLINE failures in a
+  // row, and only clears after OK_TO_ONLINE successes in a row. A single flaky
+  // request never flips the UI. "syncing" is still set directly when there is
+  // pending data on subscribe, and is cleared by the reportConn success path.
+  const connTally = useRef({ fails: 0, oks: 0 });
+  const FAIL_TO_OFFLINE = 3;
+  const OK_TO_ONLINE = 2;
+  function reportConn(ok) {
+    const t = connTally.current;
+    if (ok) {
+      t.oks++; t.fails = 0;
+      if (t.oks >= OK_TO_ONLINE) {
+        setConnStatus(prev => (prev === "offline" || prev === "connecting" || prev === "syncing") ? "online" : prev);
+      }
+    } else {
+      t.fails++; t.oks = 0;
+      if (t.fails >= FAIL_TO_OFFLINE) {
+        setConnStatus(prev => (prev === "online" || prev === "syncing") ? "offline" : prev);
+      }
+    }
+  }
   const isWriter     = useRef(false);
   const [readOnlyMode, setReadOnlyMode] = useState(false);
   const [claiming,   setClaiming]    = useState(false);
@@ -207,9 +230,9 @@ export default function IndividualRound({ user, players, roundData: initialRound
       .subscribe(status => {
         if(status === "SUBSCRIBED") {
           if(pendingData.current) { setConnStatus("syncing"); flushSave(pendingData.current); }
-          else setConnStatus("online");
+          else reportConn(true);
         } else if(status==="CLOSED"||status==="CHANNEL_ERROR"||status==="TIMED_OUT") {
-          setConnStatus(prev => prev==="online"?"offline":prev);
+          reportConn(false);
           setTimeout(() => startSubscription(), 3000);
         }
       });
@@ -222,8 +245,8 @@ export default function IndividualRound({ user, players, roundData: initialRound
       try {
         const{data} = await sb.from("live_rounds").select("*").eq("id", round?.id).single();
         if(data) setRound(prev => ({...prev, ...data, scores: data.scores || prev.scores}));
-        setConnStatus("online");
-      } catch(e) { setConnStatus("offline"); }
+        reportConn(true);
+      } catch(e) { reportConn(false); }
     }, 30000);
   }
 
@@ -294,11 +317,11 @@ export default function IndividualRound({ user, players, roundData: initialRound
       }).eq("id", round?.id);
       pendingData.current = null;
       lastConfirmed.current = Date.now();
-      setConnStatus(prev => (prev==="offline"||prev==="syncing")?"online":prev);
+      reportConn(true);
       setSaveStatus("saved");
       setTimeout(() => setSaveStatus(""), 2000);
     } catch(e) {
-      setConnStatus("offline");
+      reportConn(false);
       setTimeout(() => startSubscription(), 3000);
     }
   }
