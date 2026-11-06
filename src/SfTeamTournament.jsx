@@ -23,6 +23,192 @@ import { SfIndividualList } from "./SfIndividualList.jsx";
 import { SF_DEFAULT_POINTS, sfConfigOrDefaults, sfIsField, sfHolePoints, sfTeamPoints, sfIndividualPoints } from "./stableford.js";
 import { SideBetsTab, betTypeLabel, loadBankNameMap, BANK_ME } from "./sideBets.jsx";
 import { RulesTab } from "./RulesTab.jsx";
+// // PG-GAMES-SF-2026-11-06: Games hub — Nines / Wolf / Sixes. ADDITIVE: a calculation layer on
+// top of scores already entered (same pattern as Skins / Ryder Cup). No score
+// entry, no new DB column. Games are stored as plain JSON in the game state
+// (see the per-file setGames wrapper). One game of each type per round.
+// Net = gross - strokes by course-handicap rank (hardest first; a negative
+// HDCP gives back on the easiest holes first). A player with no HDCP plays
+// gross. $ settle is zero-sum: (points - average points) x $ per point.
+const GAMES_DEFS=[
+  {type:"nines",emoji:"9️⃣",name:"Nines",players:"3 players",desc:"5-3-1 points per hole — low 5, middle 3, high 1. Ties split the points."},
+  {type:"wolf",emoji:"🐺",name:"Wolf",players:"3–4 players",desc:"Wolf rotates each hole — pick a partner after the drives, or go Lone Wolf."},
+  {type:"sixes",emoji:"6️⃣",name:"Sixes · 6-6-6",players:"4 players",desc:"Partners rotate every 6 holes — best ball, 1 pt per hole won, 0.5 halved."},
+];
+function gamesStrokesOnHole(hdcp,holeObj,holes){
+  if(hdcp===null||hdcp===undefined||hdcp===""||isNaN(Number(hdcp))) return 0;
+  const sorted=[...(holes||[])].sort((a,b)=>((a.hdcp??99)-(b.hdcp??99)));
+  const rank=sorted.findIndex(h=>h.hole===holeObj.hole)+1;
+  if(rank<1) return 0;
+  const n=sorted.length||18;
+  if(Number(hdcp)<0){ const plus=-Number(hdcp), full=Math.floor(plus/18), rem=plus%18; return -(full+(rem>0&&rank>n-rem?1:0)); }
+  const full=Math.floor(Number(hdcp)/18), rem=Number(hdcp)%18;
+  return full+(rank<=rem?1:0);
+}
+function gamesNetScore(p,holeObj,holes,net){
+  const g=p.gross(holeObj.hole);
+  if(g===null||g===undefined) return null;
+  if(!net) return g;
+  const h=p.hdcp;
+  if(h===null||h===undefined||h==="") return g;
+  return g-gamesStrokesOnHole(h,holeObj,holes);
+}
+function gamesFmt(v){ if(v===null||v===undefined) return "—"; const r=Math.round(v*10)/10; return Number.isInteger(r)?String(r):r.toFixed(1); }
+function gamesMoney(v){ if(!v) return "$0"; return (v>0?"+$":"-$")+Math.abs(v).toFixed(2); }
+function gamesNewGame(type,keys){
+  const base={id:"g_"+Date.now()+"_"+Math.floor(Math.random()*1000),type,players:keys.slice(),net:true,perPoint:1,collapsed:false};
+  if(type==="nines") return {...base,p1:5,p2:3,p3:1};
+  if(type==="wolf") return {...base,wolf:{}};
+  return base;
+}
+function gamesCalc(game,players,holes){
+  const totals={}; players.forEach(p=>{totals[p.key]=0;});
+  const perHole={}; let holesPlayed=0; const pending=[];
+  if(game.type==="nines"){
+    const pts=[game.p1??5,game.p2??3,game.p3??1];
+    for(const h of holes){
+      const scored=players.map(p=>({p,v:gamesNetScore(p,h,holes,game.net)})).filter(x=>x.v!==null&&x.v!==undefined);
+      if(scored.length!==players.length) continue;
+      holesPlayed++;
+      const sorted=[...scored].sort((a,b)=>a.v-b.v); const row={}; let i=0;
+      while(i<sorted.length){
+        let j=i; while(j+1<sorted.length&&sorted[j+1].v===sorted[i].v) j++;
+        const pool=pts.slice(i,j+1).reduce((s,x)=>s+x,0), share=pool/(j-i+1);
+        for(let k=i;k<=j;k++){ row[sorted[k].p.key]=share; totals[sorted[k].p.key]+=share; }
+        i=j+1;
+      }
+      perHole[h.hole]=row;
+    }
+  } else if(game.type==="wolf"){
+    for(const h of holes){
+      const scored=players.map(p=>({p,v:gamesNetScore(p,h,holes,game.net)})).filter(x=>x.v!==null&&x.v!==undefined);
+      if(scored.length!==players.length) continue;
+      const wolf=players[(h.hole-1)%players.length];
+      const choice=(game.wolf||{})[h.hole];
+      if(!choice){ pending.push(h.hole); continue; }
+      holesPlayed++;
+      const wolfKeys=[wolf.key,choice.partner].filter(Boolean);
+      const otherKeys=players.map(p=>p.key).filter(k=>!wolfKeys.includes(k));
+      const best=(keys)=>{ const vs=keys.map(k=>scored.find(s=>s.p.key===k)?.v).filter(v=>v!==null&&v!==undefined); return vs.length?Math.min(...vs):null; };
+      const wb=best(wolfKeys), ob=best(otherKeys); const row={};
+      if(wb!==null&&ob!==null&&wb<ob){
+        if(choice.partner){ wolfKeys.forEach(k=>{row[k]=1; totals[k]+=1;}); }
+        else { const pts=choice.blind?4:2; row[wolf.key]=pts; totals[wolf.key]+=pts; }
+      } else if(wb!==null&&ob!==null&&wb>ob){
+        otherKeys.forEach(k=>{row[k]=1; totals[k]+=1;});
+      }
+      perHole[h.hole]=row;
+    }
+  } else if(game.type==="sixes"){
+    const segs=[[[0,1],[2,3]],[[0,2],[1,3]],[[0,3],[1,2]]];
+    for(const h of holes){
+      const seg=segs[Math.floor((h.hole-1)/6)]||segs[0];
+      const teamBest=(pair)=>{ const vs=pair.map(idx=>gamesNetScore(players[idx],h,holes,game.net)).filter(v=>v!==null&&v!==undefined); return vs.length?Math.min(...vs):null; };
+      const a=teamBest(seg[0]), b=teamBest(seg[1]);
+      if(a===null||b===null) continue;
+      holesPlayed++;
+      const row={};
+      const give=(pair,pts)=>pair.forEach(idx=>{ const k=players[idx].key; row[k]=(row[k]||0)+pts; totals[k]+=pts; });
+      if(a<b) give(seg[0],1); else if(b<a) give(seg[1],1); else { give(seg[0],0.5); give(seg[1],0.5); }
+      perHole[h.hole]=row;
+    }
+  }
+  const avg=players.length?players.reduce((s,p)=>s+totals[p.key],0)/players.length:0;
+  return {totals,perHole,holesPlayed,pending,avg};
+}
+function GamesHub({C,players,holes,games,setGames}){
+  const [showAdd,setShowAdd]=useState(false);
+  const [showHoles,setShowHoles]=useState({});
+  const n=players.length;
+  const avail=GAMES_DEFS.filter(d=>d.type==="nines"?n===3:d.type==="wolf"?(n===3||n===4):n===4);
+  const addGame=(type)=>{ if(games.some(g=>g.type===type)) return; setGames(prev=>[...prev,gamesNewGame(type,players.map(p=>p.key))]); setShowAdd(false); };
+  const updateGame=(id,patch)=>setGames(prev=>prev.map(g=>g.id===id?{...g,...patch}:g));
+  const removeGame=async(id)=>{ if(await pgConfirm("Remove this game? Its points will be lost.","Remove")) setGames(prev=>prev.filter(g=>g.id!==id)); };
+  const toggleHoles=(id)=>setShowHoles(prev=>({...prev,[id]:!prev[id]}));
+  const numInp={width:52,padding:"8px 4px",background:C.surface,border:"1px solid "+C.border,borderRadius:8,color:C.text,fontSize:15,fontWeight:700,textAlign:"center",outline:"none"};
+  const chip=(on)=>({padding:"8px 10px",borderRadius:8,background:on?C.green:C.surface,color:on?"#0a1a0f":C.muted,border:"1px solid "+(on?C.green:C.border),cursor:"pointer",fontSize:12,fontWeight:on?700:500});
+  return(<div>
+    <div style={{fontSize:11,color:C.gold,letterSpacing:1.5,textTransform:"uppercase",marginBottom:12,fontWeight:600}}>🎲 Games · calculated from scores already entered</div>
+    {n<3&&(<div style={{background:C.card,border:"1px solid "+C.border,borderRadius:12,padding:"14px",marginBottom:12,fontSize:13,color:C.muted}}>Games need at least 3 players. {n===2?"Add one more player to play Nines or Wolf.":"Add players to play a game."}</div>)}
+    <div style={{marginBottom:14}}>
+      <button onClick={()=>setShowAdd(v=>!v)} style={{width:"100%",padding:"14px",background:"transparent",border:"1.5px dashed "+C.border,borderRadius:12,color:C.green,fontSize:14,fontWeight:700,cursor:"pointer"}}>{showAdd?"− Close":"＋ Add game"}</button>
+      {showAdd&&(<div style={{background:C.card,border:"1px solid "+C.border,borderRadius:12,padding:"8px",marginTop:8}}>
+        {avail.length===0&&(<div style={{fontSize:13,color:C.muted,padding:"10px"}}>No games fit {n} player{n===1?"":"s"} yet.</div>)}
+        {avail.map(d=>{ const added=games.some(g=>g.type===d.type); return(<button key={d.type} disabled={added} onClick={()=>addGame(d.type)} style={{display:"block",width:"100%",textAlign:"left",padding:"12px",background:"transparent",border:"none",borderBottom:"1px solid "+C.border,color:added?C.muted:C.text,cursor:added?"default":"pointer"}}>
+          <div style={{fontWeight:800,fontSize:15}}>{d.emoji} {d.name} {added?"· added ✓":""}</div>
+          <div style={{fontSize:12,color:C.muted,marginTop:2}}>{d.players} · {d.desc}</div>
+        </button>); })}
+        <div style={{fontSize:11,color:C.muted,padding:"8px 4px 4px"}}>Only games that fit this group are listed. One of each game per round.</div>
+      </div>)}
+    </div>
+    {games.length===0&&(<div style={{textAlign:"center",padding:"24px 12px",color:C.muted,fontSize:13}}>No games added yet. Tap ＋ Add game above — Nines is the 3-player classic.</div>)}
+    {games.map(game=>{
+      const def=GAMES_DEFS.find(d=>d.type===game.type)||{emoji:"🎲",name:game.type};
+      const gps=game.players.map(k=>players.find(p=>p.key===k)).filter(Boolean);
+      const calc=gamesCalc(game,gps,holes||[]);
+      const ranked=[...gps].sort((a,b)=>calc.totals[b.key]-calc.totals[a.key]);
+      const holesList=(holes||[]).filter(h=>calc.perHole[h.hole]);
+      return(<div key={game.id} style={{background:C.card,border:"1px solid "+C.border,borderRadius:14,padding:"14px",marginBottom:12}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:game.collapsed?0:10}}>
+          <button onClick={()=>updateGame(game.id,{collapsed:!game.collapsed})} style={{flex:1,textAlign:"left",background:"none",border:"none",color:C.text,cursor:"pointer",padding:0}}>
+            <span style={{fontWeight:800,fontSize:16}}>{def.emoji} {def.name}</span>
+            <span style={{fontSize:12,color:C.muted,marginLeft:8}}>{calc.holesPlayed} hole{calc.holesPlayed===1?"":"s"} scored</span>
+            <span style={{fontSize:12,color:C.muted,marginLeft:6}}>{game.collapsed?"▸":"▾"}</span>
+          </button>
+          <button onClick={()=>removeGame(game.id)} style={{background:"transparent",border:"1px solid #ff8a8a",color:"#ff8a8a",borderRadius:8,padding:"6px 10px",cursor:"pointer",fontSize:12}}>✕ Remove</button>
+        </div>
+        {!game.collapsed&&(<>
+          <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:10,alignItems:"center"}}>
+            <button onClick={()=>updateGame(game.id,{net:false})} style={chip(!game.net)}>Gross</button>
+            <button onClick={()=>updateGame(game.id,{net:true})} style={chip(!!game.net)}>Net</button>
+            <span style={{fontSize:12,color:C.muted,marginLeft:4}}>$ / pt</span>
+            <button onClick={()=>updateGame(game.id,{perPoint:Math.max(0,Number(game.perPoint||0)-0.5)})} style={chip(false)}>−</button>
+            <span style={{fontSize:14,fontWeight:800,minWidth:44,textAlign:"center"}}>${Number(game.perPoint||0).toFixed(2)}</span>
+            <button onClick={()=>updateGame(game.id,{perPoint:Number(game.perPoint||0)+0.5})} style={chip(false)}>+</button>
+            {game.type==="nines"&&(<span style={{display:"flex",gap:4,alignItems:"center",marginLeft:4}}>
+              <span style={{fontSize:12,color:C.muted}}>Pts</span>
+              {[["p1",5],["p2",3],["p3",1]].map(([k])=>(<input key={k} type="number" min="0" value={game[k]??0} onChange={e=>updateGame(game.id,{[k]:Math.max(0,parseInt(e.target.value,10)||0)})} style={numInp}/>))}
+              <button onClick={()=>updateGame(game.id,{p1:5,p2:3,p3:1})} style={chip(false)}>5-3-1</button>
+              <button onClick={()=>updateGame(game.id,{p1:4,p2:2,p3:0})} style={chip(false)}>4-2-0</button>
+            </span>)}
+          </div>
+          <div style={{fontSize:11,color:C.muted,marginBottom:8}}>{game.net?"Net scores (course-handicap strokes; a player with no HDCP plays gross).":"Gross scores."} $ settle is zero-sum: (points − average) × $ per point.</div>
+          {ranked.map((p,idx)=>(<div key={p.key} style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:"1px solid rgba(255,255,255,0.04)"}}>
+            <span style={{fontSize:14,fontWeight:idx===0?800:600}}>{idx+1}. {p.name}</span>
+            <span style={{fontSize:14,fontWeight:800}}>{gamesFmt(calc.totals[p.key])} pts · <span style={{color:(calc.totals[p.key]-calc.avg)*(game.perPoint||0)===0?C.muted:(calc.totals[p.key]-calc.avg)>0?C.green:C.red}}>{gamesMoney((calc.totals[p.key]-calc.avg)*(game.perPoint||0))}</span></span>
+          </div>))}
+          {game.type==="wolf"&&calc.pending.length>0&&(<div style={{fontSize:12,color:C.gold,marginTop:8}}>Pick a partner for hole{calc.pending.length===1?"":"s"} {calc.pending.join(", ")} below — unscored until picked.</div>)}
+          {game.type==="wolf"&&(<div style={{marginTop:10}}>
+            {(holes||[]).filter(h=>{ const sc=gps.map(p=>gamesNetScore(p,h,holes,game.net)); return sc.every(v=>v!==null&&v!==undefined); }).map(h=>{
+              const wolf=gps[(h.hole-1)%gps.length]; if(!wolf) return null;
+              const choice=(game.wolf||{})[h.hole]||{};
+              const setChoice=(patch)=>updateGame(game.id,{wolf:{...(game.wolf||{}),[h.hole]:{partner:choice.partner??null,blind:!!choice.blind,...patch}}});
+              return(<div key={h.hole} style={{background:C.surface,border:"1px solid "+C.border,borderRadius:10,padding:"10px",marginBottom:8}}>
+                <div style={{fontSize:13,fontWeight:800,marginBottom:6}}>Hole {h.hole} · Wolf: {wolf.name}</div>
+                <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                  {gps.filter(p=>p.key!==wolf.key).map(p=>(<button key={p.key} onClick={()=>setChoice({partner:choice.partner===p.key?null:p.key,blind:false})} style={chip(choice.partner===p.key)}>Partner: {p.name}</button>))}
+                  <button onClick={()=>setChoice({partner:null,blind:false})} style={chip(!choice.partner&&!choice.blind&&choice.partner!==undefined&&game.wolf?.[h.hole])}>Lone Wolf</button>
+                  <button onClick={()=>setChoice({partner:null,blind:!choice.blind})} style={chip(!!choice.blind)}>Blind Lone · 4 pts</button>
+                </div>
+                <div style={{fontSize:11,color:C.muted,marginTop:6}}>{choice.partner?("Partner: "+(gps.find(p=>p.key===choice.partner)?.name||"")+" — win = 1 pt each"):choice.blind?"Blind Lone Wolf — win = 4 pts, lose = each opponent 1 pt":game.wolf?.[h.hole]?"Lone Wolf — win = 2 pts, lose = each opponent 1 pt":"No pick yet — this hole is unscored."}</div>
+              </div>);
+            })}
+          </div>)}
+          <button onClick={()=>toggleHoles(game.id)} style={{background:"none",border:"none",color:C.green,fontSize:12,fontWeight:700,cursor:"pointer",padding:"6px 0 0"}}>{showHoles[game.id]?"▾ Hide hole by hole":"▸ Hole by hole"}</button>
+          {showHoles[game.id]&&(<div style={{marginTop:8}}>
+            {holesList.length===0&&(<div style={{fontSize:12,color:C.muted}}>No holes scored yet for this game.</div>)}
+            {holesList.map(h=>(<div key={h.hole} style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"3px 0",borderBottom:"1px solid rgba(255,255,255,0.04)"}}>
+              <span style={{color:C.muted}}>Hole {h.hole}</span>
+              <span>{gps.map(p=>p.name.split(" ")[0]+" "+gamesFmt(calc.perHole[h.hole][p.key]??0)).join(" · ")}</span>
+            </div>))}
+          </div>)}
+        </>)}
+      </div>);
+    })}
+  </div>);
+}
+
+function sfCfgWithGames(row){ const d=sfConfigOrDefaults(row); const c=row?.sf_config||{}; if(c.ryder!==undefined) d.ryder=c.ryder; if(c.games!==undefined) d.games=c.games; return d; }
 
 // PG-BANKPOST-SF-2026-11-06: bank season for Post to Bank (same year App.jsx uses as CURRENT_SEASON).
 const BANK_SEASON = new Date().getFullYear();
@@ -352,6 +538,9 @@ export default function SfTeamTournament({onBack, user, onDelete, resumeId}){
   const[saveStatus,setSaveStatus]=useState("");
   const[lbTab,setLbTab]=useState("standings"); const[ryderA1,setRyderA1]=useState(""); const[ryderA2,setRyderA2]=useState(""); const[ryderB1,setRyderB1]=useState(""); const[ryderB2,setRyderB2]=useState(""); const[ryderA3,setRyderA3]=useState(""); const[ryderA4,setRyderA4]=useState(""); const[ryderB3,setRyderB3]=useState(""); const[ryderB4,setRyderB4]=useState(""); const[ryderMode,setRyderMode]=useState("difference"); // PG-RYDER-2026-11-03      // leaderboard tab
   const[showSettings,setShowSettings]=useState(false); // director settings overlay
+  // PG-GAMES-SF-2026-11-06: Games hub — games live in sf_config.games (existing JSON column, same pattern as sf_config.ryder). sfConfigOrDefaults drops unknown keys, so resume/backup restore uses sfCfgWithGames (above) to keep ryder+games.
+  const games=sfConfig.games||[];
+  const setGames=(next)=>setSfConfig(prev=>({...prev, games: typeof next==="function"?next(prev.games||[]):next}));
   // PG-SFTEAMS-2026-10-28 — two-tap delete confirmation for a Settings team card (null = none armed)
   const[deleteTeamIdx,setDeleteTeamIdx]=useState(null);
   const[ctpConfirm,setCtpConfirm]=useState(false);     // mid-round CTP enable confirmation
@@ -651,7 +840,7 @@ export default function SfTeamTournament({onBack, user, onDelete, resumeId}){
       setCtpHoles(data.ctp_holes||[]);
       setCtpLeaders(data.ctp_leaders||{});
       setSideBets(data.side_bets||[]);
-      setSfConfig(sfConfigOrDefaults(data));
+      setSfConfig(sfCfgWithGames(data));
       setSfTeamsOn(!sfIsField(data.teams||[]));
       setTeams(data.teams||[]);
       lastSyncedTeams.current=snap(data.teams||[]);
@@ -690,7 +879,7 @@ export default function SfTeamTournament({onBack, user, onDelete, resumeId}){
             if(s.ctp_leaders) setCtpLeaders(s.ctp_leaders);
             if(s.side_bets) setSideBets(s.side_bets);
             if(s.current_hole) setCurrentHole(s.current_hole);
-            if(s.sf_config) setSfConfig(sfConfigOrDefaults({sf_config:s.sf_config}));
+            if(s.sf_config) setSfConfig(sfCfgWithGames({sf_config:s.sf_config}));
             if(s.teams) setSfTeamsOn(!sfIsField(s.teams));
             setNumTeams((s.teams||[]).length);
             if(bak.lastSyncedTeams) lastSyncedTeams.current=bak.lastSyncedTeams;
@@ -2573,7 +2762,7 @@ export default function SfTeamTournament({onBack, user, onDelete, resumeId}){
             ))}
           </div>
           <div style={{display:"flex",gap:0,border:"1px solid "+C.border,borderRadius:10,overflow:"hidden"}}>
-            {[["skins","Skins"],["bets","💵 Bets"],["ryder","Ryder Cup"],["rules","📋 Rules"],...(ctpEnabled?[["ctp","CTP"]]:[])]
+            {[["skins","Skins"],["bets","💵 Bets"],["games","🎲 Games"],["ryder","Ryder Cup"],["rules","📋 Rules"],...(ctpEnabled?[["ctp","CTP"]]:[])]
               .map(([id,lbl])=>(
               <button key={id} onClick={()=>setLbTab(id)} style={{flex:1,padding:"11px",fontSize:12,fontWeight:lbTab===id?700:500,background:lbTab===id?(id==="ctp"?C.gold:C.green):"transparent",color:lbTab===id?"#0a1a0f":C.muted,border:"none",cursor:"pointer"}}>{lbl}</button>
             ))}
@@ -2795,6 +2984,7 @@ export default function SfTeamTournament({onBack, user, onDelete, resumeId}){
             </div>);
           })()}
 
+          {lbTab==="games"&&(<GamesHub C={C} players={allPlayers.map(p=>({key:p.team+":"+p.pi,name:p.name,hdcp:teams[p.team]?.hdcp?.[p.pi]??null,gross:(hole)=>{ const s=teams[p.team]?.scores?.[p.pi]?.[hole]; return s===undefined||s===null?null:Number(s); }}))} holes={course?.holes||[]} games={games} setGames={setGames}/>)}
           {lbTab==="rules"&&(<RulesTab rules={directorRules} holeNotes={holeNotes} C={C}/>)}
 
           {lbTab==="ctp"&&(
