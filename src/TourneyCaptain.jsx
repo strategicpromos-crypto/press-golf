@@ -12,6 +12,61 @@ import { SkinsTab, strokesOnHole } from "./skins.jsx";
 import { RulesTab } from "./RulesTab.jsx";
 import { SideBetsTab } from "./sideBets.jsx";
 
+// PG-RYDER-CAPTAIN-OUTING-2026-11-06: Ryder Cup view for captains (Outing, read-only). No setup, no editing here.
+// HONEST LIMIT, do not work around it: Outing Ryder matches have NO shared column. The director's Outing Ryder Cup (PG-RYDER-OUTING-2026-11-03, src/TeamTournament.jsx) saves matches on the director's device only, in localStorage key "pg-ryder-"+tourneyId. There is no sf_config on team_tournaments. So this tab reads, in order: (1) a shared Ryder object on the tournament row if one ever exists (tourney.ryder / tourney.ryder_cup / tourney.sf_config.ryder — e.g. after a future shared SQL column is added), and (2) this device's own localStorage "pg-ryder-"+tourney.id (so it shows matches only if this phone is the one the director set them up on). A captain on a different phone will see the empty state below until a shared Outing Ryder column is added — that is a separate SQL step the user runs himself; this file invents no sync mechanism and must not be described as live from the director's phone.
+// Scores themselves DO come live: match standings recalculate from tourney.teams scores, which arrive via the captain subscription + 30s polling. Only the match list (teams + pairings) is device-local on Outing.
+// Stroke modes, per match: "difference" (default, GHIN match play: lowest HDCP in the match = scratch, others get HDCP - lowest, 1 per hole on hardest holes; a 1-stroke difference = 1 stroke on the #1 handicap hole only) or "full" (each player gets full course HDCP strokes, 1 per hole on hardest holes; a pro's negative HDCP gives back on easiest holes).
+function ryderParseRef(v){ const parts=String(v).split(":"); return {team:parseInt(parts[0],10),pi:parseInt(parts[1],10)}; }
+function ryderPlayer(teams,ref){ const r=ryderParseRef(ref); const tm=teams[r.team]; if(!tm) return null; const nm=(tm.players?.[r.pi]||"").trim(); if(!nm) return null; const hd=tm.hdcp?.[r.pi]; return {ref,name:nm,hdcp:(hd===null||hd===undefined||hd==="")?null:Number(hd),team:tm}; }
+function ryderStrokeOnHole(strokes, rank, n){
+  if(!strokes) return 0;
+  if(strokes>0){ const full=Math.floor(strokes/18), rem=strokes%18; return full+(rem>0&&rank<=rem?1:0); }
+  const plus=-strokes, full=Math.floor(plus/18), rem=plus%18; return -(full+(rem>0&&rank>n-rem?1:0));
+}
+function ryderMatchCalc(match, teams, course){
+  const holes=[...(course?.holes||[])].sort((a,b)=>((a.hdcp??99)-(b.hdcp??99)));
+  const rankOf={}; holes.forEach((h,i)=>{ rankOf[h.hole]=i+1; });
+  const sidePlayers=(keys)=>(keys||[]).map(k=>ryderPlayer(teams,k)).filter(Boolean);
+  const A=sidePlayers(match.a), B=sidePlayers(match.b);
+  if(A.length===0||B.length===0) return {status:"Pick players for both sides", aPts:0, bPts:0, aUp:0, thru:0, missing:true, strokes:[]};
+  if(A.some(x=>x.hdcp===null)||B.some(x=>x.hdcp===null)) return {status:"HDCP missing - enter HDCPs for these players first", aPts:0, bPts:0, aUp:0, thru:0, missing:true, strokes:[]};
+  const all=[...A,...B];
+  const low=Math.min(...all.map(x=>x.hdcp));
+  const strokesFor=(x)=> match.mode==="full" ? x.hdcp : (x.hdcp-low);
+  const n=holes.length||18;
+  let aUp=0, thru=0, decided=false;
+  for(const h of (course?.holes||[])){
+    const netSide=(side)=>{ let best=null; for(const x of side){ const pi=parseInt(x.ref.split(":")[1],10); const g=x.team.scores?.[pi]?.[h.hole]; if(g===undefined||g===null) continue; const net=Number(g)-ryderStrokeOnHole(strokesFor(x), rankOf[h.hole]||99, n); if(best===null||net<best) best=net; } return best; };
+    const na=netSide(A), nb=netSide(B);
+    if(na===null||nb===null) continue;
+    thru++;
+    if(na<nb) aUp++; else if(nb<na) aUp--;
+    if(Math.abs(aUp) > (18-thru)) { decided=true; break; }
+  }
+  let status, aPts=0, bPts=0;
+  if(decided||thru>=18){
+    if(aUp>0){ status="Final - "+(match.teamA||"Side A")+" wins"; aPts=1; }
+    else if(aUp<0){ status="Final - "+(match.teamB||"Side B")+" wins"; bPts=1; }
+    else { status="Final - Halved"; aPts=0.5; bPts=0.5; }
+    if(decided && thru<18) status+=" ("+Math.abs(aUp)+" & "+(18-thru)+")";
+  } else {
+    status = aUp>0 ? (match.teamA||"Side A")+" "+aUp+" up thru "+thru : aUp<0 ? (match.teamB||"Side B")+" "+(-aUp)+" up thru "+thru : (thru===0 ? "Not started" : "All square thru "+thru);
+  }
+  return {status, aPts, bPts, aUp, thru, missing:false, strokes:A.map(x=>({name:x.name,hdcp:x.hdcp,strokes:strokesFor(x)})).concat(B.map(x=>({name:x.name,hdcp:x.hdcp,strokes:strokesFor(x)})))};
+}
+// PG-RYDER-CAPTAIN-OUTING-2026-11-06: read-only Ryder source for Outing. Shared row first, then this device's localStorage (director's device only). Returns {} when neither exists — the tab then shows the empty state, never crashes, never writes.
+function ryderOutingSource(tourney){
+  const shared = tourney?.ryder || tourney?.ryder_cup || (tourney?.sf_config||{}).ryder || null;
+  if(shared && Array.isArray(shared.matches)) return shared;
+  try{
+    if(tourney?.id){
+      const raw = localStorage.getItem("pg-ryder-"+tourney.id);
+      if(raw){ const parsed = JSON.parse(raw); if(parsed && Array.isArray(parsed.matches)) return parsed; }
+    }
+  }catch(e){}
+  return {};
+}
+
 // Dark (default) and Day (high-contrast, sunlight-readable) themes.
 // The component picks one via `dayMode` and shadows it as `C`, so every
 // existing style reference follows the active theme automatically.
@@ -708,7 +763,7 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
                     ))}
                   </div>
                   <div style={{display:"flex",gap:0,border:"1px solid "+C.border,borderRadius:10,overflow:"hidden",background:"#121e14"}}>
-                    {[["bets","💵 Bets"],["rules","📋 Rules"],...(ctpEnabled?[["ctp","CTP"]]:[])]
+                    {[["bets","💵 Bets"],["ryder","🏆 Ryder Cup"],["rules","📋 Rules"],...(ctpEnabled?[["ctp","CTP"]]:[])]
                       .map(([id,lbl])=>(
                       <button key={id} onClick={()=>setBTab(id)} style={{flex:1,padding:"11px",fontSize:12,fontWeight:bTab===id?700:500,background:bTab===id?(id==="ctp"?C.gold:C.green):"#121e14",color:bTab===id?"#0a1a0f":C.muted,border:"none",cursor:"pointer"}}>{lbl}</button>
                     ))}
@@ -933,6 +988,32 @@ export default function TourneyCaptain({ tourney: initialTourney, teamIdx, onBac
                     <SideBetsTab bets={tourney.side_bets||[]} teams={tourney.teams||[]} course={course} courseId={tourney.course_id||"south-toledo"} C={C} canSetup onDelete={deleteCaptainBet}/>
                   </div>
                 )}
+                {/* PG-RYDER-CAPTAIN-OUTING-2026-11-06: Ryder Cup — read-only. Team totals + per-match standings. Source: ryderOutingSource(tourney) — a shared row object if one exists, else this device's localStorage. No setup, no editing, no match creation here. See the header comment for the Outing limitation: until a shared Outing Ryder column exists, a captain on a different phone than the director will see the empty state. */}
+                {bTab==="ryder"&&(()=>{
+                  const ryder=ryderOutingSource(tourney);
+                  const matches=ryder.matches||[];
+                  const teamA=ryder.teamA||"Red", teamB=ryder.teamB||"Blue";
+                  const teams=tourney.teams||[];
+                  const calcs=matches.map(m=>ryderMatchCalc({...m,teamA,teamB}, teams, course));
+                  const aTotal=calcs.reduce((s,c)=>s+c.aPts,0), bTotal=calcs.reduce((s,c)=>s+c.bPts,0);
+                  const playerLabel=(k)=>{ const parts=String(k).split(":"); const tm=teams[parseInt(parts[0],10)]; const nm=tm?.players?.[parseInt(parts[1],10)]||""; return nm?nm+" ("+(tm?.name||"")+")":k; };
+                  return(<div>
+                    <div style={{fontSize:11,color:C.gold,letterSpacing:1.5,textTransform:"uppercase",marginBottom:12,fontWeight:600}}>Ryder Cup · Live</div>
+                    <div style={{display:"flex",gap:12,marginBottom:14}}>
+                      <div style={{flex:1,background:C.card,border:"1px solid "+C.border,borderRadius:14,padding:"14px",textAlign:"center"}}><div style={{fontSize:12,color:C.muted}}>{teamA}</div><div style={{fontSize:32,fontWeight:800}}>{aTotal}</div></div>
+                      <div style={{flex:1,background:C.card,border:"1px solid "+C.border,borderRadius:14,padding:"14px",textAlign:"center"}}><div style={{fontSize:12,color:C.muted}}>{teamB}</div><div style={{fontSize:32,fontWeight:800}}>{bTotal}</div></div>
+                    </div>
+                    <div style={{fontSize:12,color:C.muted,marginBottom:14}}>1 point per match, 0.5 for a halved match. Updates live as scores are entered. Read-only — setup is on the director's tab.</div>
+                    {matches.length===0&&<div style={{fontSize:13,color:C.muted,lineHeight:1.6}}>No Ryder Cup matches visible on this phone yet. On Outing tournaments the director's Ryder matches live only on the director's phone until a shared Ryder column is added for Outing — ask the director for the standings, or add the shared column and the matches will appear here.</div>}
+                    {matches.map((m,mi)=>{ const c=calcs[mi]; return(<div key={m.id||mi} style={{background:C.card,border:"1px solid "+C.border,borderRadius:14,padding:"14px",marginBottom:12}}>
+                      <div style={{fontWeight:800,fontSize:15,marginBottom:6}}>Match {mi+1} · {m.mode==="full"?"Full HDCP":"Difference"}</div>
+                      <div style={{fontSize:13,marginBottom:4}}><b>{teamA}:</b> {(m.a||[]).map(playerLabel).join(" & ")}</div>
+                      <div style={{fontSize:13,marginBottom:8}}><b>{teamB}:</b> {(m.b||[]).map(playerLabel).join(" & ")}</div>
+                      <div style={{fontSize:12,color:C.muted,marginBottom:8}}>{c.strokes?c.strokes.map(s=>s.name+" HDCP "+s.hdcp+" → "+s.strokes+" stroke"+(Math.abs(s.strokes)===1?"":"s")).join(" · "):""}</div>
+                      <div style={{fontWeight:800,fontSize:15,color:c.aPts===1||c.bPts===1?C.gold:C.text}}>{c.status} {c.aPts||c.bPts?`· ${teamA} ${c.aPts} — ${teamB} ${c.bPts}`:""}</div>
+                    </div>); })}
+                  </div>);
+                })()}
                 {bTab==="rules"&&<RulesTab rules={tourney.director_rules||""} holeNotes={tourney.hole_notes||{}} C={C}/>}
               </>);
             })()}
