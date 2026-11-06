@@ -1,4 +1,5 @@
 // PG-BANKPOST-OUTING-2026-11-06: one-tap Post to Bank for tournament side bets (director only).
+// PG-BANKPOST-PICKER-OUTING-2026-11-06: nickname picker — bet names are nicknames ("KP"), bank names are roster names ("Ken Pratt"). A missing match opens a picker instead of aborting, and the pick is remembered in localStorage.
 // PG-PROFIX-2026-11-02: PRO/stepper HDCP math coerces to Number first (string '0' gave -0, string '2'+1 gave '21').
 // PG-PROBUTTON-2026-11-02: PRO button flips a player's HDCP sign (type 2, tap PRO = -2; tap again = back to 2; 0/blank + PRO = -1). No minus typing needed.
 // PG-HDCPSTEP-2026-11-02: HDCP inputs get - / + buttons so a plus (negative) HDCP can be tapped in on Android, where the number keypad has no minus key.
@@ -18,7 +19,7 @@ import CourseSearch, { CourseDeletePanel } from "./CourseSearch.jsx";
 import { sb } from "./supabase.js";
 import { pgAlert } from "./PgDialog.js";
 import { calcSkins, SkinsTab, missingNetHdcp, strokesOnHole } from "./skins.jsx";
-import { SideBetsTab, betTypeLabel } from "./sideBets.jsx";
+import { SideBetsTab, betTypeLabel, loadBankNameMap } from "./sideBets.jsx";
 import { RulesTab } from "./RulesTab.jsx";
 
 // PG-BANKPOST-OUTING-2026-11-06: bank season for Post to Bank (same year App.jsx uses as CURRENT_SEASON).
@@ -807,26 +808,72 @@ export default function TeamTournament({onBack, user, onDelete}){
     setShowBetSetup(false);
   }
 
-  // PG-BANKPOST-OUTING-2026-11-06: one-tap "Post to Bank" for a finished side bet (director
+  // PG-BANKPOST-PICKER-OUTING-2026-11-06: resolve bet nicknames to bank players (director only).
+  // Exact match first, then the remembered nickname map (localStorage on
+  // the director's phone, "pg-bank-name-map"). A name that matches nothing
+  // — or matches more than one roster row — comes back as unmatched, and
+  // the UI shows the picker instead of the post aborting. A remembered
+  // match auto-applies; if the name is ambiguous AND a remembered player
+  // is among the matches, the picker opens with it pre-selected.
+  async function resolveBankNamesForBet(bet, calc){
+    if(!bet||!calc) return {ok:false, error:"Missing bet."};
+    if(bet.bankPosted) return {ok:false, error:"Already posted to the bank."};
+    if(!user?.id) return {ok:false, error:"Not signed in."};
+    const{data:roster, error:rosterErr}=await sb.from("players").select("*").eq("owner_id", user.id);
+    if(rosterErr) return {ok:false, error:"Couldn't load the bank roster: "+(rosterErr.message||"check your connection.")};
+    const list=[...(roster||[])].sort((a,b)=>(a.name||"").localeCompare(b.name||""));
+    const norm=(s)=>(s||"").trim().toLowerCase();
+    const remembered=loadBankNameMap();
+    const resolveOne=(nm)=>{
+      const matches=list.filter(p=>norm(p.name)===norm(nm));
+      if(matches.length===1) return {player:matches[0]};
+      if(matches.length>1){
+        const inSeason=matches.filter(p=>p.season===BANK_SEASON);
+        if(inSeason.length===1) return {player:inSeason[0]};
+        const sugg=remembered[norm(nm)];
+        const sugPlayer=sugg?matches.find(p=>p.id===sugg):null;
+        return {player:null, reason:"More than one bank player named \""+nm+"\" — pick the right one.", suggestedId:sugPlayer?sugPlayer.id:null};
+      }
+      const mappedId=remembered[norm(nm)];
+      if(mappedId){
+        const p=list.find(x=>x.id===mappedId);
+        if(p) return {player:p, remembered:true};
+      }
+      return {player:null, reason:"No bank player named \""+nm+"\" — pick who this is.", suggestedId:null};
+    };
+    const a=resolveOne(calc.aName), b=resolveOne(calc.bName);
+    const unmatched=[];
+    if(!a.player) unmatched.push({side:"a", betName:calc.aName, reason:a.reason, suggestedId:a.suggestedId||null});
+    if(!b.player) unmatched.push({side:"b", betName:calc.bName, reason:b.reason, suggestedId:b.suggestedId||null});
+    return {ok:true, roster:list, matched:{a:a.player||null, b:b.player||null}, unmatched};
+  }
+
+  // PG-BANKPOST-PICKER-OUTING-2026-11-06: one-tap "Post to Bank" for a finished side bet (director
   // only — SideBetsTab only receives onPostToBank from the director files).
   // Same writes as App.jsx logBet(): one "bets" row per player (winner
   // +amount, loser -amount, type "Side Bet") and a players update
   // {bet_money += amt, bank += amt} per player. The bet is then marked
   // bankPosted on the saved side_bets row, so the existing auto-save
   // persists it and the bet can never double-post, even after reload.
-  // Check-then-write: the roster is loaded fresh and BOTH names must match
-  // before anything is written. If a write fails part-way, inserted bet
-  // rows are deleted again (best effort) and the return says exactly which
-  // balances were already posted, so the director can check the bank
-  // before retrying. bankPosted is NEVER set on failure.
-  async function postSideBetToBank(bet, calc){
+  // Names are resolved by resolveBankNamesForBet + the picker (see above):
+  // mapping is {a:{playerId}|{newName}, b:...} from the picker, or
+  // omitted, in which case exact/remembered match is tried and a missing
+  // name comes back as needsMapping instead of aborting. A new player is
+  // created with the same insert as App.jsx addPlayer (strokes 0, all
+  // money 0). If a write fails part-way, inserted bet rows are deleted
+  // again (best effort) and the return says exactly which balances were
+  // already posted, so the director can check the bank before retrying.
+  // bankPosted is NEVER set on failure. A player created by the picker
+  // stays in the roster even if the post then fails — it is a real roster
+  // addition, not a bank row.
+  async function postSideBetToBank(bet, calc, mapping){
     if(!bet||!calc) return {ok:false, error:"Missing bet."};
     if(bet.bankPosted) return {ok:false, error:"Already posted to the bank."};
     if(bankPostingRef.current[bet.id]) return {ok:false, error:"Already posting — please wait."};
     if(!calc.total||(calc.holesPlayed||0)<18) return {ok:false, error:"This bet isn't finished yet."};
     if(!user?.id) return {ok:false, error:"Not signed in."};
     bankPostingRef.current[bet.id]=true;
-    const posted=[]; const inserted=[];
+    const posted=[]; const inserted=[]; const created=[];
     const rollbackInserts=async()=>{
       if(!inserted.length) return true;
       const{error:rbErr}=await sb.from("bets").delete().in("id", inserted.map(r=>r.id));
@@ -834,33 +881,60 @@ export default function TeamTournament({onBack, user, onDelete}){
     };
     try{
       const amt=Math.abs(calc.total);
-      const winnerName=calc.total>0?calc.aName:calc.bName;
-      const loserName=calc.total>0?calc.bName:calc.aName;
+      const dateStr=new Date().toISOString().slice(0,10);
+      const notes=calc.aName+" vs "+calc.bName+" — "+betTypeLabel(bet)+" — "+dateStr;
       // Fresh roster — balances must come from the DB, never cached state.
       // App.jsx loadAll does NOT filter players by season, so neither do
       // we; a same-season row wins when a name appears twice.
       const{data:roster, error:rosterErr}=await sb.from("players").select("*").eq("owner_id", user.id);
       if(rosterErr) return {ok:false, error:"Couldn't load the bank roster: "+(rosterErr.message||"check your connection.")};
       const norm=(s)=>(s||"").trim().toLowerCase();
-      const findPlayer=(nm)=>{
-        const matches=(roster||[]).filter(p=>norm(p.name)===norm(nm));
-        if(matches.length===0) return {player:null, error:"No bank player named \""+nm+"\""};
-        const inSeason=matches.filter(p=>p.season===BANK_SEASON);
-        if(inSeason.length===1) return {player:inSeason[0]};
+      const sortedRoster=[...(roster||[])].sort((a,b)=>(a.name||"").localeCompare(b.name||""));
+      // Resolve one side of the bet to a roster player: picker mapping
+      // first, then exact / remembered match. Returns needsMapping (not an
+      // error) when the director still has to pick who a name is.
+      const resolveSide=async(side, betName)=>{
+        const m=mapping?mapping[side]:null;
+        if(m&&m.newName){
+          const nm=(m.newName||"").trim();
+          if(!nm) return {player:null, error:"Enter a name for the new bank player for \""+betName+"\"."};
+          const{data:np, error:ne}=await sb.from("players").insert({owner_id:user.id, name:nm, strokes:0, round_money:0, bet_money:0, bank:0, season:BANK_SEASON}).select().single();
+          if(ne) return {player:null, error:"Couldn't add \""+nm+"\" to the bank: "+(ne.message||"check your connection.")};
+          created.push({betName, playerId:np.id, name:np.name});
+          return {player:np};
+        }
+        if(m&&m.playerId){
+          const p=(roster||[]).find(x=>x.id===m.playerId);
+          if(!p) return {player:null, error:"The picked bank player for \""+betName+"\" is no longer in the roster — pick again."};
+          return {player:p};
+        }
+        const matches=(roster||[]).filter(p=>norm(p.name)===norm(betName));
         if(matches.length===1) return {player:matches[0]};
-        return {player:null, error:"More than one bank player named \""+nm+"\" — rename one in the bank first"};
+        if(matches.length>1){
+          const inSeason=matches.filter(p=>p.season===BANK_SEASON);
+          if(inSeason.length===1) return {player:inSeason[0]};
+          return {player:null, needsMapping:true, reason:"More than one bank player named \""+betName+"\" — pick the right one."};
+        }
+        const remembered=loadBankNameMap();
+        const mappedId=remembered[norm(betName)];
+        const rp=mappedId?(roster||[]).find(x=>x.id===mappedId):null;
+        if(rp) return {player:rp};
+        return {player:null, needsMapping:true, reason:"No bank player named \""+betName+"\" — pick who this is."};
       };
-      const w=findPlayer(winnerName), l=findPlayer(loserName);
-      if(!w.player) return {ok:false, error:w.error};
-      if(!l.player) return {ok:false, error:l.error};
+      const ra=await resolveSide("a", calc.aName);
+      const rb=await resolveSide("b", calc.bName);
+      const unmatched=[];
+      if(!ra.player&&ra.needsMapping) unmatched.push({side:"a", betName:calc.aName, reason:ra.reason, suggestedId:null});
+      if(!rb.player&&rb.needsMapping) unmatched.push({side:"b", betName:calc.bName, reason:rb.reason, suggestedId:null});
+      if(unmatched.length) return {ok:false, needsMapping:true, unmatched, roster:sortedRoster, matched:{a:ra.player||null, b:rb.player||null}, created};
+      if(!ra.player) return {ok:false, error:ra.error, created};
+      if(!rb.player) return {ok:false, error:rb.error, created};
       // Re-check the saved bet — scores may have moved since the tab rendered.
       const saved=(sideBetsRef.current||[]).find(b=>b.id===bet.id);
-      if(saved&&saved.bankPosted) return {ok:false, error:"Already posted to the bank."};
-      const dateStr=new Date().toISOString().slice(0,10);
-      const notes=calc.aName+" vs "+calc.bName+" — "+betTypeLabel(bet)+" — "+dateStr;
+      if(saved&&saved.bankPosted) return {ok:false, error:"Already posted to the bank.", created};
       const sides=[
-        {player:w.player, amount:amt, label:winnerName},
-        {player:l.player, amount:-amt, label:loserName},
+        {player:ra.player, amount:calc.total, label:calc.aName},
+        {player:rb.player, amount:-calc.total, label:calc.bName},
       ];
       // Insert both bet rows first, then update both balances, so a
       // failure during inserts leaves no balance changed.
@@ -868,7 +942,7 @@ export default function TeamTournament({onBack, user, onDelete}){
         const{data:bd, error:be}=await sb.from("bets").insert({owner_id:user.id, player_id:s.player.id, player_name:s.player.name, date:dateStr, type:"Side Bet", amount:s.amount, notes, season:BANK_SEASON}).select().single();
         if(be){
           const rolledBack=await rollbackInserts();
-          return {ok:false, error:"Couldn't save the bank row for "+s.label+": "+(be.message||"check your connection."), inserted:rolledBack?[]:inserted.map(r=>r.label), rolledBack};
+          return {ok:false, error:"Couldn't save the bank row for "+s.label+": "+(be.message||"check your connection."), inserted:rolledBack?[]:inserted.map(r=>r.label), rolledBack, created};
         }
         inserted.push({id:bd.id, label:s.label});
       }
@@ -876,13 +950,13 @@ export default function TeamTournament({onBack, user, onDelete}){
         const{error:ue}=await sb.from("players").update({bet_money:(s.player.bet_money||0)+s.amount, bank:(s.player.bank||0)+s.amount}).eq("id", s.player.id);
         if(ue){
           const rolledBack=await rollbackInserts();
-          return {ok:false, error:"Bank row saved but the balance update failed for "+s.label+": "+(ue.message||"check your connection."), posted, inserted:rolledBack?[]:inserted.map(r=>r.label), rolledBack};
+          return {ok:false, error:"Bank row saved but the balance update failed for "+s.label+": "+(ue.message||"check your connection."), posted, inserted:rolledBack?[]:inserted.map(r=>r.label), rolledBack, created};
         }
         posted.push(s.label+" "+(s.amount>0?"+$":"-$")+Math.abs(s.amount));
       }
       const stamp={amount:amt, date:dateStr, postedAt:new Date().toISOString()};
       setSideBets(prev=>prev.map(b=>b.id===bet.id?{...b, bankPosted:stamp}:b));
-      return {ok:true, posted};
+      return {ok:true, posted, created};
     } finally {
       bankPostingRef.current[bet.id]=false;
     }
@@ -2663,7 +2737,7 @@ export default function TeamTournament({onBack, user, onDelete}){
                   <BigBtn onClick={saveBet}>Save bet</BigBtn>
                 </div>
               )}
-              <SideBetsTab bets={sideBets} teams={teams} course={course} courseId={courseId} C={C} onDelete={(id)=>setSideBets(prev=>prev.filter(b=>b.id!==id))} onPostToBank={postSideBetToBank}/>
+              <SideBetsTab bets={sideBets} teams={teams} course={course} courseId={courseId} C={C} onDelete={(id)=>setSideBets(prev=>prev.filter(b=>b.id!==id))} onPostToBank={postSideBetToBank} onResolveBankNames={resolveBankNamesForBet}/>
             </div>
           )}
 
