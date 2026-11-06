@@ -1,3 +1,4 @@
+// PG-BANKPOST-SF-2026-11-06: one-tap Post to Bank for tournament side bets (director only).
 // PG-SFPRO-2026-11-02: Stableford PRO button (type a number, tap PRO = negative) + HDCP clamp lowered to -18 (was 0, so a negative could never be saved).
 // PG-LINKS-2026-10-31: links use window.location.origin, not hardcoded vercel.app.
 // PG-NETSKINS-2026-10-29
@@ -18,8 +19,11 @@ import { SfSkinsTab } from "./sfSkins.jsx";
 import { missingNetHdcp } from "./skins.jsx";
 import { SfIndividualList } from "./SfIndividualList.jsx";
 import { SF_DEFAULT_POINTS, sfConfigOrDefaults, sfIsField, sfHolePoints, sfTeamPoints, sfIndividualPoints } from "./stableford.js";
-import { SideBetsTab } from "./sideBets.jsx";
+import { SideBetsTab, betTypeLabel } from "./sideBets.jsx";
 import { RulesTab } from "./RulesTab.jsx";
+
+// PG-BANKPOST-SF-2026-11-06: bank season for Post to Bank (same year App.jsx uses as CURRENT_SEASON).
+const BANK_SEASON = new Date().getFullYear();
 
 // Dark (default) and Day (high-contrast, sunlight-readable) themes.
 // The TeamTournament component picks one via `dayMode` and shadows it as
@@ -305,6 +309,7 @@ export default function SfTeamTournament({onBack, user, onDelete, resumeId}){
   const[ctpLeaders,setCtpLeaders]=useState({});      // {holeNum: {name,teamName,distance,teamIdx,playerIdx}}
   const[sideBets,setSideBets]=useState([]);          // director side bets (see sideBets.jsx)
   const sideBetsRef=useRef([]);
+  const bankPostingRef=useRef({}); // PG-BANKPOST-SF-2026-11-06: bet id -> true while a bank post is in flight (double-tap guard)
   const lastSyncedSideBets=useRef(null);
   useEffect(()=>{ sideBetsRef.current=sideBets; },[sideBets]);
   const searchPanelRef=useRef(null);
@@ -784,6 +789,88 @@ export default function SfTeamTournament({onBack, user, onDelete, resumeId}){
     setSideBets(prev=>[...prev, bet]);
     setShowBetSetup(false);
   }
+
+  // PG-BANKPOST-SF-2026-11-06: one-tap "Post to Bank" for a finished side bet (director
+  // only — SideBetsTab only receives onPostToBank from the director files).
+  // Same writes as App.jsx logBet(): one "bets" row per player (winner
+  // +amount, loser -amount, type "Side Bet") and a players update
+  // {bet_money += amt, bank += amt} per player. The bet is then marked
+  // bankPosted on the saved side_bets row, so the existing auto-save
+  // persists it and the bet can never double-post, even after reload.
+  // Check-then-write: the roster is loaded fresh and BOTH names must match
+  // before anything is written. If a write fails part-way, inserted bet
+  // rows are deleted again (best effort) and the return says exactly which
+  // balances were already posted, so the director can check the bank
+  // before retrying. bankPosted is NEVER set on failure.
+  async function postSideBetToBank(bet, calc){
+    if(!bet||!calc) return {ok:false, error:"Missing bet."};
+    if(bet.bankPosted) return {ok:false, error:"Already posted to the bank."};
+    if(bankPostingRef.current[bet.id]) return {ok:false, error:"Already posting — please wait."};
+    if(!calc.total||(calc.holesPlayed||0)<18) return {ok:false, error:"This bet isn't finished yet."};
+    if(!user?.id) return {ok:false, error:"Not signed in."};
+    bankPostingRef.current[bet.id]=true;
+    const posted=[]; const inserted=[];
+    const rollbackInserts=async()=>{
+      if(!inserted.length) return true;
+      const{error:rbErr}=await sb.from("bets").delete().in("id", inserted.map(r=>r.id));
+      return !rbErr;
+    };
+    try{
+      const amt=Math.abs(calc.total);
+      const winnerName=calc.total>0?calc.aName:calc.bName;
+      const loserName=calc.total>0?calc.bName:calc.aName;
+      // Fresh roster — balances must come from the DB, never cached state.
+      // App.jsx loadAll does NOT filter players by season, so neither do
+      // we; a same-season row wins when a name appears twice.
+      const{data:roster, error:rosterErr}=await sb.from("players").select("*").eq("owner_id", user.id);
+      if(rosterErr) return {ok:false, error:"Couldn't load the bank roster: "+(rosterErr.message||"check your connection.")};
+      const norm=(s)=>(s||"").trim().toLowerCase();
+      const findPlayer=(nm)=>{
+        const matches=(roster||[]).filter(p=>norm(p.name)===norm(nm));
+        if(matches.length===0) return {player:null, error:"No bank player named \""+nm+"\""};
+        const inSeason=matches.filter(p=>p.season===BANK_SEASON);
+        if(inSeason.length===1) return {player:inSeason[0]};
+        if(matches.length===1) return {player:matches[0]};
+        return {player:null, error:"More than one bank player named \""+nm+"\" — rename one in the bank first"};
+      };
+      const w=findPlayer(winnerName), l=findPlayer(loserName);
+      if(!w.player) return {ok:false, error:w.error};
+      if(!l.player) return {ok:false, error:l.error};
+      // Re-check the saved bet — scores may have moved since the tab rendered.
+      const saved=(sideBetsRef.current||[]).find(b=>b.id===bet.id);
+      if(saved&&saved.bankPosted) return {ok:false, error:"Already posted to the bank."};
+      const dateStr=new Date().toISOString().slice(0,10);
+      const notes=calc.aName+" vs "+calc.bName+" — "+betTypeLabel(bet)+" — "+dateStr;
+      const sides=[
+        {player:w.player, amount:amt, label:winnerName},
+        {player:l.player, amount:-amt, label:loserName},
+      ];
+      // Insert both bet rows first, then update both balances, so a
+      // failure during inserts leaves no balance changed.
+      for(const s of sides){
+        const{data:bd, error:be}=await sb.from("bets").insert({owner_id:user.id, player_id:s.player.id, player_name:s.player.name, date:dateStr, type:"Side Bet", amount:s.amount, notes, season:BANK_SEASON}).select().single();
+        if(be){
+          const rolledBack=await rollbackInserts();
+          return {ok:false, error:"Couldn't save the bank row for "+s.label+": "+(be.message||"check your connection."), inserted:rolledBack?[]:inserted.map(r=>r.label), rolledBack};
+        }
+        inserted.push({id:bd.id, label:s.label});
+      }
+      for(const s of sides){
+        const{error:ue}=await sb.from("players").update({bet_money:(s.player.bet_money||0)+s.amount, bank:(s.player.bank||0)+s.amount}).eq("id", s.player.id);
+        if(ue){
+          const rolledBack=await rollbackInserts();
+          return {ok:false, error:"Bank row saved but the balance update failed for "+s.label+": "+(ue.message||"check your connection."), posted, inserted:rolledBack?[]:inserted.map(r=>r.label), rolledBack};
+        }
+        posted.push(s.label+" "+(s.amount>0?"+$":"-$")+Math.abs(s.amount));
+      }
+      const stamp={amount:amt, date:dateStr, postedAt:new Date().toISOString()};
+      setSideBets(prev=>prev.map(b=>b.id===bet.id?{...b, bankPosted:stamp}:b));
+      return {ok:true, posted};
+    } finally {
+      bankPostingRef.current[bet.id]=false;
+    }
+  }
+
 
   // Stableford board — highest points first.
   function getLeaderboard(){
@@ -2559,7 +2646,7 @@ export default function SfTeamTournament({onBack, user, onDelete, resumeId}){
                   <BigBtn onClick={saveBet}>Save bet</BigBtn>
                 </div>
               )}
-              <SideBetsTab bets={sideBets} teams={teams} course={course} courseId={courseId} C={C} onDelete={(id)=>setSideBets(prev=>prev.filter(b=>b.id!==id))}/>
+              <SideBetsTab bets={sideBets} teams={teams} course={course} courseId={courseId} C={C} onDelete={(id)=>setSideBets(prev=>prev.filter(b=>b.id!==id))} onPostToBank={postSideBetToBank}/>
             </div>
           )}
 
