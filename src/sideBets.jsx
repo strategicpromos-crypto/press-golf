@@ -6,6 +6,14 @@ import { getStrokeHoles, calcAutoPressNassau, calcSkins, courseHasHdcp } from ".
 // uses PgDialog pgConfirm (this file did NOT use PgDialog before — its
 // delete used its own inline modal); pgAlert reports a failed post.
 import { pgConfirm, pgAlert } from "./PgDialog.js";
+// PG-BANKPOST-PICKER-2026-11-06: nickname -> bank playerId map, remembered
+// on the DIRECTOR's phone only (localStorage, never Supabase and never the
+// tournament row). Bet names are nicknames from the teams ("KP"); bank
+// names are roster names ("Ken Pratt"). The first time a nickname is
+// posted, the director picks who it is; after that it auto-matches.
+export const BANK_NAME_MAP_KEY = "pg-bank-name-map";
+export function loadBankNameMap(){ try{ return JSON.parse(localStorage.getItem(BANK_NAME_MAP_KEY)||"{}")||{}; }catch(e){ return {}; } }
+export function saveBankNameMap(map){ try{ localStorage.setItem(BANK_NAME_MAP_KEY, JSON.stringify(map||{})); }catch(e){} }
 
 // ── TOURNAMENT SIDE BETS ─────────────────────────────────────────────────────
 // A side bet is a buddy-game calculation that runs on TOP of tournament
@@ -137,13 +145,117 @@ function amtColor(amt, C){
 // captain view doesn't tell captains to wait for the director.
 // PG-BANKPOST-2026-11-06: pass onPostToBank (director only) to show the
 // "Post to Bank" button under a finished bet's settle line.
-export function SideBetsTab({bets, teams, course, courseId, C, onDelete, canSetup, onPostToBank}){
+export function SideBetsTab({bets, teams, course, courseId, C, onDelete, canSetup, onPostToBank, onResolveBankNames}){
   // PG-BANKPOST-2026-11-06: onPostToBank is director-only. Captains and
   // spectators never pass it, so they never see the button.
   // PG-PGDIALOG-2026-10-31: in-app Press Golf confirm, not the browser's
   // window.confirm (Android titles that with the site address).
   const [pendingDelete, setPendingDelete] = useState(null);
   const [postingId, setPostingId] = useState(null); // PG-BANKPOST-2026-11-06: bet id mid-post (double-tap guard)
+  // PG-BANKPOST-PICKER-2026-11-06: {bet, calc, roster, unmatched:[{side, betName, reason, suggestedId}], matched:{a,b}, choices:{side: playerId|"__NEW__"|""}, newNames:{side: string}}
+  const [bankPicker, setBankPicker] = useState(null);
+
+  // PG-BANKPOST-PICKER-2026-11-06: shared error reporting for a failed post.
+  async function showPostError(res){
+    let msg="Couldn't post to the bank: "+(res.error||"Unknown error.");
+    if(res.posted&&res.posted.length)msg+=" Posted so far: "+res.posted.join(", ")+".";
+    if(res.inserted&&res.inserted.length)msg+=" Bank rows are still in the bank for: "+res.inserted.join(", ")+".";
+    if(res.rolledBack===false)msg+=" The bank rows could not be rolled back.";
+    msg+=" Check the bank before retrying.";
+    await pgAlert(msg);
+  }
+
+  // PG-BANKPOST-PICKER-2026-11-06: Post to Bank flow. Confirm first, then
+  // resolve bet nicknames to bank players. If every name matches (exact or
+  // remembered) the post goes straight through; if a name doesn't match,
+  // the picker opens instead of the post aborting.
+  async function handlePostToBank(bet, calc){
+    const amt=Math.abs(calc.total);
+    const winner=calc.total>0?calc.aName:calc.bName;
+    const loser=calc.total>0?calc.bName:calc.aName;
+    const ok=await pgConfirm("Post "+loser+" -$"+amt+" / "+winner+" +$"+amt+" to the bank?","Post to Bank");
+    if(!ok) return;
+    setPostingId(bet.id);
+    try{
+      if(!onResolveBankNames){
+        const res=await onPostToBank(bet,calc);
+        if(res&&res.ok===false){
+          if(res.needsMapping){
+            const choices={}, newNames={};
+            for(const u of (res.unmatched||[])){ choices[u.side]=u.suggestedId||""; newNames[u.side]=u.betName; }
+            setBankPicker({bet, calc, roster:res.roster||[], unmatched:res.unmatched||[], matched:res.matched||{a:null,b:null}, choices, newNames});
+            return;
+          }
+          await showPostError(res);
+        }
+        return;
+      }
+      const r=await onResolveBankNames(bet,calc);
+      if(!r||r.ok===false){
+        if(r&&r.needsMapping){
+          const choices={}, newNames={};
+          for(const u of (r.unmatched||[])){ choices[u.side]=u.suggestedId||""; newNames[u.side]=u.betName; }
+          setBankPicker({bet, calc, roster:r.roster||[], unmatched:r.unmatched||[], matched:r.matched||{a:null,b:null}, choices, newNames});
+          return;
+        }
+        await pgAlert("Couldn't check the bank roster: "+(r&&r.error||"Unknown error."));
+        return;
+      }
+      const matched=r.matched||{};
+      if(!r.unmatched||r.unmatched.length===0){
+        const res=await onPostToBank(bet,calc,{a:{playerId:matched.a&&matched.a.id}, b:{playerId:matched.b&&matched.b.id}});
+        if(res&&res.ok===false) await showPostError(res);
+        return;
+      }
+      const choices={}, newNames={};
+      for(const u of r.unmatched){ choices[u.side]=u.suggestedId||""; newNames[u.side]=u.betName; }
+      setBankPicker({bet, calc, roster:r.roster||[], unmatched:r.unmatched, matched, choices, newNames});
+    } finally { setPostingId(null); }
+  }
+
+  // PG-BANKPOST-PICKER-2026-11-06: the director confirmed the picker.
+  // Build the mapping, remember nickname -> playerId for picked players,
+  // then post. A new player is created by the director file during the
+  // post; its id is remembered afterwards from res.created.
+  async function confirmBankPicker(){
+    const pk=bankPicker; if(!pk) return;
+    for(const u of pk.unmatched){
+      if(!pk.choices[u.side]){ await pgAlert("Pick a bank player for \""+u.betName+"\" (or choose Add new player)."); return; }
+      if(pk.choices[u.side]==="__NEW__"&&!(pk.newNames[u.side]||"").trim()){ await pgAlert("Enter a name for the new bank player for \""+u.betName+"\"."); return; }
+    }
+    const mapping={a:{}, b:{}};
+    for(const side of ["a","b"]){
+      const m=pk.matched[side];
+      if(m&&m.id) mapping[side]={playerId:m.id};
+    }
+    for(const u of pk.unmatched){
+      if(pk.choices[u.side]==="__NEW__") mapping[u.side]={newName:(pk.newNames[u.side]||"").trim()};
+      else mapping[u.side]={playerId:pk.choices[u.side]};
+    }
+    const map=loadBankNameMap(); let changed=false;
+    for(const u of pk.unmatched){
+      if(pk.choices[u.side]&&pk.choices[u.side]!=="__NEW__"){
+        const k=(u.betName||"").trim().toLowerCase();
+        if(map[k]!==pk.choices[u.side]){ map[k]=pk.choices[u.side]; changed=true; }
+      }
+    }
+    if(changed) saveBankNameMap(map);
+    const bet=pk.bet, calc=pk.calc;
+    setBankPicker(null);
+    setPostingId(bet.id);
+    try{
+      const res=await onPostToBank(bet, calc, mapping);
+      if(res&&res.ok===false){ await showPostError(res); return; }
+      if(res&&res.created&&res.created.length){
+        const m2=loadBankNameMap(); let c2=false;
+        for(const cr of res.created){
+          const k=(cr.betName||"").trim().toLowerCase();
+          if(cr.playerId&&m2[k]!==cr.playerId){ m2[k]=cr.playerId; c2=true; }
+        }
+        if(c2) saveBankNameMap(m2);
+      }
+    } finally { setPostingId(null); }
+  }
   if(!bets||bets.length===0){
     return(
       <div style={{background:C.card,border:"1px solid "+C.border,borderRadius:14,padding:"20px",textAlign:"center"}}>
@@ -265,31 +377,47 @@ export function SideBetsTab({bets, teams, course, courseId, C, onDelete, canSetu
             {onPostToBank&&bet.bankPosted?(
               <button disabled style={{width:"100%",padding:"12px",background:C.surface,border:"1px solid "+C.border,color:C.muted,borderRadius:10,fontSize:14,fontWeight:700,marginTop:10,cursor:"default"}}>Posted to Bank ✓ ${bet.bankPosted.amount}</button>
             ):onPostToBank&&calc.holesPlayed>=18&&calc.total!==0?(
-              <button disabled={postingId===bet.id} onClick={async()=>{
-                const amt=Math.abs(calc.total);
-                const winner=calc.total>0?calc.aName:calc.bName;
-                const loser=calc.total>0?calc.bName:calc.aName;
-                const ok=await pgConfirm("Post "+loser+" -$"+amt+" / "+winner+" +$"+amt+" to the bank?","Post to Bank");
-                if(!ok)return;
-                setPostingId(bet.id);
-                try{
-                  const res=await onPostToBank(bet,calc);
-                  if(res&&res.ok===false){
-                    let msg="Couldn't post to the bank: "+(res.error||"Unknown error.");
-                    if(res.posted&&res.posted.length)msg+=" Posted so far: "+res.posted.join(", ")+".";
-                    if(res.inserted&&res.inserted.length)msg+=" Bank rows are still in the bank for: "+res.inserted.join(", ")+".";
-                    if(res.rolledBack===false)msg+=" The bank rows could not be rolled back.";
-                    msg+=" Check the bank before retrying.";
-                    await pgAlert(msg);
-                  }
-                }finally{ setPostingId(null); }
-              }} style={{width:"100%",padding:"12px",background:C.gold,border:"none",color:"#0a1a0f",borderRadius:10,fontSize:14,fontWeight:800,marginTop:10,cursor:postingId===bet.id?"default":"pointer",opacity:postingId===bet.id?0.6:1}}>
+              <button disabled={postingId===bet.id} onClick={()=>handlePostToBank(bet,calc)} style={{width:"100%",padding:"12px",background:C.gold,border:"none",color:"#0a1a0f",borderRadius:10,fontSize:14,fontWeight:800,marginTop:10,cursor:postingId===bet.id?"default":"pointer",opacity:postingId===bet.id?0.6:1}}>
                 {postingId===bet.id?"Posting…":"Post to Bank · $"+Math.abs(calc.total)}
               </button>
             ):null}
           </div>
         );
       })}
+      {/* PG-BANKPOST-PICKER-2026-11-06: who-is-who picker. Opens only
+          when a bet nickname doesn't match a bank roster name. Same
+          fixed-modal style as the delete confirm above. */}
+      {bankPicker&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.65)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:9999,padding:20}} onClick={()=>setBankPicker(null)}>
+          <div style={{background:C.card,border:"1px solid "+C.border,borderRadius:16,padding:22,width:"100%",maxWidth:380,maxHeight:"85vh",overflowY:"auto"}} onClick={e=>e.stopPropagation()}>
+            <div style={{fontWeight:800,fontSize:18,marginBottom:6}}>⛳ Press Golf</div>
+            <div style={{fontSize:14,lineHeight:1.4,marginBottom:14}}>Who is who in the bank? The bet uses nicknames — pick the bank player for each name below. We&apos;ll remember it next time.</div>
+            {bankPicker.unmatched.map(u=>(
+              <div key={u.side} style={{marginBottom:14}}>
+                <div style={{fontSize:13,fontWeight:700,marginBottom:6}}>&quot;{u.betName}&quot; is…</div>
+                <select value={bankPicker.choices[u.side]||""} onChange={e=>setBankPicker(prev=>({...prev, choices:{...prev.choices,[u.side]:e.target.value}}))}
+                  style={{width:"100%",padding:"10px",background:C.surface,border:"1px solid "+C.border,color:C.text,borderRadius:10,fontSize:14}}>
+                  <option value="">— Pick a bank player —</option>
+                  {bankPicker.roster.map(pl=>(<option key={pl.id} value={pl.id}>{pl.name}</option>))}
+                  <option value="__NEW__">＋ Add new player…</option>
+                </select>
+                {bankPicker.choices[u.side]==="__NEW__"&&(
+                  <input value={bankPicker.newNames[u.side]||""} onChange={e=>setBankPicker(prev=>({...prev, newNames:{...prev.newNames,[u.side]:e.target.value}}))}
+                    placeholder="Full name for the bank"
+                    style={{width:"100%",padding:"10px",background:C.surface,border:"1px solid "+C.border,color:C.text,borderRadius:10,fontSize:14,marginTop:8}} />
+                )}
+                {u.reason&&<div style={{fontSize:11,color:C.muted,marginTop:4}}>{u.reason}</div>}
+              </div>
+            ))}
+            <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}>
+              <button onClick={()=>setBankPicker(null)}
+                style={{background:C.surface,border:"1px solid "+C.border,color:C.text,fontSize:15,fontWeight:700,padding:"10px 20px",borderRadius:10,cursor:"pointer"}}>Cancel</button>
+              <button onClick={confirmBankPicker}
+                style={{background:C.gold,border:"none",color:"#0a1a0f",fontSize:15,fontWeight:700,padding:"10px 20px",borderRadius:10,cursor:"pointer"}}>Post to Bank</button>
+            </div>
+          </div>
+        </div>
+      )}
       {pendingDelete!==null&&onDelete&&(
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.65)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:9999,padding:20}} onClick={()=>setPendingDelete(null)}>
           <div style={{background:C.card,border:"1px solid "+C.border,borderRadius:16,padding:22,width:"100%",maxWidth:340}} onClick={e=>e.stopPropagation()}>
