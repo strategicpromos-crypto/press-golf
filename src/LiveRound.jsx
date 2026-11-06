@@ -1,4 +1,3 @@
-// PG-COURSE-DROPDOWN-2026-11-06: Saved courses is a custom collapsible (NOT a native <select>), identical in IndividualRound / LiveRound / TeamTournament / SfTeamTournament. Default collapsed; filter by name/city; selected first, then alphabetical; pick collapses.
 // PG-LINKS-2026-10-31: links use window.location.origin, not hardcoded vercel.app.
 // BUDDYPICKER-2026-10-28 (LiveRound — Selected card + Search button + tap list, no dropdown)
 import { useState, useEffect, useRef } from "react";
@@ -6,6 +5,191 @@ import { sb } from "./supabase.js";
 import { pgConfirm } from "./PgDialog.js";
 import { COURSES, getStrokeHoles, calcAutoPressNassau, courseHasHdcp } from "./golf.js";
 import CourseSearch from "./CourseSearch.jsx";
+// // PG-GAMES-2026-11-06: Games hub — Nines / Wolf / Sixes. ADDITIVE: a calculation layer on
+// top of scores already entered (same pattern as Skins / Ryder Cup). No score
+// entry, no new DB column. Games are stored as plain JSON in the game state
+// (see the per-file setGames wrapper). One game of each type per round.
+// Net = gross - strokes by course-handicap rank (hardest first; a negative
+// HDCP gives back on the easiest holes first). A player with no HDCP plays
+// gross. $ settle is zero-sum: (points - average points) x $ per point.
+const GAMES_DEFS=[
+  {type:"nines",emoji:"9️⃣",name:"Nines",players:"3 players",desc:"5-3-1 points per hole — low 5, middle 3, high 1. Ties split the points."},
+  {type:"wolf",emoji:"🐺",name:"Wolf",players:"3–4 players",desc:"Wolf rotates each hole — pick a partner after the drives, or go Lone Wolf."},
+  {type:"sixes",emoji:"6️⃣",name:"Sixes · 6-6-6",players:"4 players",desc:"Partners rotate every 6 holes — best ball, 1 pt per hole won, 0.5 halved."},
+];
+function gamesStrokesOnHole(hdcp,holeObj,holes){
+  if(hdcp===null||hdcp===undefined||hdcp===""||isNaN(Number(hdcp))) return 0;
+  const sorted=[...(holes||[])].sort((a,b)=>((a.hdcp??99)-(b.hdcp??99)));
+  const rank=sorted.findIndex(h=>h.hole===holeObj.hole)+1;
+  if(rank<1) return 0;
+  const n=sorted.length||18;
+  if(Number(hdcp)<0){ const plus=-Number(hdcp), full=Math.floor(plus/18), rem=plus%18; return -(full+(rem>0&&rank>n-rem?1:0)); }
+  const full=Math.floor(Number(hdcp)/18), rem=Number(hdcp)%18;
+  return full+(rank<=rem?1:0);
+}
+function gamesNetScore(p,holeObj,holes,net){
+  const g=p.gross(holeObj.hole);
+  if(g===null||g===undefined) return null;
+  if(!net) return g;
+  const h=p.hdcp;
+  if(h===null||h===undefined||h==="") return g;
+  return g-gamesStrokesOnHole(h,holeObj,holes);
+}
+function gamesFmt(v){ if(v===null||v===undefined) return "—"; const r=Math.round(v*10)/10; return Number.isInteger(r)?String(r):r.toFixed(1); }
+function gamesMoney(v){ if(!v) return "$0"; return (v>0?"+$":"-$")+Math.abs(v).toFixed(2); }
+function gamesNewGame(type,keys){
+  const base={id:"g_"+Date.now()+"_"+Math.floor(Math.random()*1000),type,players:keys.slice(),net:true,perPoint:1,collapsed:false};
+  if(type==="nines") return {...base,p1:5,p2:3,p3:1};
+  if(type==="wolf") return {...base,wolf:{}};
+  return base;
+}
+function gamesCalc(game,players,holes){
+  const totals={}; players.forEach(p=>{totals[p.key]=0;});
+  const perHole={}; let holesPlayed=0; const pending=[];
+  if(game.type==="nines"){
+    const pts=[game.p1??5,game.p2??3,game.p3??1];
+    for(const h of holes){
+      const scored=players.map(p=>({p,v:gamesNetScore(p,h,holes,game.net)})).filter(x=>x.v!==null&&x.v!==undefined);
+      if(scored.length!==players.length) continue;
+      holesPlayed++;
+      const sorted=[...scored].sort((a,b)=>a.v-b.v); const row={}; let i=0;
+      while(i<sorted.length){
+        let j=i; while(j+1<sorted.length&&sorted[j+1].v===sorted[i].v) j++;
+        const pool=pts.slice(i,j+1).reduce((s,x)=>s+x,0), share=pool/(j-i+1);
+        for(let k=i;k<=j;k++){ row[sorted[k].p.key]=share; totals[sorted[k].p.key]+=share; }
+        i=j+1;
+      }
+      perHole[h.hole]=row;
+    }
+  } else if(game.type==="wolf"){
+    for(const h of holes){
+      const scored=players.map(p=>({p,v:gamesNetScore(p,h,holes,game.net)})).filter(x=>x.v!==null&&x.v!==undefined);
+      if(scored.length!==players.length) continue;
+      const wolf=players[(h.hole-1)%players.length];
+      const choice=(game.wolf||{})[h.hole];
+      if(!choice){ pending.push(h.hole); continue; }
+      holesPlayed++;
+      const wolfKeys=[wolf.key,choice.partner].filter(Boolean);
+      const otherKeys=players.map(p=>p.key).filter(k=>!wolfKeys.includes(k));
+      const best=(keys)=>{ const vs=keys.map(k=>scored.find(s=>s.p.key===k)?.v).filter(v=>v!==null&&v!==undefined); return vs.length?Math.min(...vs):null; };
+      const wb=best(wolfKeys), ob=best(otherKeys); const row={};
+      if(wb!==null&&ob!==null&&wb<ob){
+        if(choice.partner){ wolfKeys.forEach(k=>{row[k]=1; totals[k]+=1;}); }
+        else { const pts=choice.blind?4:2; row[wolf.key]=pts; totals[wolf.key]+=pts; }
+      } else if(wb!==null&&ob!==null&&wb>ob){
+        otherKeys.forEach(k=>{row[k]=1; totals[k]+=1;});
+      }
+      perHole[h.hole]=row;
+    }
+  } else if(game.type==="sixes"){
+    const segs=[[[0,1],[2,3]],[[0,2],[1,3]],[[0,3],[1,2]]];
+    for(const h of holes){
+      const seg=segs[Math.floor((h.hole-1)/6)]||segs[0];
+      const teamBest=(pair)=>{ const vs=pair.map(idx=>gamesNetScore(players[idx],h,holes,game.net)).filter(v=>v!==null&&v!==undefined); return vs.length?Math.min(...vs):null; };
+      const a=teamBest(seg[0]), b=teamBest(seg[1]);
+      if(a===null||b===null) continue;
+      holesPlayed++;
+      const row={};
+      const give=(pair,pts)=>pair.forEach(idx=>{ const k=players[idx].key; row[k]=(row[k]||0)+pts; totals[k]+=pts; });
+      if(a<b) give(seg[0],1); else if(b<a) give(seg[1],1); else { give(seg[0],0.5); give(seg[1],0.5); }
+      perHole[h.hole]=row;
+    }
+  }
+  const avg=players.length?players.reduce((s,p)=>s+totals[p.key],0)/players.length:0;
+  return {totals,perHole,holesPlayed,pending,avg};
+}
+function GamesHub({C,players,holes,games,setGames}){
+  const [showAdd,setShowAdd]=useState(false);
+  const [showHoles,setShowHoles]=useState({});
+  const n=players.length;
+  const avail=GAMES_DEFS.filter(d=>d.type==="nines"?n===3:d.type==="wolf"?(n===3||n===4):n===4);
+  const addGame=(type)=>{ if(games.some(g=>g.type===type)) return; setGames(prev=>[...prev,gamesNewGame(type,players.map(p=>p.key))]); setShowAdd(false); };
+  const updateGame=(id,patch)=>setGames(prev=>prev.map(g=>g.id===id?{...g,...patch}:g));
+  const removeGame=async(id)=>{ if(await pgConfirm("Remove this game? Its points will be lost.","Remove")) setGames(prev=>prev.filter(g=>g.id!==id)); };
+  const toggleHoles=(id)=>setShowHoles(prev=>({...prev,[id]:!prev[id]}));
+  const numInp={width:52,padding:"8px 4px",background:C.surface,border:"1px solid "+C.border,borderRadius:8,color:C.text,fontSize:15,fontWeight:700,textAlign:"center",outline:"none"};
+  const chip=(on)=>({padding:"8px 10px",borderRadius:8,background:on?C.green:C.surface,color:on?"#0a1a0f":C.muted,border:"1px solid "+(on?C.green:C.border),cursor:"pointer",fontSize:12,fontWeight:on?700:500});
+  return(<div>
+    <div style={{fontSize:11,color:C.gold,letterSpacing:1.5,textTransform:"uppercase",marginBottom:12,fontWeight:600}}>🎲 Games · calculated from scores already entered</div>
+    {n<3&&(<div style={{background:C.card,border:"1px solid "+C.border,borderRadius:12,padding:"14px",marginBottom:12,fontSize:13,color:C.muted}}>Games need at least 3 players. {n===2?"Add one more player to play Nines or Wolf.":"Add players to play a game."}</div>)}
+    <div style={{marginBottom:14}}>
+      <button onClick={()=>setShowAdd(v=>!v)} style={{width:"100%",padding:"14px",background:"transparent",border:"1.5px dashed "+C.border,borderRadius:12,color:C.green,fontSize:14,fontWeight:700,cursor:"pointer"}}>{showAdd?"− Close":"＋ Add game"}</button>
+      {showAdd&&(<div style={{background:C.card,border:"1px solid "+C.border,borderRadius:12,padding:"8px",marginTop:8}}>
+        {avail.length===0&&(<div style={{fontSize:13,color:C.muted,padding:"10px"}}>No games fit {n} player{n===1?"":"s"} yet.</div>)}
+        {avail.map(d=>{ const added=games.some(g=>g.type===d.type); return(<button key={d.type} disabled={added} onClick={()=>addGame(d.type)} style={{display:"block",width:"100%",textAlign:"left",padding:"12px",background:"transparent",border:"none",borderBottom:"1px solid "+C.border,color:added?C.muted:C.text,cursor:added?"default":"pointer"}}>
+          <div style={{fontWeight:800,fontSize:15}}>{d.emoji} {d.name} {added?"· added ✓":""}</div>
+          <div style={{fontSize:12,color:C.muted,marginTop:2}}>{d.players} · {d.desc}</div>
+        </button>); })}
+        <div style={{fontSize:11,color:C.muted,padding:"8px 4px 4px"}}>Only games that fit this group are listed. One of each game per round.</div>
+      </div>)}
+    </div>
+    {games.length===0&&(<div style={{textAlign:"center",padding:"24px 12px",color:C.muted,fontSize:13}}>No games added yet. Tap ＋ Add game above — Nines is the 3-player classic.</div>)}
+    {games.map(game=>{
+      const def=GAMES_DEFS.find(d=>d.type===game.type)||{emoji:"🎲",name:game.type};
+      const gps=game.players.map(k=>players.find(p=>p.key===k)).filter(Boolean);
+      const calc=gamesCalc(game,gps,holes||[]);
+      const ranked=[...gps].sort((a,b)=>calc.totals[b.key]-calc.totals[a.key]);
+      const holesList=(holes||[]).filter(h=>calc.perHole[h.hole]);
+      return(<div key={game.id} style={{background:C.card,border:"1px solid "+C.border,borderRadius:14,padding:"14px",marginBottom:12}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:game.collapsed?0:10}}>
+          <button onClick={()=>updateGame(game.id,{collapsed:!game.collapsed})} style={{flex:1,textAlign:"left",background:"none",border:"none",color:C.text,cursor:"pointer",padding:0}}>
+            <span style={{fontWeight:800,fontSize:16}}>{def.emoji} {def.name}</span>
+            <span style={{fontSize:12,color:C.muted,marginLeft:8}}>{calc.holesPlayed} hole{calc.holesPlayed===1?"":"s"} scored</span>
+            <span style={{fontSize:12,color:C.muted,marginLeft:6}}>{game.collapsed?"▸":"▾"}</span>
+          </button>
+          <button onClick={()=>removeGame(game.id)} style={{background:"transparent",border:"1px solid #ff8a8a",color:"#ff8a8a",borderRadius:8,padding:"6px 10px",cursor:"pointer",fontSize:12}}>✕ Remove</button>
+        </div>
+        {!game.collapsed&&(<>
+          <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:10,alignItems:"center"}}>
+            <button onClick={()=>updateGame(game.id,{net:false})} style={chip(!game.net)}>Gross</button>
+            <button onClick={()=>updateGame(game.id,{net:true})} style={chip(!!game.net)}>Net</button>
+            <span style={{fontSize:12,color:C.muted,marginLeft:4}}>$ / pt</span>
+            <button onClick={()=>updateGame(game.id,{perPoint:Math.max(0,Number(game.perPoint||0)-0.5)})} style={chip(false)}>−</button>
+            <span style={{fontSize:14,fontWeight:800,minWidth:44,textAlign:"center"}}>${Number(game.perPoint||0).toFixed(2)}</span>
+            <button onClick={()=>updateGame(game.id,{perPoint:Number(game.perPoint||0)+0.5})} style={chip(false)}>+</button>
+            {game.type==="nines"&&(<span style={{display:"flex",gap:4,alignItems:"center",marginLeft:4}}>
+              <span style={{fontSize:12,color:C.muted}}>Pts</span>
+              {[["p1",5],["p2",3],["p3",1]].map(([k])=>(<input key={k} type="number" min="0" value={game[k]??0} onChange={e=>updateGame(game.id,{[k]:Math.max(0,parseInt(e.target.value,10)||0)})} style={numInp}/>))}
+              <button onClick={()=>updateGame(game.id,{p1:5,p2:3,p3:1})} style={chip(false)}>5-3-1</button>
+              <button onClick={()=>updateGame(game.id,{p1:4,p2:2,p3:0})} style={chip(false)}>4-2-0</button>
+            </span>)}
+          </div>
+          <div style={{fontSize:11,color:C.muted,marginBottom:8}}>{game.net?"Net scores (course-handicap strokes; a player with no HDCP plays gross).":"Gross scores."} $ settle is zero-sum: (points − average) × $ per point.</div>
+          {ranked.map((p,idx)=>(<div key={p.key} style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:"1px solid rgba(255,255,255,0.04)"}}>
+            <span style={{fontSize:14,fontWeight:idx===0?800:600}}>{idx+1}. {p.name}</span>
+            <span style={{fontSize:14,fontWeight:800}}>{gamesFmt(calc.totals[p.key])} pts · <span style={{color:(calc.totals[p.key]-calc.avg)*(game.perPoint||0)===0?C.muted:(calc.totals[p.key]-calc.avg)>0?C.green:C.red}}>{gamesMoney((calc.totals[p.key]-calc.avg)*(game.perPoint||0))}</span></span>
+          </div>))}
+          {game.type==="wolf"&&calc.pending.length>0&&(<div style={{fontSize:12,color:C.gold,marginTop:8}}>Pick a partner for hole{calc.pending.length===1?"":"s"} {calc.pending.join(", ")} below — unscored until picked.</div>)}
+          {game.type==="wolf"&&(<div style={{marginTop:10}}>
+            {(holes||[]).filter(h=>{ const sc=gps.map(p=>gamesNetScore(p,h,holes,game.net)); return sc.every(v=>v!==null&&v!==undefined); }).map(h=>{
+              const wolf=gps[(h.hole-1)%gps.length]; if(!wolf) return null;
+              const choice=(game.wolf||{})[h.hole]||{};
+              const setChoice=(patch)=>updateGame(game.id,{wolf:{...(game.wolf||{}),[h.hole]:{partner:choice.partner??null,blind:!!choice.blind,...patch}}});
+              return(<div key={h.hole} style={{background:C.surface,border:"1px solid "+C.border,borderRadius:10,padding:"10px",marginBottom:8}}>
+                <div style={{fontSize:13,fontWeight:800,marginBottom:6}}>Hole {h.hole} · Wolf: {wolf.name}</div>
+                <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                  {gps.filter(p=>p.key!==wolf.key).map(p=>(<button key={p.key} onClick={()=>setChoice({partner:choice.partner===p.key?null:p.key,blind:false})} style={chip(choice.partner===p.key)}>Partner: {p.name}</button>))}
+                  <button onClick={()=>setChoice({partner:null,blind:false})} style={chip(!choice.partner&&!choice.blind&&choice.partner!==undefined&&game.wolf?.[h.hole])}>Lone Wolf</button>
+                  <button onClick={()=>setChoice({partner:null,blind:!choice.blind})} style={chip(!!choice.blind)}>Blind Lone · 4 pts</button>
+                </div>
+                <div style={{fontSize:11,color:C.muted,marginTop:6}}>{choice.partner?("Partner: "+(gps.find(p=>p.key===choice.partner)?.name||"")+" — win = 1 pt each"):choice.blind?"Blind Lone Wolf — win = 4 pts, lose = each opponent 1 pt":game.wolf?.[h.hole]?"Lone Wolf — win = 2 pts, lose = each opponent 1 pt":"No pick yet — this hole is unscored."}</div>
+              </div>);
+            })}
+          </div>)}
+          <button onClick={()=>toggleHoles(game.id)} style={{background:"none",border:"none",color:C.green,fontSize:12,fontWeight:700,cursor:"pointer",padding:"6px 0 0"}}>{showHoles[game.id]?"▾ Hide hole by hole":"▸ Hole by hole"}</button>
+          {showHoles[game.id]&&(<div style={{marginTop:8}}>
+            {holesList.length===0&&(<div style={{fontSize:12,color:C.muted}}>No holes scored yet for this game.</div>)}
+            {holesList.map(h=>(<div key={h.hole} style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"3px 0",borderBottom:"1px solid rgba(255,255,255,0.04)"}}>
+              <span style={{color:C.muted}}>Hole {h.hole}</span>
+              <span>{gps.map(p=>p.name.split(" ")[0]+" "+gamesFmt(calc.perHole[h.hole][p.key]??0)).join(" · ")}</span>
+            </div>))}
+          </div>)}
+        </>)}
+      </div>);
+    })}
+  </div>);
+}
+
 
 const C = {
   bg:"#080f0a", surface:"#0e1a10", card:"#121e14",
@@ -318,8 +502,6 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
   const [step,        setStep]        = useState("setup");
   const [courseId,    setCourseId]    = useState("south-toledo");
   const [showCourseSearch, setShowCourseSearch] = useState(false);
-  const [showSavedCourses, setShowSavedCourses] = useState(false); // PG-COURSE-DROPDOWN-2026-11-06: collapsed by default
-  const [savedFilter, setSavedFilter] = useState(""); // PG-COURSE-DROPDOWN-2026-11-06: filter saved courses by name/city
   // PG-BUDDYPICKER-2026-10-28 — scroll the search panel into view when it opens
   const searchPanelRef = useRef(null);
   useEffect(()=>{ if(showCourseSearch&&searchPanelRef.current){ searchPanelRef.current.scrollIntoView({behavior:"smooth",block:"start"}); } },[showCourseSearch]);
@@ -332,6 +514,10 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
   const [liveRoundId, setLiveRoundId] = useState(null);
   const [resuming,    setResuming]    = useState(false);
   const [liveTab,     setLiveTab]     = useState("score");
+  // PG-GAMES-2026-11-06: Games hub for Buddy Game — same as IndividualRound: live_rounds has no games column, so games save on this device only (localStorage pg-buddy-games-<roundId>).
+  const[games,setGamesState]=useState([]);
+  useEffect(()=>{ try{ if(liveRoundId){ const raw=localStorage.getItem("pg-buddy-games-"+liveRoundId); if(raw) setGamesState(JSON.parse(raw)); } }catch(e){} },[liveRoundId]);
+  const setGames=(next)=>{ setGamesState(prev=>{ const v=typeof next==="function"?next(prev):next; try{ if(liveRoundId) localStorage.setItem("pg-buddy-games-"+liveRoundId, JSON.stringify(v)); }catch(e){} return v; }); };
   const [showRoundSettings, setShowRoundSettings] = useState(false);
   const [showShareRound,    setShowShareRound]    = useState(false);
   const [back9Adjustments,  setBack9Adjustments]  = useState({});
@@ -870,7 +1056,7 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
         {/* Course picker — no native dropdown: Android's select opens scrolled to the
             selected course, so "Search for a course…" sat above the viewport and took a
             scroll to reach. Selected course is a card on top, Search sits right under
-            it, and saved courses are a collapsed tap list below (tap the Saved courses row to open it). Tapping the already-selected
+            it, and saved courses are a plain tap list below. Tapping the already-selected
             course does nothing. Same pattern as Tournament Setup. */}
         <div style={{marginBottom:16}}>
           <Lbl>Select Course</Lbl>
@@ -884,28 +1070,19 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
             style={{width:"100%",padding:"14px",background:C.green,color:"#0a1a0f",border:"none",borderRadius:10,fontWeight:800,fontSize:15,cursor:"pointer",marginBottom:12}}>
             🔍 Search courses
           </button>
-          {/* PG-COURSE-DROPDOWN-2026-11-06: Saved courses is a custom collapsible (NOT a native <select> — Android's select opens scrolled to the selected course and hides Search above the viewport). Default collapsed; filter matches name or city; selected course first, then alphabetical; picking a course selects it and collapses. */}
-          <button onClick={()=>{ if(showSavedCourses) setSavedFilter(""); setShowSavedCourses(!showSavedCourses); }}
-            style={{width:"100%",display:"flex",justifyContent:"space-between",alignItems:"center",textAlign:"left",padding:"12px 14px",background:C.surface,border:"1px solid "+C.border,borderRadius:10,color:C.text,cursor:"pointer",marginBottom:showSavedCourses?8:0}}>
-            <span style={{fontWeight:700,fontSize:14}}>Saved courses ({Object.keys(COURSES).length}){COURSES[courseId]?" · "+COURSES[courseId].name:""}</span>
-            <span style={{fontSize:13,color:C.muted}}>{showSavedCourses?"▴":"▾"}</span>
-          </button>
-          {showSavedCourses && (
-            <div style={{display:"flex",flexDirection:"column",gap:8}}>
-              <input value={savedFilter} onChange={e=>setSavedFilter(e.target.value)} placeholder="Filter saved…"
-                style={{width:"100%",padding:"12px 14px",background:C.surface,border:"1px solid "+C.border,borderRadius:10,color:C.text,fontSize:15,outline:"none",boxSizing:"border-box"}} />
-              {(()=>{ const q=savedFilter.trim().toLowerCase(); const list=Object.entries(COURSES).filter(([id,c])=>!q||((c.name||"")+" "+(c.city||"")).toLowerCase().includes(q)).sort(([aId,a],[bId,b])=>{ if(aId===courseId) return -1; if(bId===courseId) return 1; return (a.name||"").localeCompare(b.name||""); }); if(!list.length) return (<div style={{fontSize:13,color:C.muted,padding:"8px 4px"}}>No saved courses match &ldquo;{savedFilter}&rdquo;.</div>); return list.map(([id,c])=>{
-                const selected=id===courseId;
-                return(
-                  <button key={id} onClick={()=>{ if(id!==courseId) setCourseId(id); setSavedFilter(""); setShowSavedCourses(false); }}
-                    style={{textAlign:"left",padding:"12px 14px",background:selected?"rgba(123,180,80,0.15)":C.surface,border:"1px solid "+(selected?C.green:C.border),borderRadius:10,color:C.text,cursor:"pointer"}}>
-                    <div style={{fontWeight:selected?800:600,fontSize:15}}>{selected?"✓ ":""}{c.name} — Par {c.par}</div>
-                    {c.city ? <div style={{fontSize:12,color:C.muted}}>{c.city}</div> : null}
-                  </button>
-                );
-              }); })()}
-            </div>
-          )}
+          <div style={{fontSize:11,color:C.muted,letterSpacing:1.5,textTransform:"uppercase",marginBottom:6}}>Saved courses</div>
+          <div style={{display:"flex",flexDirection:"column",gap:8}}>
+            {Object.entries(COURSES).map(([id,c])=>{
+              const selected=id===courseId;
+              return(
+                <button key={id} onClick={()=>{ if(id!==courseId) setCourseId(id); }}
+                  style={{textAlign:"left",padding:"12px 14px",background:selected?"rgba(123,180,80,0.15)":C.surface,border:"1px solid "+(selected?C.green:C.border),borderRadius:10,color:C.text,cursor:"pointer"}}>
+                  <div style={{fontWeight:selected?800:600,fontSize:15}}>{selected?"✓ ":""}{c.name} — Par {c.par}</div>
+                  {c.city ? <div style={{fontSize:12,color:C.muted}}>{c.city}</div> : null}
+                </button>
+              );
+            })}
+          </div>
           <div ref={searchPanelRef}>
             {showCourseSearch && <CourseSearch C={C} onClose={()=>setShowCourseSearch(false)} onPick={id=>{ setCourseId(id); setShowCourseSearch(false); }} onCourseDeleted={id=>{ if(id===courseId){ const rest=Object.keys(COURSES); if(rest.length) setCourseId(rest[0]); } }} />}
           </div>
@@ -1185,7 +1362,7 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
 
         {/* Tabs */}
         <div style={{display:"flex",borderBottom:"1px solid "+C.border,background:"rgba(0,0,0,0.2)"}}>
-          {[["score","Score"],["match","Match"],["summary","Summary"]].map(([id,lbl])=>(
+          {[["score","Score"],["match","Match"],["games","🎲 Games"],["summary","Summary"]].map(([id,lbl])=>(
             <button key={id} onClick={()=>setLiveTab(id)} style={{flex:1,padding:"12px",fontSize:13,fontWeight:liveTab===id?700:500,background:"transparent",color:liveTab===id?C.green:C.muted,border:"none",borderBottom:liveTab===id?"2px solid "+C.green:"2px solid transparent",cursor:"pointer"}}>{lbl}</button>
           ))}
         </div>
@@ -1482,6 +1659,7 @@ export default function LiveRound({ user, players, resumeRoundId, onBack, onPost
           )}
 
           {/* ── SUMMARY TAB — live money breakdown mid-round ── */}
+          {liveTab==="games"&&(<GamesHub C={C} players={(()=>{ const meHdcp=Math.max(0,...opponents.map(o=>-(o.strokes||0))); return [{key:"me",name:((myName||"Me")),hdcp:meHdcp,gross:(hole)=>{ const s=scores["me"]?.[hole]; return s===undefined||s===null?null:Number(s); }},...opponents.map(o=>({key:o.playerId,name:o.name,hdcp:Math.max(0,o.strokes||0),gross:(hole)=>{ const s=scores[o.playerId]?.[hole]; return s===undefined||s===null?null:Number(s); }}))]; })()} holes={course?.holes||[]} games={games} setGames={setGames}/>)}
           {liveTab==="summary"&&(()=>{
             const results=opponents.map(opp=>({...opp,tally:getTally(scores,course,opp,courseId)}));
             const grandTotal=results.reduce((s,r)=>s+r.tally.total,0);
